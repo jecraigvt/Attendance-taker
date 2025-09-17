@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Troy High Attendance</title>
+    <style>
+      :root {
+        font-family: 'Segoe UI', Roboto, sans-serif;
+        color: #1f2937;
+        background: #f3f4f6;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      header {
+        background: #0f172a;
+        color: #ffffff;
+        padding: 1.5rem 2rem;
+      }
+
+      header h1 {
+        margin: 0;
+        font-size: 1.75rem;
+      }
+
+      main {
+        padding: 2rem;
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+
+      .card {
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
+        margin-bottom: 1.5rem;
+        padding: 1.75rem;
+      }
+
+      .card h2 {
+        margin-top: 0;
+        font-size: 1.3rem;
+      }
+
+      form label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 0.35rem;
+      }
+
+      form input,
+      form select,
+      form button,
+      textarea {
+        width: 100%;
+        padding: 0.65rem 0.75rem;
+        margin-bottom: 0.75rem;
+        border-radius: 8px;
+        border: 1px solid #cbd5f5;
+        font-size: 1rem;
+        box-sizing: border-box;
+      }
+
+      button {
+        background: #2563eb;
+        color: #ffffff;
+        border: none;
+        cursor: pointer;
+        font-weight: 600;
+        transition: background 0.2s ease-in-out;
+      }
+
+      button:hover {
+        background: #1d4ed8;
+      }
+
+      .flex {
+        display: flex;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+      }
+
+      .flex > * {
+        flex: 1 1 320px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1rem;
+      }
+
+      th,
+      td {
+        text-align: left;
+        padding: 0.75rem;
+        border-bottom: 1px solid #e5e7eb;
+      }
+
+      tr:hover {
+        background: #f8fafc;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      .status-select {
+        width: auto;
+      }
+
+      .feedback {
+        margin-top: 0.5rem;
+        color: #0f766e;
+      }
+
+      .error {
+        color: #dc2626;
+      }
+
+      .logout {
+        background: #64748b;
+      }
+
+      .logout:hover {
+        background: #475569;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Troy High Shared Attendance</h1>
+      <p>Collaborate on rosters and attendance across the teaching team.</p>
+    </header>
+    <main>
+      <section id="auth-section" class="card">
+        <h2>Teacher Login</h2>
+        <form id="login-form">
+          <label for="login-email">Email</label>
+          <input type="email" id="login-email" required autocomplete="username" />
+
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" required autocomplete="current-password" />
+
+          <button type="submit">Sign In</button>
+          <p id="login-error" class="error hidden"></p>
+        </form>
+        <p>
+          Need an account? Ask the administrator for the registration link or run the
+          seed script to add trusted teachers.
+        </p>
+      </section>
+
+      <section id="app-section" class="hidden">
+        <div class="card" id="session-info">
+          <div class="flex" style="align-items: center; justify-content: space-between">
+            <div>
+              <h2>Welcome, <span id="teacher-name"></span></h2>
+              <p id="teacher-email"></p>
+            </div>
+            <div>
+              <button id="logout-button" class="logout">Log out</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex">
+          <div class="card">
+            <h2>Your Classes</h2>
+            <form id="class-form">
+              <label for="class-name">Class name</label>
+              <input type="text" id="class-name" placeholder="Biology - Period 3" required />
+
+              <label for="class-period">Period (optional)</label>
+              <input type="text" id="class-period" placeholder="3" />
+
+              <button type="submit">Add class</button>
+              <p id="class-feedback" class="feedback hidden"></p>
+            </form>
+            <h3>Available classes</h3>
+            <select id="class-select" disabled></select>
+          </div>
+
+          <div class="card">
+            <h2>Students</h2>
+            <form id="student-form">
+              <label for="student-first">First name</label>
+              <input type="text" id="student-first" required />
+
+              <label for="student-last">Last name</label>
+              <input type="text" id="student-last" required />
+
+              <button type="submit">Add student</button>
+              <p id="student-feedback" class="feedback hidden"></p>
+            </form>
+            <div id="student-list"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Attendance</h2>
+          <div class="flex">
+            <div>
+              <label for="attendance-date">Date</label>
+              <input type="date" id="attendance-date" />
+            </div>
+            <div>
+              <p id="attendance-feedback" class="feedback hidden"></p>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Status</th>
+                <th>Note</th>
+              </tr>
+            </thead>
+            <tbody id="attendance-body"></tbody>
+          </table>
+          <button id="save-attendance">Save attendance</button>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const authSection = document.getElementById('auth-section');
+      const appSection = document.getElementById('app-section');
+      const loginForm = document.getElementById('login-form');
+      const loginError = document.getElementById('login-error');
+      const teacherName = document.getElementById('teacher-name');
+      const teacherEmail = document.getElementById('teacher-email');
+      const classForm = document.getElementById('class-form');
+      const classSelect = document.getElementById('class-select');
+      const classFeedback = document.getElementById('class-feedback');
+      const studentForm = document.getElementById('student-form');
+      const studentFeedback = document.getElementById('student-feedback');
+      const studentList = document.getElementById('student-list');
+      const attendanceDate = document.getElementById('attendance-date');
+      const attendanceBody = document.getElementById('attendance-body');
+      const attendanceFeedback = document.getElementById('attendance-feedback');
+      const saveAttendanceButton = document.getElementById('save-attendance');
+      const logoutButton = document.getElementById('logout-button');
+
+      let currentTeacher = null;
+      let currentClassId = null;
+      const attendanceState = new Map();
+
+      function show(element) {
+        element.classList.remove('hidden');
+      }
+
+      function hide(element) {
+        element.classList.add('hidden');
+      }
+
+      function setFeedback(target, message, isError = false) {
+        if (!message) {
+          hide(target);
+          target.textContent = '';
+          target.classList.remove('error');
+          return;
+        }
+        target.textContent = message;
+        target.classList.toggle('error', isError);
+        show(target);
+        setTimeout(() => {
+          hide(target);
+        }, 4000);
+      }
+
+      async function apiFetch(url, options = {}) {
+        const response = await fetch(url, {
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(options.headers || {})
+          },
+          ...options
+        });
+
+        if (!response.ok) {
+          let message = 'Request failed';
+          try {
+            const data = await response.json();
+            message = data.message || message;
+          } catch (error) {
+            // ignore
+          }
+          throw new Error(message);
+        }
+        if (response.status === 204) {
+          return null;
+        }
+        return response.json();
+      }
+
+      function renderStudents(students) {
+        studentList.innerHTML = '';
+        attendanceBody.innerHTML = '';
+        attendanceState.clear();
+
+        if (students.length === 0) {
+          studentList.innerHTML = '<p>No students in this class yet.</p>';
+          return;
+        }
+
+        const list = document.createElement('ul');
+        students.forEach((student) => {
+          const listItem = document.createElement('li');
+          listItem.textContent = `${student.first_name} ${student.last_name}`;
+          list.appendChild(listItem);
+        });
+        studentList.appendChild(list);
+      }
+
+      function renderAttendanceRows(students, existingEntries) {
+        const entryMap = new Map(existingEntries.map((entry) => [String(entry.student_id), entry]));
+        attendanceBody.innerHTML = '';
+        students.forEach((student) => {
+          const key = String(student.id);
+          const entry = entryMap.get(key);
+          const status = entry ? entry.status : 'present';
+          const note = entry ? entry.note || '' : '';
+          attendanceState.set(key, { status, note });
+
+          const row = document.createElement('tr');
+          const nameCell = document.createElement('td');
+          nameCell.textContent = `${student.first_name} ${student.last_name}`;
+
+          const statusCell = document.createElement('td');
+          const select = document.createElement('select');
+          select.className = 'status-select';
+          ['present', 'tardy', 'absent', 'excused'].forEach((optionValue) => {
+            const option = document.createElement('option');
+            option.value = optionValue;
+            option.textContent = optionValue.charAt(0).toUpperCase() + optionValue.slice(1);
+            if (optionValue === status) {
+              option.selected = true;
+            }
+            select.appendChild(option);
+          });
+          select.addEventListener('change', () => {
+            const state = attendanceState.get(key) || {};
+            state.status = select.value;
+            attendanceState.set(key, state);
+          });
+          statusCell.appendChild(select);
+
+          const noteCell = document.createElement('td');
+          const noteInput = document.createElement('textarea');
+          noteInput.rows = 1;
+          noteInput.value = note;
+          noteInput.addEventListener('input', () => {
+            const state = attendanceState.get(key) || {};
+            state.note = noteInput.value;
+            attendanceState.set(key, state);
+          });
+          noteCell.appendChild(noteInput);
+
+          row.appendChild(nameCell);
+          row.appendChild(statusCell);
+          row.appendChild(noteCell);
+          attendanceBody.appendChild(row);
+        });
+      }
+
+      async function loadClasses() {
+        try {
+          const data = await apiFetch('/api/classes');
+          classSelect.innerHTML = '';
+          if (data.classes.length === 0) {
+            classSelect.innerHTML = '<option value="">No classes yet</option>';
+            classSelect.disabled = true;
+            currentClassId = null;
+            renderStudents([]);
+            attendanceBody.innerHTML = '';
+            return;
+          }
+          classSelect.disabled = false;
+          data.classes.forEach((cls, index) => {
+            const option = document.createElement('option');
+            option.value = cls.id;
+            option.textContent = cls.period ? `${cls.name} (Period ${cls.period})` : cls.name;
+            classSelect.appendChild(option);
+            if (index === 0) {
+              currentClassId = cls.id;
+            }
+          });
+          if (currentClassId) {
+            classSelect.value = currentClassId;
+            await loadStudentsAndAttendance();
+          }
+        } catch (error) {
+          console.error(error);
+          setFeedback(classFeedback, error.message, true);
+        }
+      }
+
+      async function loadStudentsAndAttendance() {
+        if (!currentClassId) {
+          return;
+        }
+        try {
+          const [studentsData, attendanceData] = await Promise.all([
+            apiFetch(`/api/students?classId=${currentClassId}`),
+            apiFetch(`/api/attendance?classId=${currentClassId}&date=${attendanceDate.value}`)
+          ]);
+          renderStudents(studentsData.students);
+          renderAttendanceRows(studentsData.students, attendanceData.entries);
+        } catch (error) {
+          console.error(error);
+          setFeedback(attendanceFeedback, error.message, true);
+        }
+      }
+
+      loginForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        loginError.textContent = '';
+        hide(loginError);
+        try {
+          const email = document.getElementById('login-email').value.trim();
+          const password = document.getElementById('login-password').value;
+          const { teacher } = await apiFetch('/api/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ email, password })
+          });
+          currentTeacher = teacher;
+          teacherName.textContent = teacher.name;
+          teacherEmail.textContent = teacher.email;
+          hide(authSection);
+          show(appSection);
+          await loadClasses();
+        } catch (error) {
+          loginError.textContent = error.message;
+          show(loginError);
+        }
+      });
+
+      logoutButton.addEventListener('click', async () => {
+        await apiFetch('/api/auth/logout', { method: 'POST' });
+        currentTeacher = null;
+        document.getElementById('login-password').value = '';
+        show(authSection);
+        hide(appSection);
+      });
+
+      classForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const name = document.getElementById('class-name').value.trim();
+        const period = document.getElementById('class-period').value.trim();
+        try {
+          await apiFetch('/api/classes', {
+            method: 'POST',
+            body: JSON.stringify({ name, period })
+          });
+          setFeedback(classFeedback, 'Class added successfully.');
+          classForm.reset();
+          await loadClasses();
+        } catch (error) {
+          setFeedback(classFeedback, error.message, true);
+        }
+      });
+
+      classSelect.addEventListener('change', async (event) => {
+        currentClassId = event.target.value || null;
+        await loadStudentsAndAttendance();
+      });
+
+      studentForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!currentClassId) {
+          setFeedback(studentFeedback, 'Create or select a class first.', true);
+          return;
+        }
+        const firstName = document.getElementById('student-first').value.trim();
+        const lastName = document.getElementById('student-last').value.trim();
+        try {
+          await apiFetch('/api/students', {
+            method: 'POST',
+            body: JSON.stringify({ classId: currentClassId, firstName, lastName })
+          });
+          setFeedback(studentFeedback, 'Student added successfully.');
+          studentForm.reset();
+          await loadStudentsAndAttendance();
+        } catch (error) {
+          setFeedback(studentFeedback, error.message, true);
+        }
+      });
+
+      attendanceDate.addEventListener('change', loadStudentsAndAttendance);
+
+      saveAttendanceButton.addEventListener('click', async () => {
+        if (!currentClassId) {
+          setFeedback(attendanceFeedback, 'Select a class first.', true);
+          return;
+        }
+        const date = attendanceDate.value;
+        if (!date) {
+          setFeedback(attendanceFeedback, 'Pick a date before saving.', true);
+          return;
+        }
+        try {
+          const operations = [];
+          attendanceState.forEach((value, key) => {
+            operations.push(
+              apiFetch('/api/attendance', {
+                method: 'POST',
+                body: JSON.stringify({
+                  classId: currentClassId,
+                  studentId: Number(key),
+                  date,
+                  status: value.status,
+                  note: value.note || ''
+                })
+              })
+            );
+          });
+          await Promise.all(operations);
+          setFeedback(attendanceFeedback, 'Attendance saved.');
+          await loadStudentsAndAttendance();
+        } catch (error) {
+          setFeedback(attendanceFeedback, error.message, true);
+        }
+      });
+
+      function setTodayDate() {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        attendanceDate.value = `${yyyy}-${mm}-${dd}`;
+      }
+
+      async function bootstrap() {
+        setTodayDate();
+        try {
+          const data = await apiFetch('/api/auth/me');
+          if (data?.teacher) {
+            currentTeacher = data.teacher;
+            teacherName.textContent = data.teacher.name;
+            teacherEmail.textContent = data.teacher.email;
+            hide(authSection);
+            show(appSection);
+            await loadClasses();
+          }
+        } catch (error) {
+          // not authenticated yet
+          show(authSection);
+          hide(appSection);
+        }
+      }
+
+      bootstrap();
+    </script>
+  </body>
+</html>

@@ -30,18 +30,21 @@ This repository now contains a lightweight full-stack prototype that lets multip
 2. **Create an environment file**
    ```bash
    cp ../.env.example ../.env
-   # Edit ../.env to set JWT_SECRET and (optionally) REGISTRATION_CODE
+   # Edit ../.env to set JWT_SECRET, GOOGLE_CLIENT_ID, and other variables
    ```
+   - `GOOGLE_CLIENT_ID` should match the client ID generated in the Google Cloud Console for your Workspace project.
+   - `GOOGLE_ALLOWED_DOMAIN` defaults to `fjuhsd.org`; change it only if your district uses a different Google Workspace domain.
 
 3. **Run the setup check** (ensures the data directory exists)
    ```bash
    npm test
    ```
 
-4. **Seed your first teacher account**
+4. **Seed your first teacher account (optional fallback login)**
    ```bash
    node scripts/seed-teacher.js "Teacher Name" "teacher@troyhigh.edu" "strong-password"
    ```
+   Google authentication automatically provisions teachers the first time they sign in. Seed a password-based user only if you need a backup local login.
 
 5. **Start the backend**
    ```bash
@@ -54,8 +57,10 @@ This repository now contains a lightweight full-stack prototype that lets multip
 All API routes live under `/api` and require authentication except for the login and registration endpoints.
 
 - `POST /api/auth/login` — Obtain a JWT-backed session cookie.
+- `POST /api/auth/google` — Exchange a Google ID token for a session (auto-provisions teachers).
 - `POST /api/auth/logout` — Clear the session cookie.
 - `POST /api/auth/register` — Create a teacher account (optionally gated by `REGISTRATION_CODE`).
+- `GET /api/auth/config` — Surface the Google OAuth client ID to the front end.
 - `GET /api/classes` — List the authenticated teacher's classes.
 - `POST /api/classes` — Create a new class.
 - `PUT /api/classes/:id` — Update an existing class.

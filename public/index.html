@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Troy High Attendance</title>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
       :root {
         font-family: 'Segoe UI', Roboto, sans-serif;
@@ -129,6 +130,10 @@
       .logout:hover {
         background: #475569;
       }
+
+      #google-signin {
+        display: inline-flex;
+      }
     </style>
   </head>
   <body>
@@ -139,19 +144,10 @@
     <main>
       <section id="auth-section" class="card">
         <h2>Teacher Login</h2>
-        <form id="login-form">
-          <label for="login-email">Email</label>
-          <input type="email" id="login-email" required autocomplete="username" />
-
-          <label for="login-password">Password</label>
-          <input type="password" id="login-password" required autocomplete="current-password" />
-
-          <button type="submit">Sign In</button>
-          <p id="login-error" class="error hidden"></p>
-        </form>
+        <div id="google-signin"></div>
+        <p id="google-error" class="error hidden"></p>
         <p>
-          Need an account? Ask the administrator for the registration link or run the
-          seed script to add trusted teachers.
+          Sign in with your <span id="google-domain">@fjuhsd.org</span> Google account to continue.
         </p>
       </section>
 
@@ -230,8 +226,9 @@
     <script>
       const authSection = document.getElementById('auth-section');
       const appSection = document.getElementById('app-section');
-      const loginForm = document.getElementById('login-form');
-      const loginError = document.getElementById('login-error');
+      const googleSignInContainer = document.getElementById('google-signin');
+      const googleError = document.getElementById('google-error');
+      const googleDomainText = document.getElementById('google-domain');
       const teacherName = document.getElementById('teacher-name');
       const teacherEmail = document.getElementById('teacher-email');
       const classForm = document.getElementById('class-form');
@@ -249,6 +246,9 @@
       let currentTeacher = null;
       let currentClassId = null;
       const attendanceState = new Map();
+      let googleConfig = null;
+      let googleInitialized = false;
+      let googleInitPoll = null;
 
       function show(element) {
         element.classList.remove('hidden');
@@ -256,6 +256,16 @@
 
       function hide(element) {
         element.classList.add('hidden');
+      }
+
+      function setGoogleError(message) {
+        if (!message) {
+          googleError.textContent = '';
+          hide(googleError);
+          return;
+        }
+        googleError.textContent = message;
+        show(googleError);
       }
 
       function setFeedback(target, message, isError = false) {
@@ -418,35 +428,99 @@
         }
       }
 
-      loginForm.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        loginError.textContent = '';
-        hide(loginError);
-        try {
-          const email = document.getElementById('login-email').value.trim();
-          const password = document.getElementById('login-password').value;
-          const { teacher } = await apiFetch('/api/auth/login', {
-            method: 'POST',
-            body: JSON.stringify({ email, password })
-          });
-          currentTeacher = teacher;
-          teacherName.textContent = teacher.name;
-          teacherEmail.textContent = teacher.email;
-          hide(authSection);
-          show(appSection);
-          await loadClasses();
-        } catch (error) {
-          loginError.textContent = error.message;
-          show(loginError);
+      async function completeLogin(teacher) {
+        currentTeacher = teacher;
+        teacherName.textContent = teacher.name;
+        teacherEmail.textContent = teacher.email;
+        hide(authSection);
+        show(appSection);
+        await loadClasses();
+      }
+
+      async function handleGoogleCredentialResponse(response) {
+        if (!response?.credential) {
+          setGoogleError('Google sign-in did not return a credential.');
+          return;
         }
-      });
+        setGoogleError('');
+        try {
+          const { teacher } = await apiFetch('/api/auth/google', {
+            method: 'POST',
+            body: JSON.stringify({ credential: response.credential })
+          });
+          await completeLogin(teacher);
+        } catch (error) {
+          setGoogleError(error.message || 'Google sign-in failed.');
+          if (window.google?.accounts?.id) {
+            window.google.accounts.id.disableAutoSelect();
+          }
+        }
+      }
+
+      function startGoogleInitPolling() {
+        if (googleInitPoll) {
+          return;
+        }
+        googleInitPoll = setInterval(() => {
+          if (googleInitialized) {
+            clearInterval(googleInitPoll);
+            googleInitPoll = null;
+            return;
+          }
+          maybeInitializeGoogle();
+        }, 500);
+      }
+
+      function maybeInitializeGoogle() {
+        if (googleInitialized) {
+          return;
+        }
+        if (!googleConfig?.clientId || !window.google?.accounts?.id) {
+          return;
+        }
+        window.google.accounts.id.initialize({
+          client_id: googleConfig.clientId,
+          callback: handleGoogleCredentialResponse
+        });
+        googleSignInContainer.innerHTML = '';
+        window.google.accounts.id.renderButton(googleSignInContainer, {
+          theme: 'filled_blue',
+          size: 'large',
+          type: 'standard'
+        });
+        window.google.accounts.id.prompt();
+        googleInitialized = true;
+      }
+
+      async function loadGoogleConfig() {
+        setGoogleError('');
+        try {
+          const config = await apiFetch('/api/auth/config');
+          if (!config.clientId) {
+            setGoogleError('Google sign-in is not configured. Contact your administrator.');
+            return;
+          }
+          googleConfig = config;
+          if (googleDomainText && config.allowedDomain) {
+            googleDomainText.textContent = `@${config.allowedDomain}`;
+          }
+          maybeInitializeGoogle();
+          startGoogleInitPolling();
+        } catch (error) {
+          setGoogleError(error.message || 'Unable to load Google sign-in settings.');
+        }
+      }
 
       logoutButton.addEventListener('click', async () => {
         await apiFetch('/api/auth/logout', { method: 'POST' });
         currentTeacher = null;
-        document.getElementById('login-password').value = '';
         show(authSection);
         hide(appSection);
+        setGoogleError('');
+        if (window.google?.accounts?.id) {
+          window.google.accounts.id.disableAutoSelect();
+          window.google.accounts.id.prompt();
+        }
       });
 
       classForm.addEventListener('submit', async (event) => {
@@ -555,6 +629,11 @@
         }
       }
 
+      window.addEventListener('load', () => {
+        maybeInitializeGoogle();
+      });
+
+      loadGoogleConfig();
       bootstrap();
     </script>
   </body>

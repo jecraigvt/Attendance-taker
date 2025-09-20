@@ -382,13 +382,15 @@ async function handleScheduleUpload() {
             // THE FIX IS APPLIED TO THE LINE BELOW
             const cleanName = scheduleName.replace(' Schedule', '').replace('/PLC', '').replace('/', '-'); // Replace slash with hyphen
             if (Object.keys(bellSchedules[scheduleName]).length > 0) {
-                const docRef = doc(db, `artifacts/${APP_ID}/public/schedules/bell_schedules/${cleanName}`);
-                uploadPromises.push(setDoc(docRef, bellSchedules[scheduleName]));
+                const scheduleData = bellSchedules[scheduleName];
+                uploadPromises.push(setDoc(doc(db, teacherPath(`schedules/bell_schedules/${cleanName}`)), scheduleData));
+                uploadPromises.push(setDoc(doc(db, legacyPath(`schedules/bell_schedules/${cleanName}`)), scheduleData));
             }
         }
 
-        const calendarRef = doc(db, `artifacts/${APP_ID}/public/schedules/calendar/main`);
-        uploadPromises.push(setDoc(calendarRef, { dates: calendarData }));
+        const calendarPayload = { dates: calendarData };
+        uploadPromises.push(setDoc(doc(db, teacherPath('schedules/calendar/main')), calendarPayload));
+        uploadPromises.push(setDoc(doc(db, legacyPath('schedules/calendar/main')), calendarPayload));
 
         await Promise.all(uploadPromises);
 
@@ -447,8 +449,9 @@ async function exportDateRangeCSV() {
         for (const date of datesToCheck) {
             // Loop through every possible period for that date
             for (const period of masterPeriodList) {
-                const basePath = `artifacts/${APP_ID}/public/data/attendance/${date}/periods/${period}`;
-                
+                await maybeMigrateLegacyAttendance(date, period);
+                const basePath = teacherPath(`data/attendance/${date}/periods/${period}`);
+
                 // 1. Fetch the roster snapshot for this specific day and period
                 const rosterDocRef = doc(db, basePath);
                 const rosterDoc = await getDoc(rosterDocRef);
@@ -525,7 +528,7 @@ async function exportDateRangeCSV() {
 }
 // ===== Import modern Firebase SDK =====
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, doc, onSnapshot, setDoc, serverTimestamp, getDoc, addDoc, where, query, getDocs, deleteDoc, documentId } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ===== Config & Constants =====
@@ -539,9 +542,163 @@ const LATE_TO_THIRD = new Set([9,10]);   // groups that should be last to receiv
 // Cloud config passed in by host page (optional)
 const APP_ID = typeof window.__app_id === 'string' ? window.__app_id : 'demo-app';
 const FB_CONFIG = (typeof window.__firebase_config === 'object' && window.__firebase_config) ? window.__firebase_config : null;
+const DEFAULT_TEACHER_ID = 'default';
+const TEACHER_ID_STORAGE_KEY = 'teacherId';
+
+function sanitizeTeacherIdentifier(value){
+  if(!value || typeof value !== 'string') return DEFAULT_TEACHER_ID;
+  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+  return normalized || DEFAULT_TEACHER_ID;
+}
+
+function readStoredTeacherId(){
+  try{
+    const stored = localStorage.getItem(TEACHER_ID_STORAGE_KEY);
+    if(stored) return sanitizeTeacherIdentifier(stored);
+  }catch{}
+  return DEFAULT_TEACHER_ID;
+}
+
+let teacherId = readStoredTeacherId();
+try{ localStorage.setItem(TEACHER_ID_STORAGE_KEY, teacherId); }catch{}
+
+const migratedTeachers = new Set();
+const migratedAttendanceKeys = new Set();
+
+const teacherPath = subpath => `artifacts/${APP_ID}/teachers/${teacherId}/${subpath}`;
+const legacyPath = subpath => `artifacts/${APP_ID}/public/${subpath}`;
 
 let db=null, auth=null;
 let unsubRosters=null, unsubExceptions=null, unsubAttendance=null;
+
+function deriveTeacherIdFromUser(user){
+  if(user && typeof user.email === 'string' && user.email.trim()){
+    return user.email;
+  }
+  try{
+    const stored = localStorage.getItem(TEACHER_ID_STORAGE_KEY);
+    if(stored) return stored;
+  }catch{}
+  return teacherId || DEFAULT_TEACHER_ID;
+}
+
+async function maybeMigrateLegacyDataForTeacher(id=teacherId){
+  if(!db) return;
+  const sanitized = sanitizeTeacherIdentifier(id);
+  if(migratedTeachers.has(sanitized)) return;
+  const teacherScoped = subpath => `artifacts/${APP_ID}/teachers/${sanitized}/${subpath}`;
+  try{
+    const newRosterSnap = await getDocs(collection(db, teacherScoped('rosters/periods')));
+    if(newRosterSnap.empty){
+      const legacyRosterSnap = await getDocs(collection(db, legacyPath('rosters/periods')));
+      if(!legacyRosterSnap.empty){
+        await Promise.all(legacyRosterSnap.docs.map(docSnap =>
+          setDoc(doc(db, teacherScoped(`rosters/periods/${docSnap.id}`)), docSnap.data(), {merge:true})
+        ));
+      }
+    }
+
+    const teacherConfigRef = doc(db, teacherScoped('config'));
+    const teacherConfigSnap = await getDoc(teacherConfigRef);
+    if(!teacherConfigSnap.exists()){
+      const legacyConfigSnap = await getDoc(doc(db, legacyPath('config')));
+      if(legacyConfigSnap.exists()){
+        await setDoc(teacherConfigRef, legacyConfigSnap.data(), {merge:true});
+      }
+    }
+
+    const teacherSchedulesSnap = await getDocs(collection(db, teacherScoped('schedules/bell_schedules')));
+    if(teacherSchedulesSnap.empty){
+      const legacySchedulesSnap = await getDocs(collection(db, legacyPath('schedules/bell_schedules')));
+      if(!legacySchedulesSnap.empty){
+        await Promise.all(legacySchedulesSnap.docs.map(docSnap =>
+          setDoc(doc(db, teacherScoped(`schedules/bell_schedules/${docSnap.id}`)), docSnap.data(), {merge:true})
+        ));
+      }
+    }
+
+    const teacherCalendarRef = doc(db, teacherScoped('schedules/calendar/main'));
+    const teacherCalendarSnap = await getDoc(teacherCalendarRef);
+    if(!teacherCalendarSnap.exists()){
+      const legacyCalendarSnap = await getDoc(doc(db, legacyPath('schedules/calendar/main')));
+      if(legacyCalendarSnap.exists()){
+        await setDoc(teacherCalendarRef, legacyCalendarSnap.data(), {merge:true});
+      }
+    }
+    migratedTeachers.add(sanitized);
+  }catch(err){
+    console.error('[migration] Failed to migrate legacy teacher data', err);
+  }
+}
+
+async function maybeMigrateLegacyAttendance(date, period, id=teacherId){
+  if(!db || !date || !period) return;
+  const sanitized = sanitizeTeacherIdentifier(id);
+  const key = `${sanitized}|${date}|${period}`;
+  if(migratedAttendanceKeys.has(key)) return;
+  const teacherScoped = subpath => `artifacts/${APP_ID}/teachers/${sanitized}/${subpath}`;
+  try{
+    const teacherStudentsSnap = await getDocs(collection(db, teacherScoped(`data/attendance/${date}/periods/${period}/students`)));
+    if(!teacherStudentsSnap.empty){
+      migratedAttendanceKeys.add(key);
+      return;
+    }
+
+    const legacyStudentsSnap = await getDocs(collection(db, legacyPath(`data/attendance/${date}/periods/${period}/students`)));
+    if(legacyStudentsSnap.empty){
+      migratedAttendanceKeys.add(key);
+      return;
+    }
+
+    const writePromises = legacyStudentsSnap.docs.map(docSnap =>
+      setDoc(doc(db, teacherScoped(`data/attendance/${date}/periods/${period}/students/${docSnap.id}`)), docSnap.data(), {merge:true})
+    );
+    if(writePromises.length){
+      await Promise.all(writePromises);
+    }
+
+    const legacyPeriodDoc = await getDoc(doc(db, legacyPath(`data/attendance/${date}/periods/${period}`)));
+    if(legacyPeriodDoc.exists()){
+      await setDoc(doc(db, teacherScoped(`data/attendance/${date}/periods/${period}`)), legacyPeriodDoc.data(), {merge:true});
+    }
+    migratedAttendanceKeys.add(key);
+  }catch(err){
+    console.error('[migration] Failed to migrate legacy attendance', err);
+  }
+}
+
+async function updateTeacherContext(newValue){
+  const sanitized = sanitizeTeacherIdentifier(newValue || teacherId);
+  const idChanged = sanitized !== teacherId;
+  teacherId = sanitized;
+  try{ localStorage.setItem(TEACHER_ID_STORAGE_KEY, teacherId); }catch{}
+  console.log('[teacher] active teacherId =', teacherId);
+
+  if(!db) return;
+
+  await maybeMigrateLegacyDataForTeacher(teacherId);
+
+  if(idChanged){
+    if(unsubRosters){ unsubRosters(); unsubRosters=null; }
+    if(unsubExceptions){ unsubExceptions(); unsubExceptions=null; }
+    if(unsubAttendance){ unsubAttendance(); unsubAttendance=null; }
+    periodAttendanceLog = [];
+    allRosters = {};
+    currentRoster = [];
+    try{ localStorage.removeItem('allRosters'); }catch{}
+    renderRosterSummary();
+    renderRosterDebug();
+  }
+
+  watchRostersFromCloud();
+  loadExceptions();
+
+  if(periodSelect && periodSelect.value){
+    onPeriodChange().catch(err => console.error('[teacher] period refresh failed', err));
+  } else {
+    updateUI();
+  }
+}
 
 // ===== Calendars & Schedules =====
 const calendarData = {"2025-08-14":"Late Start","2025-08-15":"Assembly Schedule","2025-08-21":"Back to School Night","2025-09-01":"Holiday","2025-10-16":"Shake Out","2025-11-03":"No Students","2025-11-11":"Holiday","2025-11-24":"Thanksgiving Week","2025-11-25":"Thanksgiving Week","2025-11-26":"Thanksgiving Week","2025-11-27":"Holiday","2025-11-28":"Holiday","2025-12-19":"Finals","2025-12-22":"Winter Break","2026-01-19":"Holiday","2026-01-20":"Holiday","2026-02-13":"Holiday","2026-02-16":"Holiday","2026-03-12":"Min Day","2026-03-13":"No Students","2026-04-06":"Spring Break","2026-05-07":"Late Start","2026-05-25":"Holiday","2026-06-02":"Finals","2026-06-03":"Finals","2026-06-04":"Finals"};
@@ -653,11 +810,14 @@ async function init(){
   try{
     console.log('[init] starting');
     await initFirebase(); // Use new Firebase init function
-    if(db) watchRostersFromCloud();
     loadRostersLocal();
     loadExceptions();
     renderRosterSummary();
     renderRosterDebug();
+
+    if(db){
+      await updateTeacherContext(teacherId);
+    }
 
     // date + schedule setup
     const today = new Date();
@@ -705,7 +865,7 @@ if (scheduleFileInput && uploadSchedulesBtn) {
     uploadSchedulesBtn.addEventListener('click', handleScheduleUpload);
 }
 
-    periodSelect.addEventListener('change', ()=>{ isOverride=true; sessionStorage.setItem('periodOverride','true'); onPeriodChange(); });
+    periodSelect.addEventListener('change', ()=>{ isOverride=true; sessionStorage.setItem('periodOverride','true'); onPeriodChange().catch(err=>console.error('[period] change handler failed', err)); });
     rosterUpload.addEventListener('change', onRosterUpload);
     clearRostersBtn.addEventListener('click', clearSavedRosters);
     exportCsvButton.addEventListener('click', exportCSV);
@@ -737,6 +897,10 @@ async function initFirebase(){
     const app = initializeApp(FB_CONFIG);
     db = getFirestore(app);
     auth = getAuth(app);
+    onAuthStateChanged(auth, user => {
+      const candidate = deriveTeacherIdFromUser(user);
+      updateTeacherContext(candidate).catch(err => console.error('[auth] failed to update teacher context', err));
+    });
     await signInAnonymously(auth);
     rosterStatus.textContent = 'Cloud Sync Ready: rosters and exceptions will sync.';
   }catch(err){ console.error(err); rosterStatus.textContent='Cloud error — Local Mode enabled.'; rosterStatus.classList.add('text-red-600'); db=null; auth=null; }
@@ -751,8 +915,9 @@ function loadRostersLocal(){
 }
 
 function watchRostersFromCloud(){
+  if(!db) return;
   if(unsubRosters) unsubRosters();
-  const colRef = collection(db, `artifacts/${APP_ID}/public/rosters/periods`);
+  const colRef = collection(db, teacherPath('rosters/periods'));
   unsubRosters = onSnapshot(colRef, snap=>{
     const incoming = {};
     snap.forEach(doc=>{
@@ -822,9 +987,12 @@ function onRosterUpload(evt){ (async e=>{
       const uploadPromises = [];
       for (const p of changed){
         console.log(`[onRosterUpload] Preparing to write roster for period ${p} to Firestore.`);
-        const docRef = doc(db, `artifacts/${APP_ID}/public/rosters/periods/${p}`);
+        const payload = { roster: allRosters[p], updatedAt: serverTimestamp() };
         uploadPromises.push(
-          setDoc(docRef, { roster: allRosters[p], updatedAt: serverTimestamp() }, { merge: true })
+          setDoc(doc(db, teacherPath(`rosters/periods/${p}`)), payload, { merge: true })
+        );
+        uploadPromises.push(
+          setDoc(doc(db, legacyPath(`rosters/periods/${p}`)), payload, { merge: true })
         );
       }
       await Promise.all(uploadPromises);
@@ -840,7 +1008,7 @@ function onRosterUpload(evt){ (async e=>{
 
   renderRosterSummary();
   checkDuplicateIDs(allRosters);
-  onPeriodChange();
+  onPeriodChange().catch(err=>console.error('[rosters] period refresh failed', err));
 })(evt); }
 
 async function clearSavedRosters(){
@@ -857,12 +1025,15 @@ async function clearSavedRosters(){
     // Clear cloud state if connected
     if (db) {
         try {
-            const colRef = collection(db, `artifacts/${APP_ID}/public/rosters/periods`);
-            const snapshot = await getDocs(colRef);
             const deletePromises = [];
-            snapshot.forEach(doc => {
-                deletePromises.push(deleteDoc(doc.ref));
-            });
+            const teacherRosterCol = collection(db, teacherPath('rosters/periods'));
+            const teacherSnapshot = await getDocs(teacherRosterCol);
+            teacherSnapshot.forEach(docSnap => deletePromises.push(deleteDoc(docSnap.ref)));
+
+            const legacyRosterCol = collection(db, legacyPath('rosters/periods'));
+            const legacySnapshot = await getDocs(legacyRosterCol);
+            legacySnapshot.forEach(docSnap => deletePromises.push(deleteDoc(docSnap.ref)));
+
             await Promise.all(deletePromises);
             console.log("Cloud rosters cleared successfully.");
         } catch (err) {
@@ -894,7 +1065,7 @@ function loadExceptions(){
   }catch{}
   if(unsubExceptions) unsubExceptions();
   if(db){
-    const docRef = doc(db, `artifacts/${APP_ID}/public/config`);
+    const docRef = doc(db, teacherPath('config'));
     unsubExceptions = onSnapshot(docRef, docSnap=>{
       if(docSnap.exists()){
         const d=docSnap.data();
@@ -925,8 +1096,11 @@ async function saveExceptions(){
   exceptionsStatus.textContent='Saved locally'; setTimeout(()=>exceptionsStatus.textContent='',1500);
   if(db){
     try{
-      const docRef = doc(db, `artifacts/${APP_ID}/public/config`);
-      await setDoc(docRef, {avoidPairs: ap, frontRow: fr, updatedAt: serverTimestamp()},{merge:true});
+      const payload = {avoidPairs: ap, frontRow: fr, updatedAt: serverTimestamp()};
+      await Promise.all([
+        setDoc(doc(db, teacherPath('config')), payload,{merge:true}),
+        setDoc(doc(db, legacyPath('config')), payload,{merge:true})
+      ]);
       exceptionsStatus.textContent='Saved to cloud';
       setTimeout(()=>exceptionsStatus.textContent='',1500);
     } catch{
@@ -942,12 +1116,12 @@ function doDetectAndMaybeSwitch(){
   lastDetect = info;
   if(info.detected && periodSelect.value!==info.detected){
     periodSelect.value = info.detected;
-    onPeriodChange();
+    onPeriodChange().catch(err=>console.error('[period] auto detect failed', err));
   } else {
     updateUI();
   }
 }
-function onPeriodChange(){
+async function onPeriodChange(){
   const p = periodSelect.value;
   if(unsubAttendance){ unsubAttendance(); unsubAttendance=null; }
 
@@ -959,11 +1133,16 @@ function onPeriodChange(){
   const today = nowISODate();
 
   if(db && p){
-    const colRef = collection(db, `artifacts/${APP_ID}/public/data/attendance/${today}/periods/${p}/students`);
+    try{
+      await maybeMigrateLegacyAttendance(today, p);
+    }catch(err){
+      console.error('[attendance] legacy migration failed', err);
+    }
+    const colRef = collection(db, teacherPath(`data/attendance/${today}/periods/${p}/students`));
     unsubAttendance = onSnapshot(colRef, snap=>{
       periodAttendanceLog = snap.docs.map(d=>d.data());
       updateUI(); renderRosterDebug();
-    });
+    }, err => console.error('[attendance] snapshot error', err));
   } else {
     periodAttendanceLog = getLocalLogs(today,p);
     updateUI(); renderRosterDebug();
@@ -1188,15 +1367,17 @@ async function handleSignIn(){
       // --- START: NEW ROSTER SNAPSHOT LOGIC ---
       // For each day and period, we save a snapshot of the roster.
       // This is crucial for accurately determining absences later.
-      const rosterSnapshotRef = doc(db, `artifacts/${APP_ID}/public/data/attendance/${today}/periods/${p}`);
+      const rosterSnapshotRef = doc(db, teacherPath(`data/attendance/${today}/periods/${p}`));
       try {
           const rosterDoc = await getDoc(rosterSnapshotRef);
           // If the period document doesn't exist yet, or it's missing the roster, we create it.
           if (!rosterDoc.exists() || !rosterDoc.data().roster_snapshot) {
               console.log(`Creating roster snapshot for Period ${p} on ${today}.`);
-              await setDoc(rosterSnapshotRef, {
-                  roster_snapshot: currentRoster // Save the entire current roster array
-              }, { merge: true }); // Merge ensures we don't overwrite the 'students' subcollection
+              const snapshotPayload = { roster_snapshot: currentRoster };
+              await Promise.all([
+                setDoc(rosterSnapshotRef, snapshotPayload, { merge: true }),
+                setDoc(doc(db, legacyPath(`data/attendance/${today}/periods/${p}`)), snapshotPayload, { merge: true })
+              ]); // Merge ensures we don't overwrite the 'students' subcollection
           }
       } catch(err) {
           console.error("Failed to save roster snapshot:", err);
@@ -1204,7 +1385,9 @@ async function handleSignIn(){
       }
       // --- END: NEW ROSTER SNAPSHOT LOGIC ---
 
-      const colRef = collection(db, `artifacts/${APP_ID}/public/data/attendance/${today}/periods/${p}/students`);
+      await maybeMigrateLegacyAttendance(today, p);
+
+      const colRef = collection(db, teacherPath(`data/attendance/${today}/periods/${p}/students`));
       const q = query(colRef, where('StudentID','==',student.StudentID));
       const snap = await getDocs(q);
 
@@ -1230,8 +1413,11 @@ async function handleSignIn(){
           Timestamp: serverTimestamp()
         };
         // We now use the StudentID as the document ID to prevent any chance of duplicates.
-        const studentDocRef = doc(db, `artifacts/${APP_ID}/public/data/attendance/${today}/periods/${p}/students/${student.StudentID}`);
-        await setDoc(studentDocRef, log);
+        const studentDocRef = doc(db, teacherPath(`data/attendance/${today}/periods/${p}/students/${student.StudentID}`));
+        await Promise.all([
+          setDoc(studentDocRef, log),
+          setDoc(doc(db, legacyPath(`data/attendance/${today}/periods/${p}/students/${student.StudentID}`)), log)
+        ]);
       }catch(err){
         console.error('Write failed', err);
         showMessage('error','Database Error','Could not save attendance. Please try again.');
@@ -1272,7 +1458,8 @@ async function exportCSV(){
   for(const p of Object.keys(allRosters)){
     const present = new Map();
     if(db){
-      const colRef = collection(db, `artifacts/${APP_ID}/public/data/attendance/${today}/periods/${p}/students`);
+      await maybeMigrateLegacyAttendance(today, p);
+      const colRef = collection(db, teacherPath(`data/attendance/${today}/periods/${p}/students`));
       const snap = await getDocs(colRef);
       snap.docs.forEach(d=>{ const data=d.data(); present.set(data.StudentID,data); });
     } else {

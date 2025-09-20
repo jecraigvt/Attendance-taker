@@ -70,7 +70,7 @@
           <!-- Seating Exceptions -->
           <div class="pt-6 border-t">
             <h3 class="text-lg font-semibold text-gray-800 mb-2">Seating Exceptions</h3>
-            <p class="text-xs text-gray-500 mb-2">Front row tables are 1, 2, 12, 13. Enter full Student IDs.</p>
+            <p id="front-group-note" class="text-xs text-gray-500 mb-2"></p>
 
             <label class="block text-xs font-medium text-gray-700">Front Row IDs (one per line)</label>
             <textarea id="front-row-input" class="w-full mt-1 p-2 border rounded-md h-20" placeholder="800024418&#10;800024885"></textarea>
@@ -81,6 +81,31 @@
             <div class="flex items-center gap-2 mt-3">
               <button id="save-exceptions" class="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700">Save Exceptions</button>
               <span id="exceptions-status" class="text-xs text-gray-600"></span>
+            </div>
+
+            <div class="pt-5 mt-5 border-t">
+              <h4 class="text-sm font-semibold text-gray-700 mb-2">Group Layout Preferences</h4>
+              <div class="grid grid-cols-1 gap-3 text-xs">
+                <label class="block font-medium text-gray-700">Max Group Number</label>
+                <input id="max-group-input" type="number" min="1" class="w-full p-2 border rounded-md" placeholder="13" />
+
+                <label class="block font-medium text-gray-700">Default Group Capacity</label>
+                <input id="default-cap-input" type="number" min="1" class="w-full p-2 border rounded-md" placeholder="3" />
+
+                <label class="block font-medium text-gray-700">Per-Group Capacity Overrides (one "Group=Cap" per line)</label>
+                <textarea id="cap-overrides-input" class="w-full p-2 border rounded-md h-20" placeholder="6=2"></textarea>
+
+                <label class="block font-medium text-gray-700">Front Row Group Numbers (comma separated)</label>
+                <input id="front-groups-input" type="text" class="w-full p-2 border rounded-md" placeholder="1,2,12,13" />
+
+                <label class="block font-medium text-gray-700">Groups Slow to Add a Third Seat (comma separated)</label>
+                <input id="late-third-input" type="text" class="w-full p-2 border rounded-md" placeholder="9,10" />
+              </div>
+
+              <div class="flex items-center gap-2 mt-3">
+                <button id="save-teacher-config" class="bg-green-600 text-white px-3 py-1 rounded-md hover:bg-green-700">Save Group Layout</button>
+                <span id="teacher-config-status" class="text-xs text-gray-600"></span>
+              </div>
             </div>
           </div>
 
@@ -242,16 +267,24 @@ function updateFullscreenGroupView() {
     if (!fullscreenListEl) return;
 
     const map = new Map();
-    for (let g = 1; g <= MAX_GROUP; g++) map.set(g, []);
+    const maxGroup = computeMaxGroupForLog();
+    for (let g = 1; g <= maxGroup; g++) map.set(g, []);
     periodAttendanceLog.forEach(l => {
-        if (l.Group && map.has(l.Group)) map.get(l.Group).push(l.Name);
+        const gNum = Number(l && l.Group);
+        if (Number.isFinite(gNum) && gNum > 0) {
+            const idx = Math.floor(gNum);
+            if (!map.has(idx)) map.set(idx, []);
+            map.get(idx).push(l.Name);
+        }
     });
 
     fullscreenListEl.innerHTML = '';
     if (periodAttendanceLog.length === 0) {
         fullscreenListEl.innerHTML = '<p class="col-span-full text-center text-gray-400 text-xl">Students will appear here as they sign in.</p>';
     } else {
-        map.forEach((arr, grp) => {
+        const sortedGroups = Array.from(map.keys()).sort((a, b) => a - b);
+        sortedGroups.forEach(grp => {
+            const arr = map.get(grp) || [];
             if (arr.length > 0) {
                 const div = document.createElement('div');
                 div.innerHTML = `<h4 class="font-bold text-2xl text-red-500 mb-2">Group ${grp} (${arr.length})</h4><ul class="text-xl space-y-1">${arr.map(n => `<li>${n}</li>`).join('')}</ul>`;
@@ -531,10 +564,31 @@ import { getFirestore, collection, doc, onSnapshot, setDoc, serverTimestamp, get
 // ===== Config & Constants =====
 const TEACHER_CODE = "****";            // change in one place
 const PASSING_MIN = 7;                   // minutes before next bell to switch
-const MAX_GROUP = 13;                    // groups 1..13
-const GROUP_CAP = g => g===6 ? 2 : 3;    // cap 2 for group 6, else 3
-const FRONT_SET = new Set([1,2,12,13]);  // "front of room" groups
-const LATE_TO_THIRD = new Set([9,10]);   // groups that should be last to receive a 3rd person
+
+const defaultTeacherConfig = Object.freeze({
+  maxGroup: 13,
+  defaultGroupCap: 3,
+  groupCapOverrides: { "6": 2 },
+  frontGroups: [1, 2, 12, 13],
+  lateThirdGroups: [9, 10]
+});
+
+const RAW_TEACHER_ID = (typeof window.__teacher_id === 'string' && window.__teacher_id.trim())
+  ? window.__teacher_id.trim()
+  : ((typeof window.__teacher_code === 'string' && window.__teacher_code.trim())
+      ? window.__teacher_code.trim()
+      : ((TEACHER_CODE && TEACHER_CODE !== '****') ? TEACHER_CODE : 'default'));
+
+const TEACHER_ID = sanitizeDocId(RAW_TEACHER_ID) || 'default';
+
+const teacherIdWasSanitized = TEACHER_ID !== (RAW_TEACHER_ID || '');
+if (teacherIdWasSanitized) {
+  console.warn('[config] Teacher ID contained invalid characters and was sanitized.', { RAW_TEACHER_ID, TEACHER_ID });
+}
+
+let teacherConfig = normalizeTeacherConfig(defaultTeacherConfig);
+let frontGroupSet = new Set(teacherConfig.frontGroups);
+let lateThirdSet = new Set(teacherConfig.lateThirdGroups);
 
 // Cloud config passed in by host page (optional)
 const APP_ID = typeof window.__app_id === 'string' ? window.__app_id : 'demo-app';
@@ -563,6 +617,7 @@ let scheduleName = 'Default';
 let isOverride = false;
 let autoTimer = null;
 let lastDetect = null;
+let teacherConfigStatusTimeout = null;
 
 let exceptions = { avoidPairs: [], frontRow: new Set() };
 
@@ -599,6 +654,14 @@ const avoidPairsInput = $('#avoid-pairs-input');
 const saveExceptionsBtn = $('#save-exceptions');
 const exceptionsStatus = $('#exceptions-status');
 const periodIndicator = $('#period-indicator');
+const frontGroupNote = $('#front-group-note');
+const maxGroupInput = $('#max-group-input');
+const defaultCapInput = $('#default-cap-input');
+const capOverridesInput = $('#cap-overrides-input');
+const frontGroupsInput = $('#front-groups-input');
+const lateThirdInput = $('#late-third-input');
+const saveTeacherConfigBtn = $('#save-teacher-config');
+const teacherConfigStatus = $('#teacher-config-status');
 
 // ===== Helpers =====
 const nowISODate = () => new Date().toISOString().slice(0,10);
@@ -617,6 +680,155 @@ const localLogCache = new Map();
 const keyFor = (date,period) => `${date}|${period}`;
 const getLocalLogs = (date,period) => { const k=keyFor(date,period); if(!localLogCache.has(k)){ const s=localStorage.getItem('logs:'+k); localLogCache.set(k, s?JSON.parse(s):[]);} return localLogCache.get(k); };
 const setLocalLogs = (date,period,list) => { const k=keyFor(date,period); localLogCache.set(k,list); localStorage.setItem('logs:'+k, JSON.stringify(list)); };
+
+function sanitizeDocId(raw){
+  if(typeof raw !== 'string') return '';
+  return raw.replace(/[\/#?\[\]]+/g,'-').replace(/\*/g,'').trim();
+}
+
+function parseNumericList(input){
+  let values=[];
+  if(Array.isArray(input)) values = input;
+  else if(typeof input === 'string') values = input.split(/[\s,]+/);
+  else if(typeof input === 'number') values = [input];
+
+  const nums = [];
+  for(const val of values){
+    const num = Number(val);
+    if(Number.isFinite(num) && num>0){
+      nums.push(Math.floor(num));
+    }
+  }
+  const unique = Array.from(new Set(nums));
+  unique.sort((a,b)=>a-b);
+  return unique;
+}
+
+function parseGroupCapOverrides(input){
+  const out={};
+  const applyPair=(grp,cap)=>{
+    const gNum = Number(grp);
+    const cNum = Number(cap);
+    if(Number.isFinite(gNum) && Number.isFinite(cNum) && gNum>0 && cNum>0){
+      out[String(Math.floor(gNum))] = Math.floor(cNum);
+    }
+  };
+
+  const processString=str=>{
+    str.split(/\r?\n/).forEach(line=>{
+      const trimmed=line.trim();
+      if(!trimmed) return;
+      const parts=trimmed.split(/[^0-9]+/).filter(Boolean);
+      if(parts.length>=2) applyPair(parts[0], parts[1]);
+    });
+  };
+
+  if(Array.isArray(input)){
+    input.forEach(item=>{
+      if(!item) return;
+      if(typeof item==='string') processString(item);
+      else if(typeof item==='object'){
+        if(Array.isArray(item) && item.length>=2) applyPair(item[0], item[1]);
+        else if(item.group!==undefined && item.cap!==undefined) applyPair(item.group, item.cap);
+        else if(item.g!==undefined && item.c!==undefined) applyPair(item.g, item.c);
+      }
+    });
+  } else if(typeof input==='string'){
+    processString(input);
+  } else if(typeof input==='object' && input){
+    Object.entries(input).forEach(([key,val])=>applyPair(key,val));
+  }
+  return out;
+}
+
+function normalizeTeacherConfig(raw){
+  const base = {
+    maxGroup: defaultTeacherConfig.maxGroup,
+    defaultGroupCap: defaultTeacherConfig.defaultGroupCap,
+    groupCapOverrides: { ...defaultTeacherConfig.groupCapOverrides },
+    frontGroups: [...defaultTeacherConfig.frontGroups],
+    lateThirdGroups: [...defaultTeacherConfig.lateThirdGroups]
+  };
+
+  if(!raw || typeof raw !== 'object') return base;
+
+  if(Object.prototype.hasOwnProperty.call(raw,'maxGroup')){
+    const val = raw.maxGroup;
+    const parsed = Number(val);
+    if(Number.isFinite(parsed) && parsed>0) base.maxGroup = Math.floor(parsed);
+  }
+
+  if(Object.prototype.hasOwnProperty.call(raw,'defaultGroupCap')){
+    const val = raw.defaultGroupCap;
+    const parsed = Number(val);
+    if(Number.isFinite(parsed) && parsed>0) base.defaultGroupCap = Math.floor(parsed);
+  }
+
+  if(Object.prototype.hasOwnProperty.call(raw,'groupCapOverrides')){
+    base.groupCapOverrides = parseGroupCapOverrides(raw.groupCapOverrides);
+  }
+
+  if(Object.prototype.hasOwnProperty.call(raw,'frontGroups')){
+    base.frontGroups = parseNumericList(raw.frontGroups);
+  }
+
+  if(Object.prototype.hasOwnProperty.call(raw,'lateThirdGroups')){
+    base.lateThirdGroups = parseNumericList(raw.lateThirdGroups);
+  }
+
+  return base;
+}
+
+function applyTeacherConfig(raw){
+  teacherConfig = normalizeTeacherConfig(raw);
+  frontGroupSet = new Set((teacherConfig.frontGroups||[]).map(n=>Number(n)));
+  lateThirdSet = new Set((teacherConfig.lateThirdGroups||[]).map(n=>Number(n)));
+}
+
+function getTeacherConfigSnapshot(){
+  return {
+    maxGroup: teacherConfig.maxGroup,
+    defaultGroupCap: teacherConfig.defaultGroupCap,
+    groupCapOverrides: teacherConfig.groupCapOverrides,
+    frontGroups: teacherConfig.frontGroups,
+    lateThirdGroups: teacherConfig.lateThirdGroups
+  };
+}
+
+function persistTeacherConfigLocal(){
+  try{
+    localStorage.setItem('teacherConfig', JSON.stringify(getTeacherConfigSnapshot()));
+  }catch(err){ console.warn('[config] Failed to persist teacher config locally', err); }
+}
+
+function getMaxConfiguredGroup(){
+  const configured = Number(teacherConfig && teacherConfig.maxGroup);
+  if(Number.isFinite(configured) && configured>0) return Math.floor(configured);
+  return defaultTeacherConfig.maxGroup;
+}
+
+function computeMaxGroupForLog(){
+  const configured = getMaxConfiguredGroup();
+  const overrideMax = Object.keys(teacherConfig.groupCapOverrides||{}).reduce((max,key)=>{
+    const num = Number(key);
+    return Number.isFinite(num) && num>max ? Math.floor(num) : max;
+  }, configured);
+  const logMax = periodAttendanceLog.reduce((max,entry)=>{
+    const num = Number(entry && entry.Group);
+    return Number.isFinite(num) && num>max ? Math.floor(num) : max;
+  }, overrideMax);
+  return Math.max(configured, overrideMax, logMax);
+}
+
+function capForGroup(groupNumber){
+  const key = String(groupNumber);
+  if(Object.prototype.hasOwnProperty.call(teacherConfig.groupCapOverrides||{}, key)){
+    const override = teacherConfig.groupCapOverrides[key];
+    const parsed = Number(override);
+    if(Number.isFinite(parsed) && parsed>0) return Math.floor(parsed);
+  }
+  return teacherConfig.defaultGroupCap || defaultTeacherConfig.defaultGroupCap;
+}
 
 // Resolve roster key, e.g., "2A"/"2B" -> "2" if that roster exists
 function resolveRosterKey(p){
@@ -653,6 +865,7 @@ async function init(){
   try{
     console.log('[init] starting');
     await initFirebase(); // Use new Firebase init function
+    await loadTeacherConfig();
     if(db) watchRostersFromCloud();
     loadRostersLocal();
     loadExceptions();
@@ -711,6 +924,9 @@ if (scheduleFileInput && uploadSchedulesBtn) {
     exportCsvButton.addEventListener('click', exportCSV);
     hideAdminButton.addEventListener('click', ()=>{ adminPanel.classList.add('hidden'); kioskPanel.classList.remove('hidden'); });
     saveExceptionsBtn.addEventListener('click', saveExceptions);
+    if(saveTeacherConfigBtn){
+      saveTeacherConfigBtn.addEventListener('click', saveTeacherConfig);
+    }
     studentIdInput.addEventListener('input', ()=>{ signInButton.disabled = studentIdInput.value.length<4; });
     studentIdInput.addEventListener('keyup', e=>{ if(e.key==='Enter' && !signInButton.disabled) signInButton.click(); });
     signInButton.addEventListener('click', handleSignIn);
@@ -911,6 +1127,106 @@ function renderExceptionsInputs(){
   frontRowInput.value = Array.from(exceptions.frontRow).join('\n');
   avoidPairsInput.value = exceptions.avoidPairs.map(p => `${p.s1},${p.s2}`).join('\n');
 }
+
+function setTeacherConfigStatus(message, duration=1500){
+  if(!teacherConfigStatus) return;
+  teacherConfigStatus.textContent = message;
+  if(teacherConfigStatusTimeout) clearTimeout(teacherConfigStatusTimeout);
+  if(duration>0){
+    teacherConfigStatusTimeout = setTimeout(()=>{
+      if(teacherConfigStatus && teacherConfigStatus.textContent === message){
+        teacherConfigStatus.textContent='';
+      }
+    }, duration);
+  }
+}
+
+function renderTeacherConfigInputs(){
+  const frontGroups = Array.from(frontGroupSet).sort((a,b)=>a-b);
+  if(frontGroupNote){
+    frontGroupNote.textContent = frontGroups.length
+      ? `Front row tables are ${frontGroups.join(', ')}. Enter full Student IDs.`
+      : 'No front row tables configured. Enter full Student IDs for priority seating.';
+  }
+  if(maxGroupInput){
+    maxGroupInput.value = teacherConfig.maxGroup || '';
+  }
+  if(defaultCapInput){
+    defaultCapInput.value = teacherConfig.defaultGroupCap || '';
+  }
+  if(capOverridesInput){
+    const overrides = Object.keys(teacherConfig.groupCapOverrides||{})
+      .sort((a,b)=>Number(a)-Number(b))
+      .map(key=>`${key}=${teacherConfig.groupCapOverrides[key]}`);
+    capOverridesInput.value = overrides.join('\n');
+  }
+  if(frontGroupsInput){
+    frontGroupsInput.value = frontGroups.join(', ');
+  }
+  if(lateThirdInput){
+    const lateGroups = Array.from(lateThirdSet).sort((a,b)=>a-b);
+    lateThirdInput.value = lateGroups.join(', ');
+  }
+}
+
+async function loadTeacherConfig(){
+  try{
+    const stored = localStorage.getItem('teacherConfig');
+    if(stored){
+      const parsed = JSON.parse(stored);
+      applyTeacherConfig(parsed);
+    }
+  }catch(err){ console.warn('[config] Failed to load teacher config from localStorage', err); }
+
+  renderTeacherConfigInputs();
+
+  if(!db){
+    return teacherConfig;
+  }
+
+  try{
+    const docRef = doc(db, `artifacts/${APP_ID}/teachers/${TEACHER_ID}`);
+    const snap = await getDoc(docRef);
+    if(snap.exists()){
+      const data = snap.data() || {};
+      applyTeacherConfig(data);
+      persistTeacherConfigLocal();
+      renderTeacherConfigInputs();
+    }
+  }catch(err){
+    console.warn('[config] Failed to load teacher config from Firestore', err);
+  }
+
+  return teacherConfig;
+}
+
+async function saveTeacherConfig(){
+  const newConfig = {
+    maxGroup: maxGroupInput ? maxGroupInput.value : undefined,
+    defaultGroupCap: defaultCapInput ? defaultCapInput.value : undefined,
+    groupCapOverrides: capOverridesInput ? capOverridesInput.value : undefined,
+    frontGroups: frontGroupsInput ? frontGroupsInput.value : undefined,
+    lateThirdGroups: lateThirdInput ? lateThirdInput.value : undefined
+  };
+
+  applyTeacherConfig(newConfig);
+  persistTeacherConfigLocal();
+  renderTeacherConfigInputs();
+  setTeacherConfigStatus('Saved locally');
+
+  if(db){
+    try{
+      const docRef = doc(db, `artifacts/${APP_ID}/teachers/${TEACHER_ID}`);
+      await setDoc(docRef, { ...getTeacherConfigSnapshot(), updatedAt: serverTimestamp() }, { merge: true });
+      setTeacherConfigStatus('Saved to cloud');
+    }catch(err){
+      console.error('[config] Failed to save teacher config to Firestore', err);
+      setTeacherConfigStatus('Cloud save failed', 2000);
+    }
+  }
+
+  updateUI();
+}
 async function saveExceptions(){
   const fr = frontRowInput.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
   const ap = avoidPairsInput.value.split(/\r?\n/).map(line => {
@@ -1110,28 +1426,43 @@ function randomChoice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 function pickGroup(student){
   const id = student ? String(student.StudentID) : null;
 
-  const counts = new Array(MAX_GROUP+1).fill(0);
-  periodAttendanceLog.forEach(l=>{ if(typeof l.Group === 'number') counts[l.Group]++; });
+  const maxGroup = Math.max(1, computeMaxGroupForLog());
+  const counts = [];
+  for(let i=0;i<=maxGroup;i++) counts[i]=0;
+  periodAttendanceLog.forEach(l=>{
+    const gNum = Number(l && l.Group);
+    if(Number.isFinite(gNum) && gNum>0){
+      const idx = Math.floor(gNum);
+      if(idx >= counts.length){
+        for(let extra=counts.length; extra<=idx; extra++) counts[extra]=0;
+      }
+      counts[idx] = (counts[idx] || 0) + 1;
+    }
+  });
 
-  const cap = g => GROUP_CAP(g);
+  const cap = g => capForGroup(g);
   const avoid = id ? forbiddenGroupsFor(id) : new Set();
   const needsFront = id ? isFront(id) : false;
 
   let pool = [];
-  for(let g=1; g<=MAX_GROUP; g++){
-    if(counts[g] < cap(g) && !avoid.has(g)) pool.push(g);
+  for(let g=1; g<=maxGroup; g++){
+    const currentCount = counts[g] || 0;
+    if(currentCount < cap(g) && !avoid.has(g)) pool.push(g);
   }
 
-  if(needsFront){
-    const frontPool = pool.filter(g => FRONT_SET.has(g));
+  if(needsFront && frontGroupSet.size){
+    const frontPool = pool.filter(g => frontGroupSet.has(g));
     if(frontPool.length) pool = frontPool;
   }
 
   if(pool.length === 0){
     let alt = [];
-    for(let g=1; g<=MAX_GROUP; g++) if(counts[g] < cap(g)) alt.push(g);
-    if(needsFront){
-      const frontAlt = alt.filter(g => FRONT_SET.has(g));
+    for(let g=1; g<=maxGroup; g++){
+      const currentCount = counts[g] || 0;
+      if(currentCount < cap(g)) alt.push(g);
+    }
+    if(needsFront && frontGroupSet.size){
+      const frontAlt = alt.filter(g => frontGroupSet.has(g));
       pool = frontAlt.length ? frontAlt : alt;
     } else {
       pool = alt;
@@ -1140,19 +1471,20 @@ function pickGroup(student){
 
   if(pool.length === 0){
     let best = Infinity, ties = [];
-    for(let g=1; g<=MAX_GROUP; g++){
-      if(counts[g] < best){ best = counts[g]; ties = [g]; }
-      else if(counts[g] === best) ties.push(g);
+    for(let g=1; g<=maxGroup; g++){
+      const currentCount = counts[g] || 0;
+      if(currentCount < best){ best = currentCount; ties = [g]; }
+      else if(currentCount === best) ties.push(g);
     }
     return randomChoice(ties) || 1;
   }
 
-  const eligible2 = pool.filter(g => counts[g] < Math.min(2, cap(g)));
+  const eligible2 = pool.filter(g => (counts[g] || 0) < Math.min(2, cap(g)));
   if(eligible2.length) return randomChoice(eligible2);
 
-  const thirdEligible = pool.filter(g => cap(g) >= 3 && counts[g] < 3);
+  const thirdEligible = pool.filter(g => cap(g) >= 3 && (counts[g] || 0) < 3);
   if(thirdEligible.length){
-    const primary = thirdEligible.filter(g => !LATE_TO_THIRD.has(g));
+    const primary = thirdEligible.filter(g => !lateThirdSet.has(g));
     if(primary.length) return randomChoice(primary);
     return randomChoice(thirdEligible);
   }
@@ -1372,12 +1704,23 @@ function updateUI(){
   if(!periodSelect.value){
     groupReportEl.innerHTML='<p class="text-gray-500">Select a period to see groups.</p>';
   } else {
-    const map=new Map(); for(let g=1; g<=MAX_GROUP; g++) map.set(g,[]);
-    periodAttendanceLog.forEach(l=>{ if(l.Group && map.has(l.Group)) map.get(l.Group).push(l.Name); });
+    const map=new Map();
+    const maxGroup = computeMaxGroupForLog();
+    for(let g=1; g<=maxGroup; g++) map.set(g,[]);
+    periodAttendanceLog.forEach(l=>{
+      const gNum = Number(l && l.Group);
+      if(Number.isFinite(gNum) && gNum>0){
+        const idx = Math.floor(gNum);
+        if(!map.has(idx)) map.set(idx, []);
+        map.get(idx).push(l.Name);
+      }
+    });
     groupReportEl.innerHTML='';
     if(periodAttendanceLog.length===0) groupReportEl.innerHTML='<p class="text-gray-500">Students will appear here as they sign in.</p>';
     else {
-      map.forEach((arr,grp)=>{
+      const sortedGroups = Array.from(map.keys()).sort((a,b)=>a-b);
+      sortedGroups.forEach(grp=>{
+        const arr = map.get(grp) || [];
         if(arr.length>0){
           const div=document.createElement('div');
           div.innerHTML = `<h4 class="font-bold text-md">Group ${grp} (${arr.length})</h4><ul class="text-sm list-disc list-inside mb-2">${arr.map(n=>`<li>${n}</li>`).join('')}</ul>`;
@@ -1446,12 +1789,30 @@ function runDetectTests(){
   a=detectPeriod(mk(15,10)); console.assert(a.detected==='6','afterLast detect'); scheduleName=prev;
 }
 function runGroupTests(){
-  const prevAP=[["A1","B1"]], prevFR=['S1'];
-  const prevLogs=[{StudentID:'B1',Group:5},{StudentID:'X',Group:1}];
-  exceptions.avoidPairs=prevAP; exceptions.frontRow=new Set(prevFR);
-  periodAttendanceLog=[...prevLogs];
-  const g1=pickGroup({StudentID:'S1'}); console.assert([1,2,12,13].includes(g1),'front-row preference');
-  const g2=pickGroup({StudentID:'A1'}); console.assert(g2!==5,'avoid-pair enforce');
+  const savedPairs = Array.isArray(exceptions.avoidPairs)
+    ? exceptions.avoidPairs.map(p=>({ ...p }))
+    : [];
+  const savedFrontRow = new Set(exceptions.frontRow);
+  const savedLogs = [...periodAttendanceLog];
+
+  try{
+    exceptions.avoidPairs = [{ s1:'A1', s2:'B1' }];
+    exceptions.frontRow = new Set(['S1']);
+    periodAttendanceLog = [{StudentID:'B1',Group:5},{StudentID:'X',Group:1}];
+
+    const frontOptions = Array.from(frontGroupSet);
+    if(frontOptions.length){
+      const g1 = pickGroup({StudentID:'S1'});
+      console.assert(frontOptions.includes(g1),'front-row preference');
+    }
+
+    const g2 = pickGroup({StudentID:'A1'});
+    console.assert(g2!==5,'avoid-pair enforce');
+  } finally {
+    exceptions.avoidPairs = savedPairs;
+    exceptions.frontRow = new Set(savedFrontRow);
+    periodAttendanceLog = savedLogs;
+  }
 }
 
 </script>

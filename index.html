@@ -41,9 +41,15 @@
         <!-- ===== LEFT COLUMN (PRIMARY CONTROLS) ===== -->
         <div class="md:col-span-1 flex flex-col space-y-6">
           
-          <div>
-            <h2 class="text-2xl font-bold text-gray-900 mb-2">Teacher Admin</h2>
-            <p id="current-date" class="text-sm text-gray-500"></p>
+          <div class="flex flex-col gap-2">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <h2 class="text-2xl font-bold text-gray-900">Teacher Admin</h2>
+                <p id="current-date" class="text-sm text-gray-500"></p>
+              </div>
+              <button id="teacher-sign-out" class="text-xs font-semibold text-red-500 hover:text-red-600 hidden">Sign Out</button>
+            </div>
+            <p id="teacher-auth-indicator" class="text-xs text-gray-500"></p>
           </div>
 
           <!-- Period override (TOP PRIORITY) -->
@@ -207,6 +213,11 @@
         <div id="student-schedule-display" class="mt-8 text-center">
           <h3 id="student-schedule-name" class="text-xl font-semibold text-gray-300"></h3>
           <div id="student-bell-schedule" class="mt-2 text-sm text-gray-400 grid grid-cols-2 gap-x-4"></div>
+        </div>
+
+        <div class="mt-10 space-y-2">
+          <button id="show-admin-button" class="w-full bg-white/10 text-white font-semibold py-3 rounded-lg border border-white/30 hover:bg-white/20 transition-all focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-gray-900">Teacher Admin</button>
+          <p id="admin-auth-status" class="text-sm text-amber-200 min-h-[1.5rem]"></p>
         </div>
       </div>
 
@@ -558,7 +569,7 @@ async function exportDateRangeCSV() {
 }
 // ===== Import modern Firebase SDK =====
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, doc, onSnapshot, setDoc, serverTimestamp, getDoc, addDoc, where, query, getDocs, deleteDoc, documentId } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ===== Config & Constants =====
@@ -585,6 +596,15 @@ const teacherIdWasSanitized = TEACHER_ID !== (RAW_TEACHER_ID || '');
 if (teacherIdWasSanitized) {
   console.warn('[config] Teacher ID contained invalid characters and was sanitized.', { RAW_TEACHER_ID, TEACHER_ID });
 }
+
+const teacherAllowlistSources = [];
+if (Array.isArray(window.__teacher_allowlist)) teacherAllowlistSources.push(...window.__teacher_allowlist);
+if (Array.isArray(window.__teacher_emails)) teacherAllowlistSources.push(...window.__teacher_emails);
+if (typeof window.__teacher_email === 'string') teacherAllowlistSources.push(window.__teacher_email);
+const TEACHER_EMAIL_ALLOW_SET = new Set(teacherAllowlistSources.map(normalizeTeacherEmail).filter(Boolean));
+const TEACHER_EMAIL_DOMAIN = typeof window.__teacher_domain === 'string'
+  ? window.__teacher_domain.trim().toLowerCase().replace(/^@/, '')
+  : '';
 
 let teacherConfig = normalizeTeacherConfig(defaultTeacherConfig);
 let frontGroupSet = new Set(teacherConfig.frontGroups);
@@ -618,6 +638,12 @@ let isOverride = false;
 let autoTimer = null;
 let lastDetect = null;
 let teacherConfigStatusTimeout = null;
+let teacherAuthUser = null;
+let teacherAuthInitialized = false;
+let teacherLoginInProgress = false;
+let pendingAdminOpen = false;
+let reauthingAnonymous = false;
+let authPersistenceReady = false;
 
 let exceptions = { avoidPairs: [], frontRow: new Set() };
 
@@ -640,6 +666,8 @@ const studentIdInput = $('#student-id-input');
 const signInButton = $('#sign-in-button');
 const kioskView = $('#kiosk-view');
 const messageView = $('#message-view');
+const showAdminButton = $('#show-admin-button');
+const adminAuthStatus = $('#admin-auth-status');
 const summaryOnTime = $('#summary-ontime');
 const summaryLate = $('#summary-late');
 const summaryTruant = $('#summary-truant');
@@ -662,6 +690,208 @@ const frontGroupsInput = $('#front-groups-input');
 const lateThirdInput = $('#late-third-input');
 const saveTeacherConfigBtn = $('#save-teacher-config');
 const teacherConfigStatus = $('#teacher-config-status');
+const teacherSignOutButton = $('#teacher-sign-out');
+const teacherAuthIndicator = $('#teacher-auth-indicator');
+
+// ===== Teacher auth & admin gating =====
+function normalizeTeacherEmail(email){
+  if(typeof email !== 'string') return '';
+  return email.trim().toLowerCase();
+}
+
+function teacherDisplayName(user){
+  if(!user) return 'Teacher';
+  const name = typeof user.displayName === 'string' && user.displayName.trim()
+    ? user.displayName.trim()
+    : '';
+  if(name) return name;
+  const email = typeof user.email === 'string' ? user.email.trim() : '';
+  if(email) return email;
+  return 'Teacher';
+}
+
+function isTeacherEmailAllowed(email){
+  const normalized = normalizeTeacherEmail(email);
+  if(!normalized) return false;
+  if(TEACHER_EMAIL_ALLOW_SET.size > 0){
+    return TEACHER_EMAIL_ALLOW_SET.has(normalized);
+  }
+  if(TEACHER_EMAIL_DOMAIN){
+    return normalized.endsWith(`@${TEACHER_EMAIL_DOMAIN}`);
+  }
+  return true;
+}
+
+function isTeacherAuthorized(user = auth && auth.currentUser){
+  if(!user || user.isAnonymous) return false;
+  return isTeacherEmailAllowed(user.email || '');
+}
+
+function setAdminAuthStatus(message='', tone='info'){
+  if(!adminAuthStatus) return;
+  adminAuthStatus.textContent = message || '';
+  adminAuthStatus.classList.remove('text-amber-200','text-red-300','text-green-300','text-gray-300');
+  if(!message) return;
+  let cls = 'text-gray-300';
+  if(tone === 'error') cls = 'text-red-300';
+  else if(tone === 'success') cls = 'text-green-300';
+  else if(tone === 'warn') cls = 'text-amber-200';
+  adminAuthStatus.classList.add(cls);
+}
+
+function updateTeacherAuthIndicator(message='', tone='info'){
+  if(!teacherAuthIndicator) return;
+  teacherAuthIndicator.textContent = message || '';
+  teacherAuthIndicator.classList.remove('text-green-600','text-red-500','text-gray-500');
+  let cls = 'text-gray-500';
+  if(tone === 'success') cls = 'text-green-600';
+  else if(tone === 'error') cls = 'text-red-500';
+  teacherAuthIndicator.classList.add(cls);
+}
+
+function showAdminPanel(){
+  if(!isTeacherAuthorized()){
+    setAdminAuthStatus('Sign in with an authorized teacher account to open the admin tools.', 'warn');
+    pendingAdminOpen = false;
+    return false;
+  }
+  adminPanel.classList.remove('hidden');
+  kioskPanel.classList.add('hidden');
+  setAdminAuthStatus('', 'info');
+  pendingAdminOpen = false;
+  const name = teacherDisplayName(teacherAuthUser || (auth && auth.currentUser));
+  updateTeacherAuthIndicator(`Signed in as ${name}`, 'success');
+  return true;
+}
+
+function hideAdminPanel(){
+  adminPanel.classList.add('hidden');
+  kioskPanel.classList.remove('hidden');
+  if(studentIdInput){
+    studentIdInput.value='';
+    studentIdInput.focus();
+  }
+  if(signInButton){
+    signInButton.disabled = true;
+  }
+}
+
+function setTeacherLoggedIn(user){
+  teacherAuthUser = user;
+  if(showAdminButton){
+    showAdminButton.disabled = false;
+    showAdminButton.textContent = 'Open Teacher Admin';
+  }
+  if(teacherSignOutButton){
+    teacherSignOutButton.classList.remove('hidden');
+  }
+  const name = teacherDisplayName(user);
+  setAdminAuthStatus(`Signed in as ${name}. Tap to open admin tools.`, 'success');
+  updateTeacherAuthIndicator(`Signed in as ${name}`, 'success');
+}
+
+function setTeacherLoggedOut(message='Teacher sign-in required for admin tools.', tone='warn'){
+  teacherAuthUser = null;
+  pendingAdminOpen = false;
+  if(showAdminButton){
+    showAdminButton.disabled = false;
+    showAdminButton.textContent = 'Teacher Admin';
+  }
+  if(teacherSignOutButton){
+    teacherSignOutButton.classList.add('hidden');
+  }
+  setAdminAuthStatus(message, tone);
+  updateTeacherAuthIndicator('Admin tools locked.', 'info');
+  hideAdminPanel();
+}
+
+async function ensureAnonymousAuth(){
+  if(!auth || reauthingAnonymous) return;
+  const current = auth.currentUser;
+  if(current) return;
+  reauthingAnonymous = true;
+  try{
+    await signInAnonymously(auth);
+  }catch(err){
+    console.error('[auth] failed to establish anonymous auth', err);
+    setAdminAuthStatus('Unable to connect to Firebase auth.', 'error');
+  }finally{
+    reauthingAnonymous = false;
+  }
+}
+
+async function startTeacherLogin(){
+  if(teacherLoginInProgress){
+    return false;
+  }
+  if(!auth){
+    setAdminAuthStatus('Firebase authentication is unavailable.', 'error');
+    pendingAdminOpen = false;
+    return false;
+  }
+  teacherLoginInProgress = true;
+  if(showAdminButton) showAdminButton.disabled = true;
+  setAdminAuthStatus('Launching Google sign-in…', 'info');
+  try{
+    if(!authPersistenceReady){
+      try{
+        await setPersistence(auth, browserLocalPersistence);
+        authPersistenceReady = true;
+      }catch(err){
+        console.warn('[auth] Failed to set persistence', err);
+      }
+    }
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    await signInWithPopup(auth, provider);
+    return true;
+  }catch(err){
+    console.error('[auth] Google sign-in failed', err);
+    const code = err && err.code ? String(err.code) : '';
+    if(code === 'auth/popup-closed-by-user'){
+      setAdminAuthStatus('Google sign-in was closed before completing.', 'warn');
+    } else if(code === 'auth/cancelled-popup-request'){
+      setAdminAuthStatus('A Google sign-in window is already open.', 'warn');
+    } else {
+      setAdminAuthStatus('Google sign-in failed. Please try again.', 'error');
+    }
+    pendingAdminOpen = false;
+    return false;
+  } finally {
+    teacherLoginInProgress = false;
+    if(showAdminButton) showAdminButton.disabled = false;
+  }
+}
+
+async function handleTeacherAuthState(user){
+  teacherAuthInitialized = true;
+  if(user && !user.isAnonymous){
+    if(isTeacherAuthorized(user)){
+      setTeacherLoggedIn(user);
+      if(pendingAdminOpen){
+        showAdminPanel();
+      }
+    } else {
+      setAdminAuthStatus('This Google account is not authorized for teacher admin access.', 'error');
+      setTeacherLoggedOut();
+      try{
+        await signOut(auth);
+      }catch(err){
+        console.error('[auth] Failed to sign out unauthorized user', err);
+      }
+      await ensureAnonymousAuth();
+    }
+    return;
+  }
+  if(user && user.isAnonymous){
+    setTeacherLoggedOut();
+    return;
+  }
+  if(!user){
+    setTeacherLoggedOut();
+    await ensureAnonymousAuth();
+  }
+}
 
 // ===== Helpers =====
 const nowISODate = () => new Date().toISOString().slice(0,10);
@@ -864,6 +1094,7 @@ document.addEventListener('DOMContentLoaded', init);
 async function init(){
   try{
     console.log('[init] starting');
+    setTeacherLoggedOut('Teacher sign-in required for admin tools.');
     await initFirebase(); // Use new Firebase init function
     await loadTeacherConfig();
     if(db) watchRostersFromCloud();
@@ -922,7 +1153,30 @@ if (scheduleFileInput && uploadSchedulesBtn) {
     rosterUpload.addEventListener('change', onRosterUpload);
     clearRostersBtn.addEventListener('click', clearSavedRosters);
     exportCsvButton.addEventListener('click', exportCSV);
-    hideAdminButton.addEventListener('click', ()=>{ adminPanel.classList.add('hidden'); kioskPanel.classList.remove('hidden'); });
+    hideAdminButton.addEventListener('click', hideAdminPanel);
+    if(showAdminButton){
+      showAdminButton.addEventListener('click', async ()=>{
+        if(isTeacherAuthorized()){
+          showAdminPanel();
+        } else {
+          pendingAdminOpen = true;
+          await startTeacherLogin();
+        }
+      });
+    }
+    if(teacherSignOutButton){
+      teacherSignOutButton.addEventListener('click', async ()=>{
+        pendingAdminOpen = false;
+        if(auth){
+          try{
+            await signOut(auth);
+          }catch(err){
+            console.error('[auth] Sign out failed', err);
+            setAdminAuthStatus('Sign out failed. Please try again.', 'error');
+          }
+        }
+      });
+    }
     saveExceptionsBtn.addEventListener('click', saveExceptions);
     if(saveTeacherConfigBtn){
       saveTeacherConfigBtn.addEventListener('click', saveTeacherConfig);
@@ -948,14 +1202,36 @@ const exportRangeBtn = document.getElementById('export-range-csv');
 
 // ===== Firebase (MODULAR) setup =====
 async function initFirebase(){
-  if(!FB_CONFIG){ rosterStatus.textContent = 'Local Mode: data saved in this browser.'; rosterStatus.classList.add('text-green-600'); return; }
+  if(!FB_CONFIG){
+    rosterStatus.textContent = 'Local Mode: data saved in this browser.';
+    rosterStatus.classList.add('text-green-600');
+    setTeacherLoggedOut('Teacher sign-in requires Firebase configuration.', 'warn');
+    return;
+  }
   try{
     const app = initializeApp(FB_CONFIG);
     db = getFirestore(app);
     auth = getAuth(app);
-    await signInAnonymously(auth);
+    try{
+      await setPersistence(auth, browserLocalPersistence);
+      authPersistenceReady = true;
+    }catch(err){
+      console.warn('[auth] Unable to set persistence', err);
+    }
+    onAuthStateChanged(auth, user=>{
+      handleTeacherAuthState(user);
+    });
+    await ensureAnonymousAuth();
     rosterStatus.textContent = 'Cloud Sync Ready: rosters and exceptions will sync.';
-  }catch(err){ console.error(err); rosterStatus.textContent='Cloud error — Local Mode enabled.'; rosterStatus.classList.add('text-red-600'); db=null; auth=null; }
+    rosterStatus.classList.remove('text-red-600');
+    rosterStatus.classList.add('text-green-600');
+  }catch(err){
+    console.error(err);
+    rosterStatus.textContent='Cloud error — Local Mode enabled.';
+    rosterStatus.classList.add('text-red-600');
+    db=null; auth=null;
+    setTeacherLoggedOut('Teacher sign-in unavailable while offline.', 'warn');
+  }
 }
 
 // ===== Rosters: load/save/watch =====
@@ -1507,7 +1783,16 @@ function statusForNow(){
 async function handleSignIn(){
   try{
     const code = studentIdInput.value.trim();
-    if(code===TEACHER_CODE){ adminPanel.classList.remove('hidden'); kioskPanel.classList.add('hidden'); studentIdInput.value=''; return; }
+    if(code===TEACHER_CODE){
+      studentIdInput.value='';
+      if(isTeacherAuthorized()){
+        showAdminPanel();
+      } else {
+        pendingAdminOpen = true;
+        await startTeacherLogin();
+      }
+      return;
+    }
     const p = periodSelect.value; if(!p){ showMessage('error','Period Not Set','Open the admin panel and select a period.'); return; }
     const student = (currentRoster||[]).find(s=>String(s.StudentID||'').slice(-4)===code);
     if(!student){ showMessage('error','ID Not Found','Please check your ID and try again.'); return; }

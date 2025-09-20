@@ -40,10 +40,19 @@
 
         <!-- ===== LEFT COLUMN (PRIMARY CONTROLS) ===== -->
         <div class="md:col-span-1 flex flex-col space-y-6">
-          
-          <div>
-            <h2 class="text-2xl font-bold text-gray-900 mb-2">Teacher Admin</h2>
-            <p id="current-date" class="text-sm text-gray-500"></p>
+
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <div>
+              <h2 class="text-2xl font-bold text-gray-900">Teacher Admin</h2>
+              <p id="current-date" class="text-sm text-gray-500"></p>
+            </div>
+            <div class="flex flex-col items-start sm:items-end gap-2">
+              <p id="teacher-status" class="text-sm text-gray-500">Not signed in</p>
+              <div class="flex flex-wrap gap-2">
+                <button id="teacher-login-button" class="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700">Sign in with Google</button>
+                <button id="teacher-logout-button" class="hidden bg-gray-200 text-gray-800 px-3 py-1 rounded-md hover:bg-gray-300">Sign out</button>
+              </div>
+            </div>
           </div>
 
           <!-- Period override (TOP PRIORITY) -->
@@ -171,9 +180,12 @@
 
     <!-- ================== KIOSK ================== -->
     <div id="kiosk-panel" class="w-full p-8 md:p-12 flex flex-col items-center justify-center bg-gray-900 text-white min-h-[80vh] md:min-h-0">
+      <div class="w-full flex justify-end mb-4">
+        <button id="show-admin-button" class="hidden bg-white/10 text-white px-3 py-1 rounded-md hover:bg-white/20 transition-all">Teacher Admin</button>
+      </div>
       <div id="kiosk-view" class="w-full max-w-sm text-center">
         <h1 class="text-4xl font-bold mb-2">Welcome Warriors!</h1>
-        <p class="text-lg text-gray-400">Enter ID or Teacher Code.</p>
+        <p class="text-lg text-gray-400">Enter ID or Teacher PIN.</p>
         <p id="period-indicator" class="mt-2 text-sm text-white/90"></p>
 
         <input type="text" id="student-id-input" maxlength="4" class="w-full mt-6 text-center text-5xl font-mono p-4 rounded-lg border-4 border-gray-600 bg-white text-gray-900 focus:outline-none focus:ring-4 focus:ring-red-500" placeholder="_ _ _ _"/>
@@ -525,11 +537,11 @@ async function exportDateRangeCSV() {
 }
 // ===== Import modern Firebase SDK =====
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, doc, onSnapshot, setDoc, serverTimestamp, getDoc, addDoc, where, query, getDocs, deleteDoc, documentId } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ===== Config & Constants =====
-const TEACHER_CODE = "****";            // change in one place
+const ADMIN_ACCESS_CODE = "****";       // 4-digit PIN to open admin tools
 const PASSING_MIN = 7;                   // minutes before next bell to switch
 const MAX_GROUP = 13;                    // groups 1..13
 const GROUP_CAP = g => g===6 ? 2 : 3;    // cap 2 for group 6, else 3
@@ -539,8 +551,11 @@ const LATE_TO_THIRD = new Set([9,10]);   // groups that should be last to receiv
 // Cloud config passed in by host page (optional)
 const APP_ID = typeof window.__app_id === 'string' ? window.__app_id : 'demo-app';
 const FB_CONFIG = (typeof window.__firebase_config === 'object' && window.__firebase_config) ? window.__firebase_config : null;
+const ALLOWED_TEACHER_EMAILS = new Set(['jcraig@fjuhsd.org']);
+const TEACHER_SESSION_KEY = 'teacherEmail';
 
 let db=null, auth=null;
+let googleProvider = null;
 let unsubRosters=null, unsubExceptions=null, unsubAttendance=null;
 
 // ===== Calendars & Schedules =====
@@ -563,6 +578,7 @@ let scheduleName = 'Default';
 let isOverride = false;
 let autoTimer = null;
 let lastDetect = null;
+let currentTeacherEmail = null;
 
 let exceptions = { avoidPairs: [], frontRow: new Set() };
 
@@ -581,10 +597,14 @@ const rosterSummary = $('#roster-summary');
 const rosterDebug = $('#roster-debug');
 const clearRostersBtn = $('#clear-rosters');
 const exportCsvButton = $('#export-csv');
+const teacherStatusEl = $('#teacher-status');
+const teacherLoginButton = $('#teacher-login-button');
+const teacherLogoutButton = $('#teacher-logout-button');
 const studentIdInput = $('#student-id-input');
 const signInButton = $('#sign-in-button');
 const kioskView = $('#kiosk-view');
 const messageView = $('#message-view');
+const showAdminButton = $('#show-admin-button');
 const summaryOnTime = $('#summary-ontime');
 const summaryLate = $('#summary-late');
 const summaryTruant = $('#summary-truant');
@@ -601,6 +621,97 @@ const exceptionsStatus = $('#exceptions-status');
 const periodIndicator = $('#period-indicator');
 
 // ===== Helpers =====
+const TEACHER_STATUS_CLASSES = ['text-gray-500','text-green-600','text-red-600'];
+
+const isAllowedTeacher = email => typeof email === 'string' && ALLOWED_TEACHER_EMAILS.has(email.toLowerCase());
+
+function setTeacherStatus(text, colorClass='text-gray-500'){
+  if(!teacherStatusEl) return;
+  teacherStatusEl.textContent = text;
+  teacherStatusEl.classList.remove(...TEACHER_STATUS_CLASSES);
+  if(colorClass) teacherStatusEl.classList.add(colorClass);
+}
+
+function setTeacherAuthorized(email){
+  currentTeacherEmail = email;
+  sessionStorage.setItem(TEACHER_SESSION_KEY, email);
+  setTeacherStatus(`Signed in as ${email}`, 'text-green-600');
+  if(teacherLoginButton) teacherLoginButton.classList.add('hidden');
+  if(teacherLogoutButton) teacherLogoutButton.classList.remove('hidden');
+  if(showAdminButton) showAdminButton.classList.remove('hidden');
+  showAdminPanel();
+}
+
+function setTeacherLoggedOut(message='Not signed in'){
+  currentTeacherEmail = null;
+  sessionStorage.removeItem(TEACHER_SESSION_KEY);
+  setTeacherStatus(message, 'text-gray-500');
+  if(teacherLoginButton) teacherLoginButton.classList.remove('hidden');
+  if(teacherLogoutButton) teacherLogoutButton.classList.add('hidden');
+  if(showAdminButton) showAdminButton.classList.add('hidden');
+  hideAdminPanel();
+}
+
+function setTeacherUnauthorized(email){
+  currentTeacherEmail = null;
+  sessionStorage.removeItem(TEACHER_SESSION_KEY);
+  setTeacherStatus(`Access restricted for ${email}`, 'text-red-600');
+  if(teacherLoginButton) teacherLoginButton.classList.remove('hidden');
+  if(teacherLogoutButton) teacherLogoutButton.classList.add('hidden');
+  if(showAdminButton) showAdminButton.classList.add('hidden');
+  hideAdminPanel();
+}
+
+function isTeacherAuthorized(){
+  return typeof currentTeacherEmail === 'string' && isAllowedTeacher(currentTeacherEmail);
+}
+
+function showAdminPanel(){
+  if(!adminPanel || !kioskPanel) return;
+  if(!isTeacherAuthorized()) return;
+  adminPanel.classList.remove('hidden');
+  kioskPanel.classList.add('hidden');
+}
+
+function hideAdminPanel(){
+  if(!adminPanel || !kioskPanel) return;
+  adminPanel.classList.add('hidden');
+  kioskPanel.classList.remove('hidden');
+  if(typeof dismissMessage === 'function'){
+    dismissMessage();
+  } else if(studentIdInput){
+    studentIdInput.value='';
+    studentIdInput.focus();
+  }
+}
+
+async function startTeacherLogin(){
+  if(!auth || !googleProvider){
+    alert('Google sign-in is not available right now.');
+    return;
+  }
+  try{
+    await signInWithPopup(auth, googleProvider);
+  }catch(err){
+    if(err && err.code === 'auth/popup-closed-by-user') return;
+    console.error('[teacherLogin] failed', err);
+    alert('Google sign-in failed. Please try again.');
+  }
+}
+
+async function startTeacherLogout(){
+  if(!auth){
+    setTeacherLoggedOut();
+    return;
+  }
+  try{
+    await signOut(auth);
+  }catch(err){
+    console.error('[teacherLogout] failed', err);
+    alert('Could not sign out. Please try again.');
+  }
+}
+
 const nowISODate = () => new Date().toISOString().slice(0,10);
 const fmtTime = d => { try{ return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});}catch{ return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); } };
 const startAt = hhmm => { const [h,m] = hhmm.split(':').map(x=>parseInt(x,10)); const d=new Date(); d.setHours(h||0,m||0,0,0); return d; };
@@ -709,7 +820,22 @@ if (scheduleFileInput && uploadSchedulesBtn) {
     rosterUpload.addEventListener('change', onRosterUpload);
     clearRostersBtn.addEventListener('click', clearSavedRosters);
     exportCsvButton.addEventListener('click', exportCSV);
-    hideAdminButton.addEventListener('click', ()=>{ adminPanel.classList.add('hidden'); kioskPanel.classList.remove('hidden'); });
+    hideAdminButton.addEventListener('click', ()=>{ hideAdminPanel(); });
+    if(showAdminButton){
+      showAdminButton.addEventListener('click', ()=>{
+        if(isTeacherAuthorized()){
+          showAdminPanel();
+        } else {
+          showMessage('error','Teacher Login Required','Sign in with your school Google account first.');
+        }
+      });
+    }
+    if(teacherLoginButton){
+      teacherLoginButton.addEventListener('click', startTeacherLogin);
+    }
+    if(teacherLogoutButton){
+      teacherLogoutButton.addEventListener('click', startTeacherLogout);
+    }
     saveExceptionsBtn.addEventListener('click', saveExceptions);
     studentIdInput.addEventListener('input', ()=>{ signInButton.disabled = studentIdInput.value.length<4; });
     studentIdInput.addEventListener('keyup', e=>{ if(e.key==='Enter' && !signInButton.disabled) signInButton.click(); });
@@ -732,14 +858,51 @@ const exportRangeBtn = document.getElementById('export-range-csv');
 
 // ===== Firebase (MODULAR) setup =====
 async function initFirebase(){
-  if(!FB_CONFIG){ rosterStatus.textContent = 'Local Mode: data saved in this browser.'; rosterStatus.classList.add('text-green-600'); return; }
+  if(!FB_CONFIG){
+    rosterStatus.textContent = 'Local Mode: data saved in this browser.';
+    rosterStatus.classList.remove('text-red-600');
+    rosterStatus.classList.add('text-green-600');
+    setTeacherLoggedOut('Google sign-in disabled in local mode');
+    if(teacherLoginButton){
+      teacherLoginButton.disabled = true;
+      teacherLoginButton.classList.add('opacity-50','cursor-not-allowed');
+    }
+    return;
+  }
   try{
     const app = initializeApp(FB_CONFIG);
     db = getFirestore(app);
     auth = getAuth(app);
-    await signInAnonymously(auth);
+    googleProvider = new GoogleAuthProvider();
+    googleProvider.setCustomParameters({ prompt: 'select_account' });
+    if(teacherLoginButton){
+      teacherLoginButton.disabled = false;
+      teacherLoginButton.classList.remove('opacity-50','cursor-not-allowed');
+    }
+    onAuthStateChanged(auth, user=>{
+      if(user && user.email){
+        if(isAllowedTeacher(user.email)){
+          setTeacherAuthorized(user.email);
+        } else {
+          setTeacherUnauthorized(user.email);
+          alert(`Access restricted for ${user.email}. Please sign in with an approved teacher account.`);
+          signOut(auth).catch(err=>console.error('Failed to sign out unauthorized user', err));
+        }
+      } else {
+        setTeacherLoggedOut();
+      }
+    });
     rosterStatus.textContent = 'Cloud Sync Ready: rosters and exceptions will sync.';
-  }catch(err){ console.error(err); rosterStatus.textContent='Cloud error — Local Mode enabled.'; rosterStatus.classList.add('text-red-600'); db=null; auth=null; }
+    rosterStatus.classList.remove('text-red-600');
+    rosterStatus.classList.add('text-green-600');
+  }catch(err){
+    console.error(err);
+    rosterStatus.textContent='Cloud error — Local Mode enabled.';
+    rosterStatus.classList.remove('text-green-600');
+    rosterStatus.classList.add('text-red-600');
+    db=null; auth=null; googleProvider=null;
+    setTeacherLoggedOut('Google sign-in unavailable');
+  }
 }
 
 // ===== Rosters: load/save/watch =====
@@ -1175,7 +1338,16 @@ function statusForNow(){
 async function handleSignIn(){
   try{
     const code = studentIdInput.value.trim();
-    if(code===TEACHER_CODE){ adminPanel.classList.remove('hidden'); kioskPanel.classList.add('hidden'); studentIdInput.value=''; return; }
+    if(code===ADMIN_ACCESS_CODE){
+      studentIdInput.value='';
+      signInButton.disabled = true;
+      if(isTeacherAuthorized()){
+        showAdminPanel();
+      } else {
+        showMessage('error','Teacher Login Required','Sign in with your school Google account first.');
+      }
+      return;
+    }
     const p = periodSelect.value; if(!p){ showMessage('error','Period Not Set','Open the admin panel and select a period.'); return; }
     const student = (currentRoster||[]).find(s=>String(s.StudentID||'').slice(-4)===code);
     if(!student){ showMessage('error','ID Not Found','Please check your ID and try again.'); return; }

@@ -1,0 +1,1459 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Attendance & Group Assigner — Single File</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet"/>
+<style>
+  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  .transition-all{transition:all .3s ease-in-out}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+  .fade-in{animation:fadeIn .5s ease-out forwards}
+  .file-input-button{cursor:pointer}
+</style>
+<script>
+  // Use the SAME app_id on every kiosk so they share data
+  window.__app_id = 'attendance-taker-56916';
+
+  // Firebase web config (from your Console)
+  window.__firebase_config = {
+    apiKey: "AIzaSyDelYxA0NGfGakd3T8wd8PxfZu2sFJZrDA",
+    authDomain: "attendance-taker-56916.firebaseapp.com",
+    projectId: "attendance-taker-56916",
+    storageBucket: "attendance-taker-56916.firebasestorage.app",
+    messagingSenderId: "709493952046",
+    appId: "1:709493952046:web:3266a6e1d706bdfe9059bf",
+    measurementId: "G-LBLM1420GZ"
+  };
+</script>
+</head>
+
+<body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen p-4">
+<div class="w-full max-w-6xl mx-auto bg-white rounded-2xl shadow-lg overflow-hidden">
+  <div class="flex">
+
+    <!-- ================== ADMIN ================== -->
+    <div id="admin-panel" class="w-full bg-gray-50 p-6 border-r border-gray-200 hidden">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+        <!-- ===== LEFT COLUMN (PRIMARY CONTROLS) ===== -->
+        <div class="md:col-span-1 flex flex-col space-y-6">
+          
+          <div>
+            <h2 class="text-2xl font-bold text-gray-900 mb-2">Teacher Admin</h2>
+            <p id="current-date" class="text-sm text-gray-500"></p>
+          </div>
+
+          <!-- Period override (TOP PRIORITY) -->
+          <div>
+            <label for="period-select" class="block text-sm font-medium text-gray-700 mb-2">Current Period (Override)</label>
+            <select id="period-select" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500">
+              <option value="">-- Auto-Detecting --</option>
+            </select>
+            <input type="hidden" id="class-start-time"/>
+          </div>
+
+          <!-- Attendance Summary -->
+          <div class="pt-6 border-t">
+            <h3 class="text-lg font-semibold text-gray-800 mb-2">Attendance Summary</h3>
+            <div class="space-y-1 text-sm">
+              <p>On Time: <span id="summary-ontime" class="font-bold">0</span></p>
+              <p>Late: <span id="summary-late" class="font-bold">0</span></p>
+              <p>Truant: <span id="summary-truant" class="font-bold">0</span></p>
+              <p>Absent: <span id="summary-absent" class="font-bold">0</span></p>
+              <p>Total: <span id="summary-total" class="font-bold">0</span></p>
+            </div>
+          </div>
+
+          <!-- Seating Exceptions -->
+          <div class="pt-6 border-t">
+            <h3 class="text-lg font-semibold text-gray-800 mb-2">Seating Exceptions</h3>
+            <p class="text-xs text-gray-500 mb-2">Front row tables are 1, 2, 12, 13. Enter full Student IDs.</p>
+
+            <label class="block text-xs font-medium text-gray-700">Front Row IDs (one per line)</label>
+            <textarea id="front-row-input" class="w-full mt-1 p-2 border rounded-md h-20" placeholder="800024418&#10;800024885"></textarea>
+
+            <label class="block text-xs font-medium text-gray-700 mt-3">Do-Not-Sit-Together Pairs (ID1,ID2 per line)</label>
+            <textarea id="avoid-pairs-input" class="w-full mt-1 p-2 border rounded-md h-20" placeholder="800024418,800026182"></textarea>
+
+            <div class="flex items-center gap-2 mt-3">
+              <button id="save-exceptions" class="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700">Save Exceptions</button>
+              <span id="exceptions-status" class="text-xs text-gray-600"></span>
+            </div>
+          </div>
+
+        </div><!-- End Left Column -->
+        
+        <!-- ===== RIGHT COLUMN (LIVE DATA & SETUP) ===== -->
+        <div class="md:col-span-2 flex flex-col space-y-6">
+
+          <!-- Live Data Panels -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h3 class="text-xl font-semibold text-gray-800 mb-2">Currently Absent</h3>
+              <ul id="absent-list" class="text-sm space-y-1 h-96 overflow-y-auto bg-gray-100 p-3 rounded-md border">
+                <li class="text-gray-500">Select a period to see list.</li>
+              </ul>
+            </div>
+
+            <div>
+             <div class="flex justify-between items-center mb-2">
+            <h3 class="text-xl font-semibold text-gray-800">Group Assignments</h3>
+            <button id="display-groups-btn" class="bg-blue-500 text-white px-3 py-1 text-xs rounded-md hover:bg-blue-600">Display Fullscreen</button>
+          </div>
+              <div id="group-report" class="space-y-3 h-96 overflow-y-auto bg-gray-100 p-3 rounded-md border">
+                <p class="text-gray-500">Students will appear here as they sign in.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="pt-6 border-t space-y-3">
+              <h3 class="text-lg font-semibold text-gray-800">Export Attendance</h3>
+              <button id="export-csv" class="w-full bg-red-700 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-800 transition-all">Download Today's Full Log</button>
+
+              <div class="pt-2 border-t">
+                  <p class="text-xs text-gray-500 my-2 text-center">Or, select a date range to export:</p>
+                  <div class="grid grid-cols-2 gap-4">
+                      <div>
+                          <label for="start-date" class="block text-sm font-medium text-gray-700">Start Date</label>
+                          <input type="date" id="start-date" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                      </div>
+                      <div>
+                          <label for="end-date" class="block text-sm font-medium text-gray-700">End Date</label>
+                          <input type="date" id="end-date" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                      </div>
+                  </div>
+                  <button id="export-range-csv" class="w-full mt-4 bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-all">Export Selected Range</button>
+                  <p id="export-status" class="text-xs mt-2 text-center font-medium"></p>
+              </div>
+          </div>
+          
+          <!-- Roster Management (LOWER PRIORITY) -->
+          <div class="pt-6 border-t">
+            <h3 class="text-lg font-semibold text-gray-800 mb-2">Roster Management</h3>
+            <p class="text-xs text-gray-500 mb-2">Upload one or more roster CSVs. Saved locally and synced to cloud (if configured).</p>
+
+            <input type="file" id="roster-upload" accept=".csv" class="hidden" multiple/>
+            <label for="roster-upload" class="file-input-button w-full text-center bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition-all">Add/Update Roster File(s)</label>
+
+            <p id="roster-status" class="text-xs mt-2 font-medium"></p>
+            <div id="roster-warning" class="mt-2 text-sm text-red-600 font-semibold"></div>
+            <div id="roster-summary" class="mt-2 text-xs text-gray-600"></div>
+            <div id="roster-debug" class="mt-1 text-xs text-gray-500"></div>
+
+            <button id="clear-rosters" class="text-xs text-red-500 hover:underline mt-2">Clear all saved rosters</button>
+          </div>
+          
+          <!-- Schedule Management (LOWEST PRIORITY) -->
+          <div class="pt-6 border-t">
+            <h3 class="text-lg font-semibold text-gray-800 mb-2">Schedule Management (One-Time Upload)</h3>
+            <p class="text-xs text-gray-500 mb-2">Upload the school schedule CSV to populate Firestore. This only needs to be done once per school year, or if schedules change.</p>
+
+            <input type="file" id="schedule-csv-upload" accept=".csv" class="hidden"/>
+            <label for="schedule-csv-upload" class="file-input-button w-full text-center bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition-all">Select Schedule CSV File</label>
+            
+            <button id="upload-schedules-btn" class="w-full mt-4 bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50" disabled>Parse & Upload to Firebase</button>
+            <div id="upload-status" class="text-sm mt-2 font-medium text-center"></div>
+          </div>
+          
+          <!-- Kiosk Mode Button -->
+          <div class="pt-6 border-t">
+             <button id="hide-admin-button" class="w-full bg-gray-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-700 transition-all">Show Kiosk Mode</button>
+          </div>
+
+        </div><!-- End Right Column -->
+
+      </div><!-- grid -->
+    </div><!-- admin-panel -->
+
+    <!-- ================== KIOSK ================== -->
+    <div id="kiosk-panel" class="w-full p-8 md:p-12 flex flex-col items-center justify-center bg-gray-900 text-white min-h-[80vh] md:min-h-0">
+      <div id="kiosk-view" class="w-full max-w-sm text-center">
+        <h1 class="text-4xl font-bold mb-2">Welcome Warriors!</h1>
+        <p class="text-lg text-gray-400">Enter ID or Teacher Code.</p>
+        <p id="period-indicator" class="mt-2 text-sm text-white/90"></p>
+
+        <input type="text" id="student-id-input" maxlength="4" class="w-full mt-6 text-center text-5xl font-mono p-4 rounded-lg border-4 border-gray-600 bg-white text-gray-900 focus:outline-none focus:ring-4 focus:ring-red-500" placeholder="_ _ _ _"/>
+        <button id="sign-in-button" class="w-full mt-6 bg-red-700 text-white font-bold text-xl py-4 rounded-lg shadow-md hover:bg-red-800 transform hover:-translate-y-1 transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-white disabled:opacity-50 disabled:transform-none" disabled>Sign In</button>
+
+        <div id="student-schedule-display" class="mt-8 text-center">
+          <h3 id="student-schedule-name" class="text-xl font-semibold text-gray-300"></h3>
+          <div id="student-bell-schedule" class="mt-2 text-sm text-gray-400 grid grid-cols-2 gap-x-4"></div>
+        </div>
+      </div>
+
+      <div id="message-view" class="w-full max-w-md text-center hidden"></div>
+    </div><!-- kiosk-panel -->
+
+  </div><!-- flex -->
+</div><!-- container -->
+
+<div id="group-display-fullscreen" class="hidden fixed inset-0 bg-gray-900 text-white z-50 p-8 md:p-12">
+  <button id="close-group-display-btn" class="absolute top-4 right-6 text-5xl font-bold text-gray-400 hover:text-white">&times;</button>
+  
+  <div class="w-full max-w-7xl mx-auto">
+    <h2 class="text-4xl md:text-5xl font-bold text-center mb-8">Group Assignments</h2>
+    
+    <!-- The group data will be injected here -->
+    <div id="fullscreen-group-list" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
+      <!-- Example of what will be generated:
+      <div>
+        <h4 class="font-bold text-2xl text-red-500">Group 1 (3)</h4>
+        <ul class="text-lg list-disc list-inside">
+          <li>Student Name 1</li>
+          <li>Student Name 2</li>
+          <li>Student Name 3</li>
+        </ul>
+      </div>
+      -->
+    </div>
+  </div>
+</div>
+
+<script type="module">
+
+// ===== FULLSCREEN DISPLAY FUNCTIONS =====
+
+function showGroupDisplay() {
+  const mainAppContainer = document.querySelector('.w-full.max-w-6xl');
+  const fullscreenContainer = document.getElementById('group-display-fullscreen');
+  
+  // This ensures the fullscreen view has the latest data when opened
+  updateFullscreenGroupView(); 
+
+  mainAppContainer.classList.add('hidden');
+  fullscreenContainer.classList.remove('hidden');
+}
+
+function hideGroupDisplay() {
+  const mainAppContainer = document.querySelector('.w-full.max-w-6xl');
+  const fullscreenContainer = document.getElementById('group-display-fullscreen');
+  
+  mainAppContainer.classList.remove('hidden');
+  fullscreenContainer.classList.add('hidden');
+}
+
+// This helper function will be called by updateUI to keep both views in sync
+function updateFullscreenGroupView() {
+    const fullscreenListEl = document.getElementById('fullscreen-group-list');
+    if (!fullscreenListEl) return;
+
+    const map = new Map();
+    for (let g = 1; g <= MAX_GROUP; g++) map.set(g, []);
+    periodAttendanceLog.forEach(l => {
+        if (l.Group && map.has(l.Group)) map.get(l.Group).push(l.Name);
+    });
+
+    fullscreenListEl.innerHTML = '';
+    if (periodAttendanceLog.length === 0) {
+        fullscreenListEl.innerHTML = '<p class="col-span-full text-center text-gray-400 text-xl">Students will appear here as they sign in.</p>';
+    } else {
+        map.forEach((arr, grp) => {
+            if (arr.length > 0) {
+                const div = document.createElement('div');
+                div.innerHTML = `<h4 class="font-bold text-2xl text-red-500 mb-2">Group ${grp} (${arr.length})</h4><ul class="text-xl space-y-1">${arr.map(n => `<li>${n}</li>`).join('')}</ul>`;
+                fullscreenListEl.appendChild(div);
+            }
+        });
+    }
+}
+
+// ===== SCHEDULE PARSER & UPLOADER =====
+
+// Helper function to convert time like "1:30 PM" to "13:30"
+function convertTo24Hour(timeStr) {
+    if (!timeStr || typeof timeStr !== 'string') return '';
+    const lowerTime = timeStr.toLowerCase();
+    let [time, modifier] = lowerTime.split(' ');
+    let [hours, minutes] = time.split(':');
+
+    if (hours === '12') {
+        hours = '00';
+    }
+    if (modifier === 'pm' || modifier === 'p.m.') {
+        hours = parseInt(hours, 10) + 12;
+    }
+    return `${String(hours).padStart(2, '0')}:${minutes}`;
+}
+
+// Helper function to format dates from M/D/YY to YYYY-MM-DD
+function formatCSVDate(dateStr) {
+    const d = new Date(dateStr);
+    // Add a day to correct for potential timezone offset issues during parsing
+    d.setDate(d.getDate() + 1); 
+    return d.toISOString().slice(0, 10);
+}
+
+async function handleScheduleUpload() {
+    const fileInput = document.getElementById('schedule-csv-upload');
+    const statusEl = document.getElementById('upload-status');
+    const uploadBtn = document.getElementById('upload-schedules-btn');
+
+    if (!fileInput.files || fileInput.files.length === 0) {
+        statusEl.textContent = 'Please select a file first.';
+        return;
+    }
+    
+    uploadBtn.disabled = true;
+    statusEl.textContent = 'Parsing CSV file...';
+    statusEl.classList.remove('text-red-600', 'text-green-600');
+
+    function formatCSVDate(dateStr) {
+        const parts = dateStr.split('/');
+        if (parts.length !== 3) return null;
+        const m = parts[0].padStart(2, '0');
+        const d = parts[1].padStart(2, '0');
+        const y = parseInt(parts[2], 10) < 50 ? `20${parts[2]}` : `19${parts[2]}`;
+        return `${y}-${m}-${d}`;
+    }
+
+    const file = fileInput.files[0];
+    const text = await file.text();
+    const lines = text.split(/\r?\n/);
+
+    const bellSchedules = {};
+    const calendarData = {};
+    let currentScheduleName = null;
+
+    for (const line of lines) {
+        const cells = line.split(',');
+        
+        let isHeader = false;
+        for (const cell of cells) {
+            if (cell.trim().endsWith("Schedule")) {
+                currentScheduleName = cell.trim();
+                if (!bellSchedules[currentScheduleName]) {
+                    bellSchedules[currentScheduleName] = {};
+                }
+                isHeader = true;
+                break;
+            }
+        }
+        if (isHeader) continue;
+
+
+        const periodText = cells[6] || '';
+        const timeText = cells[2] || '';
+        if (periodText.toLowerCase().includes('period') && timeText) {
+            const periodMatch = periodText.match(/Period\s*([0-9A-Z]+)/i);
+            if (periodMatch && periodMatch[1] && currentScheduleName) {
+                const periodNumber = periodMatch[1].toUpperCase();
+                const startTime24 = convertTo24Hour(timeText);
+                bellSchedules[currentScheduleName][periodNumber] = startTime24;
+            }
+        }
+        
+        if (cells.join(',').toLowerCase().includes('date(s):') || cells.join(',').toLowerCase().includes('date:')) {
+            if (currentScheduleName) {
+                const datesCombined = cells.slice(3).join(',').replace(/"/g, '');
+                const dateEntries = datesCombined.split(',').map(d => d.trim()).filter(Boolean);
+                
+                for (const dateEntry of dateEntries) {
+                    const dateMatch = dateEntry.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/);
+                    if (!dateMatch) continue; 
+                    
+                    const formattedDate = formatCSVDate(dateMatch[1]);
+                    if(formattedDate) {
+                        // THE FIX IS APPLIED TO THE LINE BELOW
+                        const cleanName = currentScheduleName.replace(' Schedule', '').replace('/PLC', '').replace('/', '-'); // Replace slash with hyphen
+                        calendarData[formattedDate] = cleanName;
+                    }
+                }
+            }
+        }
+    }
+    
+    statusEl.textContent = 'Parsing complete. Uploading to Firebase...';
+
+    if (!db) {
+        statusEl.textContent = 'Error: Firebase is not connected.';
+        statusEl.classList.add('text-red-600');
+        uploadBtn.disabled = false;
+        return;
+    }
+
+    try {
+        const uploadPromises = [];
+
+        for (const scheduleName in bellSchedules) {
+            // THE FIX IS APPLIED TO THE LINE BELOW
+            const cleanName = scheduleName.replace(' Schedule', '').replace('/PLC', '').replace('/', '-'); // Replace slash with hyphen
+            if (Object.keys(bellSchedules[scheduleName]).length > 0) {
+                const docRef = doc(db, `artifacts/${APP_ID}/public/schedules/bell_schedules/${cleanName}`);
+                uploadPromises.push(setDoc(docRef, bellSchedules[scheduleName]));
+            }
+        }
+
+        const calendarRef = doc(db, `artifacts/${APP_ID}/public/schedules/calendar/main`);
+        uploadPromises.push(setDoc(calendarRef, { dates: calendarData }));
+
+        await Promise.all(uploadPromises);
+
+        statusEl.textContent = 'Success! All schedules and calendar dates have been uploaded.';
+        statusEl.classList.add('text-green-600');
+
+    } catch (err) {
+        console.error("Schedule upload failed:", err);
+        statusEl.textContent = 'Error during upload. Check the console for details.';
+        statusEl.classList.add('text-red-600');
+        uploadBtn.disabled = false;
+    }
+}
+
+async function exportDateRangeCSV() {
+    const startDateInput = document.getElementById('start-date');
+    const endDateInput = document.getElementById('end-date');
+    const statusEl = document.getElementById('export-status');
+
+    const startDateStr = startDateInput.value;
+    const endDateStr = endDateInput.value;
+
+    if (!startDateStr || !endDateStr) {
+        statusEl.textContent = 'Please select both a start and end date.';
+        statusEl.classList.add('text-red-600');
+        return;
+    }
+
+    const startDate = new Date(startDateStr + 'T00:00:00');
+    const endDate = new Date(endDateStr + 'T00:00:00');
+
+    if (startDate > endDate) {
+        statusEl.textContent = 'Start date cannot be after the end date.';
+        statusEl.classList.add('text-red-600');
+        return;
+    }
+
+    statusEl.textContent = 'Fetching data and rosters... This may take a moment.';
+    statusEl.classList.remove('text-red-600', 'text-green-600');
+    statusEl.classList.add('text-blue-600');
+
+    // Define the headers for the CSV file
+    const rows = [["Date", "Period", "StudentID", "LastName", "FirstName", "Status", "SignInTime", "Group"]];
+    const masterPeriodList = ["0", "1", "2", "2A", "2B", "3", "4", "5", "6"];
+    
+    // Create a list of all dates to check
+    const datesToCheck = [];
+    let currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+        datesToCheck.push(currentDate.toISOString().slice(0, 10));
+        currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    try {
+        // Loop through each date in the user's selected range
+        for (const date of datesToCheck) {
+            // Loop through every possible period for that date
+            for (const period of masterPeriodList) {
+                const basePath = `artifacts/${APP_ID}/public/data/attendance/${date}/periods/${period}`;
+                
+                // 1. Fetch the roster snapshot for this specific day and period
+                const rosterDocRef = doc(db, basePath);
+                const rosterDoc = await getDoc(rosterDocRef);
+                const roster = rosterDoc.exists() && rosterDoc.data().roster_snapshot ? rosterDoc.data().roster_snapshot : [];
+
+                // If no roster was ever saved for this day/period, we can't know who was absent, so we skip it.
+                if (roster.length === 0) continue; 
+
+                // 2. Fetch all student sign-in records for this day and period
+                const studentsCollectionRef = collection(db, `${basePath}/students`);
+                const studentsSnapshot = await getDocs(studentsCollectionRef);
+                
+                // Create a Map for quick lookups of who signed in
+                const presentStudents = new Map();
+                studentsSnapshot.forEach(doc => presentStudents.set(doc.data().StudentID, doc.data()));
+
+                // 3. Compare the full roster against the sign-ins to generate the report
+                for (const student of roster) {
+                    if (presentStudents.has(student.StudentID)) {
+                        // If the student is in the 'present' map, they signed in.
+                        const log = presentStudents.get(student.StudentID);
+                        rows.push([
+                            date,
+                            period,
+                            student.StudentID,
+                            `"${student.LastName || ''}"`,
+                            `"${student.FirstName || ''}"`,
+                            log.Status,
+                            log.SignInTime,
+                            log.Group
+                        ]);
+                    } else {
+                        // If the student is on the roster but not in the 'present' map, they were absent.
+                        rows.push([
+                            date,
+                            period,
+                            student.StudentID,
+                            `"${student.LastName || ''}"`,
+                            `"${student.FirstName || ''}"`,
+                            'Absent', // Mark them as Absent
+                            'N/A',    // Add 'Not Applicable' for time and group
+                            'N/A'
+                        ]);
+                    }
+                }
+            }
+        }
+
+        if (rows.length <= 1) {
+            statusEl.textContent = 'No attendance entries (with saved rosters) were found in the selected date range.';
+            statusEl.classList.add('text-red-600');
+            return;
+        }
+
+        // Generate and download the final CSV file
+        const csvContent = rows.map(r => r.join(',')).join('\r\n');
+        const encodedUri = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csvContent);
+        const link = document.createElement('a');
+        link.setAttribute('href', encodedUri);
+        link.setAttribute('download', `full_attendance_log_${startDateStr}_to_${endDateStr}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        statusEl.textContent = `Successfully exported ${rows.length - 1} records (including absences).`;
+        statusEl.classList.remove('text-red-600', 'text-blue-600');
+        statusEl.classList.add('text-green-600');
+
+    } catch (err) {
+        console.error("Error exporting full attendance log:", err);
+        statusEl.textContent = 'An error occurred. Check the console for details.';
+        statusEl.classList.add('text-red-600');
+    }
+}
+// ===== Import modern Firebase SDK =====
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, doc, onSnapshot, setDoc, serverTimestamp, getDoc, addDoc, where, query, getDocs, deleteDoc, documentId } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// ===== Config & Constants =====
+const TEACHER_CODE = "****";            // change in one place
+const PASSING_MIN = 7;                   // minutes before next bell to switch
+const MAX_GROUP = 13;                    // groups 1..13
+const GROUP_CAP = g => g===6 ? 2 : 3;    // cap 2 for group 6, else 3
+const FRONT_SET = new Set([1,2,12,13]);  // "front of room" groups
+const LATE_TO_THIRD = new Set([9,10]);   // groups that should be last to receive a 3rd person
+
+// Cloud config passed in by host page (optional)
+const APP_ID = typeof window.__app_id === 'string' ? window.__app_id : 'demo-app';
+const FB_CONFIG = (typeof window.__firebase_config === 'object' && window.__firebase_config) ? window.__firebase_config : null;
+
+let db=null, auth=null;
+let unsubRosters=null, unsubExceptions=null, unsubAttendance=null;
+
+// ===== Calendars & Schedules =====
+const calendarData = {"2025-08-14":"Late Start","2025-08-15":"Assembly Schedule","2025-08-21":"Back to School Night","2025-09-01":"Holiday","2025-10-16":"Shake Out","2025-11-03":"No Students","2025-11-11":"Holiday","2025-11-24":"Thanksgiving Week","2025-11-25":"Thanksgiving Week","2025-11-26":"Thanksgiving Week","2025-11-27":"Holiday","2025-11-28":"Holiday","2025-12-19":"Finals","2025-12-22":"Winter Break","2026-01-19":"Holiday","2026-01-20":"Holiday","2026-02-13":"Holiday","2026-02-16":"Holiday","2026-03-12":"Min Day","2026-03-13":"No Students","2026-04-06":"Spring Break","2026-05-07":"Late Start","2026-05-25":"Holiday","2026-06-02":"Finals","2026-06-03":"Finals","2026-06-04":"Finals"};
+const bellSchedules = {
+  Regular:{0:"07:28",1:"08:30",2:"09:32",3:"10:52",4:"11:54",5:"13:31",6:"14:33"},
+  "Late Start":{0:"07:28",1:"09:30",2:"10:25",3:"11:32",4:"12:24",5:"13:51",6:"14:43"},
+  "Assembly Schedule":{0:"07:37",1:"08:30","2A":"09:23","2B":"10:20",3:"11:27",4:"12:20",5:"13:52",6:"14:45"},
+  "Back to School Night":{0:"07:28",1:"08:30",2:"09:12",3:"09:54",4:"10:36",5:"11:18",6:"12:00"},
+  Finals:{0:"07:28",2:"08:30",4:"10:50",6:"13:30"},
+  "Min Day":{0:"07:28",1:"08:30",2:"09:15",3:"10:05",4:"10:50",5:"11:35",6:"12:20"},
+  Default:{0:"07:28",1:"08:30",2:"09:32",3:"10:52",4:"11:54",5:"13:31",6:"14:33"}
+};
+
+// ===== State =====
+let allRosters = {};      // { period -> [{StudentID,LastName,FirstName}, ...] }
+let currentRoster = [];   // active period roster array
+let periodAttendanceLog = []; // sign-ins for current period
+let scheduleName = 'Default';
+let isOverride = false;
+let autoTimer = null;
+let lastDetect = null;
+
+let exceptions = { avoidPairs: [], frontRow: new Set() };
+
+// ===== DOM =====
+const $ = sel => document.querySelector(sel);
+const adminPanel = $('#admin-panel');
+const hideAdminButton = $('#hide-admin-button');
+const kioskPanel = $('#kiosk-panel');
+const currentDateDisplay = $('#current-date');
+const periodSelect = $('#period-select');
+const classStartTimeInput = $('#class-start-time');
+const rosterUpload = $('#roster-upload');
+const rosterStatus = $('#roster-status');
+const rosterWarning = $('#roster-warning');
+const rosterSummary = $('#roster-summary');
+const rosterDebug = $('#roster-debug');
+const clearRostersBtn = $('#clear-rosters');
+const exportCsvButton = $('#export-csv');
+const studentIdInput = $('#student-id-input');
+const signInButton = $('#sign-in-button');
+const kioskView = $('#kiosk-view');
+const messageView = $('#message-view');
+const summaryOnTime = $('#summary-ontime');
+const summaryLate = $('#summary-late');
+const summaryTruant = $('#summary-truant');
+const summaryAbsent = $('#summary-absent');
+const summaryTotal = $('#summary-total');
+const absentListEl = $('#absent-list');
+const groupReportEl = $('#group-report');
+const studentScheduleNameEl = $('#student-schedule-name');
+const studentBellScheduleEl = $('#student-bell-schedule');
+const frontRowInput = $('#front-row-input');
+const avoidPairsInput = $('#avoid-pairs-input');
+const saveExceptionsBtn = $('#save-exceptions');
+const exceptionsStatus = $('#exceptions-status');
+const periodIndicator = $('#period-indicator');
+
+// ===== Helpers =====
+const nowISODate = () => new Date().toISOString().slice(0,10);
+const fmtTime = d => { try{ return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});}catch{ return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); } };
+const startAt = hhmm => { const [h,m] = hhmm.split(':').map(x=>parseInt(x,10)); const d=new Date(); d.setHours(h||0,m||0,0,0); return d; };
+
+// BOM-safe normalization
+const linesFromText = t =>
+  t.replace(/^\uFEFF/, '')            // strip UTF-8 BOM if present
+   .replace(/\r\n/g,'\n')
+   .replace(/\r/g,'\n')
+   .split('\n');
+
+// Local-only storage for attendance when no cloud
+const localLogCache = new Map();
+const keyFor = (date,period) => `${date}|${period}`;
+const getLocalLogs = (date,period) => { const k=keyFor(date,period); if(!localLogCache.has(k)){ const s=localStorage.getItem('logs:'+k); localLogCache.set(k, s?JSON.parse(s):[]);} return localLogCache.get(k); };
+const setLocalLogs = (date,period,list) => { const k=keyFor(date,period); localLogCache.set(k,list); localStorage.setItem('logs:'+k, JSON.stringify(list)); };
+
+// Resolve roster key, e.g., "2A"/"2B" -> "2" if that roster exists
+function resolveRosterKey(p){
+  if(!p) return null;
+  if(allRosters[p]) return p;              // exact
+  const m = String(p).match(/^(\d+)/);     // digits at start
+  if(m && allRosters[m[1]]) return m[1];
+  return null;
+}
+
+// ===== Auto-detect period =====
+function detectPeriod(at=new Date()){
+  const sched = bellSchedules[scheduleName] || bellSchedules.Default;
+  const periods = Object.keys(sched);
+  const info = {detected:null, mode:'unknown', reason:'', nextPeriod:null, nextTime:null, currentTime: fmtTime(at)};
+  if(periods.length===0){ info.reason='no periods defined for schedule'; return info; }
+  for(let i=0;i<periods.length;i++){
+    const cur=periods[i]; const start=startAt(sched[cur]);
+    const hasNext = i+1<periods.length; const nxt = hasNext? periods[i+1]: null;
+    const nextStart = hasNext? startAt(sched[nxt]) : null;
+    const switchAt = nextStart? new Date(nextStart.getTime()-PASSING_MIN*60*1000) : null;
+    if(i===0 && at<start){ info.detected=cur; info.mode='preFirst'; info.reason='before first bell'; info.nextPeriod=cur; info.nextTime=sched[cur]; return info; }
+    if(nextStart){
+      if(at>=switchAt && at<nextStart){ info.detected=nxt; info.mode='passing'; info.reason='passing time'; info.nextPeriod=nxt; info.nextTime=sched[nxt]; return info; }
+      if(at>=start && at<switchAt){ info.detected=cur; info.mode='during'; info.reason='class in session'; info.nextPeriod=nxt; info.nextTime=sched[nxt]; return info; }
+    } else if(at>=start) { info.detected=cur; info.mode='afterLast'; info.reason='after last switch'; return info; }
+  }
+  info.detected = periods[periods.length-1]; info.mode='fallback'; info.reason='time outside expected windows'; return info;
+}
+
+// ===== Init =====
+document.addEventListener('DOMContentLoaded', init);
+async function init(){
+  try{
+    console.log('[init] starting');
+    await initFirebase(); // Use new Firebase init function
+    if(db) watchRostersFromCloud();
+    loadRostersLocal();
+    loadExceptions();
+    renderRosterSummary();
+    renderRosterDebug();
+
+    // date + schedule setup
+    const today = new Date();
+    const dateString = nowISODate();
+    currentDateDisplay.textContent = today.toLocaleDateString(undefined,{weekday:'long', year:'numeric', month:'long', day:'numeric'});
+    const note = calendarData[dateString] || 'Regular';
+    scheduleName = note.includes('Late Start')? 'Late Start'
+                 : note.includes('Assembly')? 'Assembly Schedule'
+                 : note.includes('Back to School')? 'Back to School Night'
+                 : note.includes('Finals')? 'Finals'
+                 : note.includes('Min Day')? 'Min Day'
+                 : (note.includes('Holiday')||note.includes('No Student')||note.includes('Break'))? 'No School' : 'Regular';
+    const todays = bellSchedules[scheduleName] || bellSchedules.Default;
+    periodSelect.innerHTML = '<option value="">-- Auto-Detecting --</option>' + Object.keys(todays).map(p=>`<option value="${p}">Period ${p} (${todays[p]})</option>`).join('');
+    studentScheduleNameEl.textContent = scheduleName;
+    studentBellScheduleEl.innerHTML = Object.keys(todays).map(p=>`<div><strong>P ${p}:</strong> ${todays[p]}</div>`).join('');
+
+    if(sessionStorage.getItem('periodOverride')==='true'){ isOverride=true; }
+    else { doDetectAndMaybeSwitch(); autoTimer = setInterval(doDetectAndMaybeSwitch, 30000); }
+
+    // listeners
+const displayGroupsBtn = document.getElementById('display-groups-btn');
+    const closeGroupsBtn = document.getElementById('close-group-display-btn');
+    
+    if (displayGroupsBtn && closeGroupsBtn) {
+        displayGroupsBtn.addEventListener('click', showGroupDisplay);
+        closeGroupsBtn.addEventListener('click', hideGroupDisplay);
+    }
+    
+    // Add listener for the Escape key to close the fullscreen view
+    document.addEventListener('keydown', (e) => {
+        const fullscreenContainer = document.getElementById('group-display-fullscreen');
+        if (e.key === 'Escape' && !fullscreenContainer.classList.contains('hidden')) {
+            hideGroupDisplay();
+        }
+    });
+
+const scheduleFileInput = document.getElementById('schedule-csv-upload');
+const uploadSchedulesBtn = document.getElementById('upload-schedules-btn');
+
+if (scheduleFileInput && uploadSchedulesBtn) {
+    scheduleFileInput.addEventListener('change', () => {
+        uploadSchedulesBtn.disabled = scheduleFileInput.files.length === 0;
+    });
+    uploadSchedulesBtn.addEventListener('click', handleScheduleUpload);
+}
+
+    periodSelect.addEventListener('change', ()=>{ isOverride=true; sessionStorage.setItem('periodOverride','true'); onPeriodChange(); });
+    rosterUpload.addEventListener('change', onRosterUpload);
+    clearRostersBtn.addEventListener('click', clearSavedRosters);
+    exportCsvButton.addEventListener('click', exportCSV);
+    hideAdminButton.addEventListener('click', ()=>{ adminPanel.classList.add('hidden'); kioskPanel.classList.remove('hidden'); });
+    saveExceptionsBtn.addEventListener('click', saveExceptions);
+    studentIdInput.addEventListener('input', ()=>{ signInButton.disabled = studentIdInput.value.length<4; });
+    studentIdInput.addEventListener('keyup', e=>{ if(e.key==='Enter' && !signInButton.disabled) signInButton.click(); });
+    signInButton.addEventListener('click', handleSignIn);
+    document.addEventListener('keydown', e=>{ if(!messageView.classList.contains('hidden') && (e.key==='Enter'||e.key==='Escape')) dismissMessage(); });
+    messageView.addEventListener('click', ()=>{ if(!messageView.classList.contains('hidden')) dismissMessage(); });
+const exportRangeBtn = document.getElementById('export-range-csv');
+    if (exportRangeBtn) {
+        exportRangeBtn.addEventListener('click', exportDateRangeCSV);
+    }
+
+    updateUI();
+    studentIdInput.focus();
+    try{ runParseTests(); runDetectTests(); runGroupTests(); runCSVEdgeTests(); }catch{}
+  }catch(err){
+    console.error('[init] fatal', err);
+    alert('Init error: '+(err&&err.message?err.message:err));
+  }
+}
+
+// ===== Firebase (MODULAR) setup =====
+async function initFirebase(){
+  if(!FB_CONFIG){ rosterStatus.textContent = 'Local Mode: data saved in this browser.'; rosterStatus.classList.add('text-green-600'); return; }
+  try{
+    const app = initializeApp(FB_CONFIG);
+    db = getFirestore(app);
+    auth = getAuth(app);
+    await signInAnonymously(auth);
+    rosterStatus.textContent = 'Cloud Sync Ready: rosters and exceptions will sync.';
+  }catch(err){ console.error(err); rosterStatus.textContent='Cloud error — Local Mode enabled.'; rosterStatus.classList.add('text-red-600'); db=null; auth=null; }
+}
+
+// ===== Rosters: load/save/watch =====
+function loadRostersLocal(){
+  const saved = localStorage.getItem('allRosters');
+  if(saved){ allRosters = JSON.parse(saved); rosterStatus.textContent = 'Loaded saved rosters from browser.'; }
+  else { allRosters = {}; rosterStatus.textContent = 'No local rosters yet — upload CSV(s) or use Cloud Rosters.'; }
+  renderRosterSummary();
+}
+
+function watchRostersFromCloud(){
+  if(unsubRosters) unsubRosters();
+  const colRef = collection(db, `artifacts/${APP_ID}/public/rosters/periods`);
+  unsubRosters = onSnapshot(colRef, snap=>{
+    const incoming = {};
+    snap.forEach(doc=>{
+      const d = doc.data();
+      const p = String(doc.id);
+      if (Array.isArray(d.roster)) {
+        incoming[p] = d.roster;
+      }
+    });
+
+    allRosters = { ...allRosters, ...incoming };
+    localStorage.setItem('allRosters', JSON.stringify(allRosters));
+    renderRosterSummary();
+
+    const cur = periodSelect.value;
+    if (cur){
+      const r = resolveRosterKey(cur);
+      currentRoster = r ? (allRosters[r] || []) : [];
+      updateUI();
+      renderRosterDebug();
+    }
+  });
+}
+
+function onRosterUpload(evt){ (async e=>{
+  const files = e.target.files; if(!files||!files.length) return;
+  console.log(`[onRosterUpload] Starting upload of ${files.length} file(s).`);
+  rosterWarning.innerHTML='';
+
+  let processed = 0;
+  const merged = { ...allRosters };
+  const changed = new Set();
+
+  for (const f of files){
+    try{
+      const text = await f.text();
+      const parsed = parseRoster(text);
+      console.log(`[onRosterUpload] Parsed file ${f.name}:`, parsed);
+      for (const p in parsed){
+        merged[p] = parsed[p];
+        changed.add(String(p));
+      }
+      processed++;
+    } catch(err){
+      rosterStatus.textContent = `Error processing ${f.name}: ${err.message}`;
+      rosterStatus.classList.add('text-red-600');
+      loadRostersLocal();
+      return;
+    }
+  }
+
+  console.log(`[onRosterUpload] Periods to update:`, Array.from(changed));
+  allRosters = merged;
+  localStorage.setItem('allRosters', JSON.stringify(allRosters));
+  rosterStatus.textContent = `Successfully processed and saved ${processed} file(s).`;
+  rosterStatus.classList.remove('text-red-600'); rosterStatus.classList.add('text-green-600');
+
+  const cur = periodSelect.value;
+  if (cur){
+    const resolved = resolveRosterKey(cur);
+    currentRoster = resolved ? (allRosters[resolved] || []) : [];
+    updateUI(); renderRosterDebug();
+  }
+
+  if(db){
+    try{
+      const uploadPromises = [];
+      for (const p of changed){
+        console.log(`[onRosterUpload] Preparing to write roster for period ${p} to Firestore.`);
+        const docRef = doc(db, `artifacts/${APP_ID}/public/rosters/periods/${p}`);
+        uploadPromises.push(
+          setDoc(docRef, { roster: allRosters[p], updatedAt: serverTimestamp() }, { merge: true })
+        );
+      }
+      await Promise.all(uploadPromises);
+      console.log("[onRosterUpload] All Firestore writes completed successfully.");
+      rosterStatus.textContent += ' Cloud sync complete.';
+      rosterStatus.classList.add('text-green-600');
+    } catch(err){
+      console.error("Firebase write error:", err);
+      rosterStatus.textContent='Cloud sync failed. Using local rosters (kiosks will not match).';
+      rosterStatus.classList.add('text-red-600');
+    }
+  }
+
+  renderRosterSummary();
+  checkDuplicateIDs(allRosters);
+  onPeriodChange();
+})(evt); }
+
+async function clearSavedRosters(){
+    rosterStatus.textContent = "Clearing local and cloud rosters...";
+    rosterStatus.classList.remove('text-red-600', 'text-green-600');
+
+    // Clear local state first
+    localStorage.removeItem('allRosters');
+    sessionStorage.removeItem('periodOverride');
+    allRosters = {};
+    currentRoster = [];
+    periodAttendanceLog = [];
+
+    // Clear cloud state if connected
+    if (db) {
+        try {
+            const colRef = collection(db, `artifacts/${APP_ID}/public/rosters/periods`);
+            const snapshot = await getDocs(colRef);
+            const deletePromises = [];
+            snapshot.forEach(doc => {
+                deletePromises.push(deleteDoc(doc.ref));
+            });
+            await Promise.all(deletePromises);
+            console.log("Cloud rosters cleared successfully.");
+        } catch (err) {
+            console.error("Error clearing cloud rosters:", err);
+            rosterStatus.textContent = "Error clearing cloud rosters. Check console.";
+            rosterStatus.classList.add('text-red-600');
+            return;
+        }
+    }
+
+    rosterStatus.textContent = "All rosters cleared. Reloading...";
+    rosterStatus.classList.add('text-green-600');
+
+    setTimeout(() => {
+        location.reload();
+    }, 1500);
+}
+
+// ===== Exceptions: load/save/watch =====
+function loadExceptions(){
+  try{
+    const s=localStorage.getItem('exceptions');
+    if(s){
+      const obj=JSON.parse(s);
+      exceptions.avoidPairs = Array.isArray(obj.avoidPairs)? obj.avoidPairs: [];
+      exceptions.frontRow = new Set(Array.isArray(obj.frontRow)? obj.frontRow: []);
+      renderExceptionsInputs();
+    }
+  }catch{}
+  if(unsubExceptions) unsubExceptions();
+  if(db){
+    const docRef = doc(db, `artifacts/${APP_ID}/public/config`);
+    unsubExceptions = onSnapshot(docRef, docSnap=>{
+      if(docSnap.exists()){
+        const d=docSnap.data();
+        const ap = Array.isArray(d.avoidPairs)? d.avoidPairs: [];
+        const fr = Array.isArray(d.frontRow)? d.frontRow: [];
+        exceptions.avoidPairs = ap; exceptions.frontRow = new Set(fr);
+        localStorage.setItem('exceptions', JSON.stringify({avoidPairs: ap, frontRow: fr}));
+        renderExceptionsInputs();
+      }
+    });
+  }
+}
+function renderExceptionsInputs(){
+  frontRowInput.value = Array.from(exceptions.frontRow).join('\n');
+  avoidPairsInput.value = exceptions.avoidPairs.map(p => `${p.s1},${p.s2}`).join('\n');
+}
+async function saveExceptions(){
+  const fr = frontRowInput.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  const ap = avoidPairsInput.value.split(/\r?\n/).map(line => {
+  const pair = line.split(',').map(s => s.trim()).filter(Boolean);
+  if (pair.length === 2) {
+    return { s1: pair[0], s2: pair[1] }; // Convert to an object
+  }
+  return null;
+}).filter(Boolean);
+  exceptions.frontRow = new Set(fr); exceptions.avoidPairs = ap;
+  localStorage.setItem('exceptions', JSON.stringify({avoidPairs: ap, frontRow: fr}));
+  exceptionsStatus.textContent='Saved locally'; setTimeout(()=>exceptionsStatus.textContent='',1500);
+  if(db){
+    try{
+      const docRef = doc(db, `artifacts/${APP_ID}/public/config`);
+      await setDoc(docRef, {avoidPairs: ap, frontRow: fr, updatedAt: serverTimestamp()},{merge:true});
+      exceptionsStatus.textContent='Saved to cloud';
+      setTimeout(()=>exceptionsStatus.textContent='',1500);
+    } catch{
+      exceptionsStatus.textContent='Cloud save failed';
+      setTimeout(()=>exceptionsStatus.textContent='',2000);
+    }
+  }
+}
+// ===== Period change & attendance stream =====
+function doDetectAndMaybeSwitch(){
+  if(isOverride){ if(autoTimer) clearInterval(autoTimer); return; }
+  const info = detectPeriod(new Date());
+  lastDetect = info;
+  if(info.detected && periodSelect.value!==info.detected){
+    periodSelect.value = info.detected;
+    onPeriodChange();
+  } else {
+    updateUI();
+  }
+}
+function onPeriodChange(){
+  const p = periodSelect.value;
+  if(unsubAttendance){ unsubAttendance(); unsubAttendance=null; }
+
+  const resolved = resolveRosterKey(p);
+  currentRoster = resolved ? (allRosters[resolved] || []) : [];
+
+  const sched = bellSchedules[scheduleName] || bellSchedules.Default;
+  classStartTimeInput.value = p ? (sched[p]||'') : '';
+  const today = nowISODate();
+
+  if(db && p){
+    const colRef = collection(db, `artifacts/${APP_ID}/public/data/attendance/${today}/periods/${p}/students`);
+    unsubAttendance = onSnapshot(colRef, snap=>{
+      periodAttendanceLog = snap.docs.map(d=>d.data());
+      updateUI(); renderRosterDebug();
+    });
+  } else {
+    periodAttendanceLog = getLocalLogs(today,p);
+    updateUI(); renderRosterDebug();
+  }
+}
+
+// ===== CSV parsing & roster checks =====
+function splitCSVRow(row){
+  const out=[]; let cur="", inQ=false;
+  for(let i=0;i<row.length;i++){
+    const ch=row[i];
+    if(ch=='"'){ inQ=!inQ; continue; }
+    if(ch===',' && !inQ){ out.push(cur.trim()); cur=""; continue; }
+    cur+=ch;
+  }
+  out.push(cur.trim()); return out;
+}
+
+function parseRoster(csv){
+  const lines = linesFromText(csv.trim());
+  const rosters = {};
+  let curPeriod = null, idIdx = -1, nameIdx = -1;
+
+  for (let raw of lines){
+    let line = raw;
+    if(!line) continue;
+    if (line.charCodeAt(0) === 0xFEFF) line = line.slice(1);
+
+    // FIX: Regex now handles multi-digit period numbers (e.g., "10", "12")
+    const m = line.match(/^\s*"?\uFEFF?(\d+[A-Z]?)\s*-\s/);
+    if (m){
+      curPeriod = m[1];
+      if (!rosters[curPeriod]) rosters[curPeriod] = [];
+      idIdx = -1; nameIdx = -1;
+      continue;
+    }
+
+    const lower = line.toLowerCase();
+    if (lower.includes('stu#') && lower.includes('student name')){
+      const hdr = splitCSVRow(line).map(h=>h.toLowerCase());
+      idIdx   = hdr.indexOf('stu#');
+      nameIdx = hdr.indexOf('student name');
+      continue;
+    }
+
+    if (curPeriod && idIdx !== -1 && nameIdx !== -1){
+      const cells = splitCSVRow(line);
+      if (cells.length <= Math.max(idIdx, nameIdx)) continue;
+
+      const studentId   = (cells[idIdx]   || '').replace(/"/g,'').trim();
+      const studentName = (cells[nameIdx] || '').replace(/"/g,'').trim();
+      if (!studentId || !studentName) continue;
+
+      const comma = studentName.indexOf(',');
+      const last  = comma>=0 ? studentName.slice(0,comma).trim() : '';
+      const first = comma>=0 ? studentName.slice(comma+1).trim() : studentName.trim();
+
+      rosters[curPeriod].push({ StudentID: studentId, LastName: last, FirstName: first });
+    }
+  }
+
+  if (Object.keys(rosters).length === 0)
+    throw new Error('No valid period rosters found in the file.');
+
+  return rosters;
+}
+
+function checkDuplicateIDs(map){
+  let html='';
+  for(const p in map){
+    const roster=map[p]||[];
+    const tails=new Map();
+    roster.forEach(s=>{
+      const id=String(s.StudentID||'');
+      const last4 = id.length>=4? id.slice(-4): id;
+      if(!tails.has(last4)) tails.set(last4, []);
+      tails.get(last4).push(`${s.FirstName||''} ${s.LastName||''}`);
+    });
+    tails.forEach((names,tail)=>{
+      if(tail && names.length>1){
+        html += `<div><strong>P.${p} Warning:</strong> ID ending in <strong>${tail}</strong> is shared by: ${names.join(', ')}</div>`;
+      }
+    });
+  }
+  rosterWarning.innerHTML = html;
+}
+
+// ===== Roster summary & debug =====
+function parsePeriodLabel(p){
+  const m = String(p).match(/^(\d+)([A-Z])?$/);
+  return { num: m ? parseInt(m[1],10) : 0, suf: m && m[2] ? m[2] : '' };
+}
+function periodSort(a,b){
+  const A = parsePeriodLabel(a), B = parsePeriodLabel(b);
+  if (A.num !== B.num) return A.num - B.num;
+  return A.suf < B.suf ? -1 : A.suf > B.suf ? 1 : 0;
+}
+function renderRosterSummary(){
+  if(!rosterSummary) return;
+  const parts = Object.keys(allRosters).sort(periodSort)
+    .map(p => `${p}(${(allRosters[p]||[]).length})`);
+  rosterSummary.textContent = parts.length ? `Loaded periods: ${parts.join(', ')}` : 'Loaded periods: none';
+}
+function renderRosterDebug(){
+  if(!rosterDebug) return;
+  const p = periodSelect.value;
+  const r = resolveRosterKey(p);
+  const lenCur = (currentRoster || []).length;
+  const lenAll = r ? (allRosters[r]||[]).length : 0;
+  rosterDebug.innerHTML =
+    p ? `Selected period: <b>${p}</b> • Using roster key: <b>${r||'—'}</b> • currentRoster=${lenCur} • allRosters[${r||'—'}]=${lenAll}`
+      : 'No period selected';
+}
+
+// ===== Group selection =====
+const isFront = id => exceptions.frontRow.has(id);
+
+function forbiddenGroupsFor(studentId){
+  const bad = new Set();
+  for(const pair of exceptions.avoidPairs){
+    // This part is unchanged
+    if(!pair || !pair.s1 || !pair.s2) continue;
+    const a = pair.s1;
+    const b = pair.s2;
+    const otherStudentId = studentId===a ? b : (studentId===b ? a : null);
+
+    // If the student signing in is part of a pair...
+    if (otherStudentId) {
+        // --- START OF FIX ---
+        // Find the sign-in record for the other student in the pair.
+        const otherLog = periodAttendanceLog.find(log => log.StudentID === otherStudentId);
+
+        // If the other student has already signed in and has a group, add their group to the forbidden set.
+        if (otherLog && typeof otherLog.Group === 'number') {
+            bad.add(otherLog.Group);
+        }
+        // --- END OF FIX ---
+    }
+  }
+  return bad;
+}
+function randomChoice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+function pickGroup(student){
+  const id = student ? String(student.StudentID) : null;
+
+  const counts = new Array(MAX_GROUP+1).fill(0);
+  periodAttendanceLog.forEach(l=>{ if(typeof l.Group === 'number') counts[l.Group]++; });
+
+  const cap = g => GROUP_CAP(g);
+  const avoid = id ? forbiddenGroupsFor(id) : new Set();
+  const needsFront = id ? isFront(id) : false;
+
+  let pool = [];
+  for(let g=1; g<=MAX_GROUP; g++){
+    if(counts[g] < cap(g) && !avoid.has(g)) pool.push(g);
+  }
+
+  if(needsFront){
+    const frontPool = pool.filter(g => FRONT_SET.has(g));
+    if(frontPool.length) pool = frontPool;
+  }
+
+  if(pool.length === 0){
+    let alt = [];
+    for(let g=1; g<=MAX_GROUP; g++) if(counts[g] < cap(g)) alt.push(g);
+    if(needsFront){
+      const frontAlt = alt.filter(g => FRONT_SET.has(g));
+      pool = frontAlt.length ? frontAlt : alt;
+    } else {
+      pool = alt;
+    }
+  }
+
+  if(pool.length === 0){
+    let best = Infinity, ties = [];
+    for(let g=1; g<=MAX_GROUP; g++){
+      if(counts[g] < best){ best = counts[g]; ties = [g]; }
+      else if(counts[g] === best) ties.push(g);
+    }
+    return randomChoice(ties) || 1;
+  }
+
+  const eligible2 = pool.filter(g => counts[g] < Math.min(2, cap(g)));
+  if(eligible2.length) return randomChoice(eligible2);
+
+  const thirdEligible = pool.filter(g => cap(g) >= 3 && counts[g] < 3);
+  if(thirdEligible.length){
+    const primary = thirdEligible.filter(g => !LATE_TO_THIRD.has(g));
+    if(primary.length) return randomChoice(primary);
+    return randomChoice(thirdEligible);
+  }
+
+  return randomChoice(pool);
+}
+
+// ===== Attendance helpers =====
+function statusForNow(){
+  const startStr = classStartTimeInput.value; if(!startStr) return 'On Time';
+  const now=new Date();
+  const [hh,mm] = startStr.split(':').map(x=>parseInt(x,10));
+  const start = new Date(); start.setHours(hh,mm,0,0);
+  const truantAt = new Date(start.getTime()+30*60000);
+  if(now<=start) return 'On Time';
+  if(now>start && now<=truantAt) return 'Late';
+  return 'Truant';
+}
+
+async function handleSignIn(){
+  try{
+    const code = studentIdInput.value.trim();
+    if(code===TEACHER_CODE){ adminPanel.classList.remove('hidden'); kioskPanel.classList.add('hidden'); studentIdInput.value=''; return; }
+    const p = periodSelect.value; if(!p){ showMessage('error','Period Not Set','Open the admin panel and select a period.'); return; }
+    const student = (currentRoster||[]).find(s=>String(s.StudentID||'').slice(-4)===code);
+    if(!student){ showMessage('error','ID Not Found','Please check your ID and try again.'); return; }
+    signInButton.disabled = true;
+
+    const today = nowISODate();
+    const status = statusForNow();
+
+    if(db){
+      // --- START: NEW ROSTER SNAPSHOT LOGIC ---
+      // For each day and period, we save a snapshot of the roster.
+      // This is crucial for accurately determining absences later.
+      const rosterSnapshotRef = doc(db, `artifacts/${APP_ID}/public/data/attendance/${today}/periods/${p}`);
+      try {
+          const rosterDoc = await getDoc(rosterSnapshotRef);
+          // If the period document doesn't exist yet, or it's missing the roster, we create it.
+          if (!rosterDoc.exists() || !rosterDoc.data().roster_snapshot) {
+              console.log(`Creating roster snapshot for Period ${p} on ${today}.`);
+              await setDoc(rosterSnapshotRef, {
+                  roster_snapshot: currentRoster // Save the entire current roster array
+              }, { merge: true }); // Merge ensures we don't overwrite the 'students' subcollection
+          }
+      } catch(err) {
+          console.error("Failed to save roster snapshot:", err);
+          // We can still proceed with the sign-in even if this fails.
+      }
+      // --- END: NEW ROSTER SNAPSHOT LOGIC ---
+
+      const colRef = collection(db, `artifacts/${APP_ID}/public/data/attendance/${today}/periods/${p}/students`);
+      const q = query(colRef, where('StudentID','==',student.StudentID));
+      const snap = await getDocs(q);
+
+      if(!snap.empty){
+        const existing = snap.docs[0].data();
+        const g = typeof existing.Group==='number' ? existing.Group : pickGroup(student);
+        showGroup(g, existing.Status || status, student.FirstName);
+        updateUI();
+        return;
+      }
+
+      const g = pickGroup(student);
+      showGroup(g, status, student.FirstName);
+      try{
+        const log = {
+          Date: new Date().toLocaleDateString(),
+          StudentID: student.StudentID,
+          Name: `${student.FirstName} ${student.LastName}`,
+          SignInTime: new Date().toLocaleTimeString(),
+          Status: status,
+          Group: g,
+          Period: p,
+          Timestamp: serverTimestamp()
+        };
+        // We now use the StudentID as the document ID to prevent any chance of duplicates.
+        const studentDocRef = doc(db, `artifacts/${APP_ID}/public/data/attendance/${today}/periods/${p}/students/${student.StudentID}`);
+        await setDoc(studentDocRef, log);
+      }catch(err){
+        console.error('Write failed', err);
+        showMessage('error','Database Error','Could not save attendance. Please try again.');
+      }
+    } else {
+      // This part for local-only mode remains unchanged.
+      const list = getLocalLogs(today,p);
+      const existing = list.find(x=>x.StudentID===student.StudentID);
+      if(existing){
+        showGroup(existing.Group, existing.Status, student.FirstName);
+        updateUI();
+        return;
+      }
+      const g = pickGroup(student);
+      const log = {
+        Date: new Date().toLocaleDateString(),
+        StudentID: student.StudentID,
+        Name: `${student.FirstName} ${student.LastName}`,
+        SignInTime: new Date().toLocaleTimeString(),
+        Status: status,
+        Group: g,
+        Period: p,
+        Timestamp: Date.now()
+      };
+      list.push(log); setLocalLogs(today,p,list); periodAttendanceLog = list;
+      showGroup(g, status, student.FirstName);
+    }
+    updateUI();
+  }catch(err){
+    console.error('[handleSignIn] error', err);
+    alert('Sign-in error: '+(err&&err.message?err.message:err));
+  }
+}
+
+async function exportCSV(){
+  const today = nowISODate();
+  const rows = [["Date","Period","StudentID","LastName","FirstName","Status","SignInTime","Group"]];
+  for(const p of Object.keys(allRosters)){
+    const present = new Map();
+    if(db){
+      const colRef = collection(db, `artifacts/${APP_ID}/public/data/attendance/${today}/periods/${p}/students`);
+      const snap = await getDocs(colRef);
+      snap.docs.forEach(d=>{ const data=d.data(); present.set(data.StudentID,data); });
+    } else {
+      (getLocalLogs(today,p)||[]).forEach(d=>present.set(d.StudentID,d));
+    }
+    const roster = allRosters[p]||[];
+    roster.forEach(stu=>{
+      if(present.has(stu.StudentID)){
+        const log = present.get(stu.StudentID);
+        const parts=(log.Name||'').split(' ');
+        const first=parts[0]||''; const last=parts.slice(1).join(' ');
+        rows.push([log.Date,p,log.StudentID,'"'+last+'"','"'+first+'"',log.Status,log.SignInTime,log.Group]);
+      } else {
+        rows.push([today,p,stu.StudentID,'"'+(stu.LastName||'')+'"','"'+(stu.FirstName||'')+'"','Absent','N/A','N/A']);
+      }
+    });
+  }
+  const csv = rows.map(r=>r.join(',')).join('\r\n');
+  const uri = 'data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  const a=document.createElement('a'); a.href=uri; a.download=`full_attendance_log_${today}.csv`; document.body.appendChild(a); a.click(); a.remove();
+}
+
+// ===== UI: messages & summaries =====
+let dismissTimer=null;
+function showMessage(type,title,html){
+  let bg='bg-gray-700';
+  if(type==='success') bg='bg-green-600'; else if(type==='error') bg='bg-red-700'; else if(type==='admin') bg='bg-blue-600';
+  messageView.innerHTML = `<div class="fade-in p-8 rounded-lg ${bg}"><h2 class="text-3xl font-bold text-white mb-2">${title}</h2><p class="text-lg text-white/90">${html}</p></div>`;
+  kioskView.classList.add('hidden'); messageView.classList.remove('hidden');
+  if(dismissTimer) clearTimeout(dismissTimer);
+  dismissTimer = setTimeout(()=>{ dismissMessage(); }, 2500);
+}
+function showGroup(group,status,first){
+  const red700 = '#b91c1c';
+  const red500 = '#ef4444';
+  const glow   = '0 0 48px rgba(185,28,28,.55), 0 0 120px rgba(185,28,28,.35), inset 0 0 60px rgba(185,28,28,.25)';
+  messageView.innerHTML = `
+    <div class="fade-in p-8 rounded-2xl ring-4" style="background:#000; border-color:${red700}; box-shadow:${glow}">
+      <div class="text-2xl font-semibold" style="color:#ffffff">${first}, you are</div>
+      <div class="mt-2 text-6xl md:text-7xl font-extrabold tracking-tight" style="color:${red500}">GROUP ${group}</div>
+      <div class="mt-2 text-lg" style="color:#ffffff">Status: <span class="font-bold" style="color:${red500}">${status}</span></div>
+      <div class="mt-4 text-sm" style="color:#ffffff">Press <span class="font-semibold">Enter</span> to continue</div>
+    </div>`;
+  kioskView.classList.add('hidden'); messageView.classList.remove('hidden');
+  if(dismissTimer) clearTimeout(dismissTimer);
+  beep();
+  dismissTimer = setTimeout(()=>{ dismissMessage(); }, 2500);
+}
+function dismissMessage(){
+  if(dismissTimer){ clearTimeout(dismissTimer); dismissTimer=null;}
+  studentIdInput.value=''; signInButton.disabled=true;
+  kioskView.classList.remove('hidden'); messageView.classList.add('hidden');
+  studentIdInput.focus();
+}
+function beep(){
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const osc=ctx.createOscillator(); const gain=ctx.createGain();
+    osc.type='sine'; osc.frequency.value=880; osc.connect(gain); gain.connect(ctx.destination);
+    gain.gain.setValueAtTime(.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(.2, ctx.currentTime+.02);
+    gain.gain.exponentialRampToValueAtTime(.0001, ctx.currentTime+.35);
+    osc.start(); osc.stop(ctx.currentTime+.4);
+  }catch{}
+}
+
+function updateUI(){
+  const counts = {'On Time':0,'Late':0,'Truant':0};
+  periodAttendanceLog.forEach(l=>{ if(counts[l.Status]!==undefined) counts[l.Status]++; });
+  const present = periodAttendanceLog.length;
+  const absent = (currentRoster||[]).length - present;
+  summaryOnTime.textContent = counts['On Time'];
+  summaryLate.textContent = counts['Late'];
+  summaryTruant.textContent = counts['Truant'];
+  summaryAbsent.textContent = Math.max(0,absent);
+  summaryTotal.textContent = (currentRoster||[]).length;
+
+  if(!periodSelect.value){
+    absentListEl.innerHTML = '<li class="text-gray-500">Select a period to see list.</li>';
+  } else {
+    const set = new Set(periodAttendanceLog.map(l=>l.StudentID));
+    const absentList = (currentRoster||[]).filter(s=>!set.has(s.StudentID));
+    if(absentList.length===0 && (currentRoster||[]).length>0){
+      absentListEl.innerHTML = '<li class="text-green-600 font-semibold">All students are present!</li>';
+    } else {
+      absentListEl.innerHTML='';
+      absentList.sort((a,b)=>String(a.LastName||'').localeCompare(String(b.LastName||'')));
+      absentList.forEach(s=>{
+        const li=document.createElement('li');
+        li.textContent = `${s.LastName||''}, ${s.FirstName||''}`;
+        li.className = "hover:bg-gray-200 rounded px-2";
+        absentListEl.appendChild(li);
+      });
+    }
+  }
+
+  if(!periodSelect.value){
+    groupReportEl.innerHTML='<p class="text-gray-500">Select a period to see groups.</p>';
+  } else {
+    const map=new Map(); for(let g=1; g<=MAX_GROUP; g++) map.set(g,[]);
+    periodAttendanceLog.forEach(l=>{ if(l.Group && map.has(l.Group)) map.get(l.Group).push(l.Name); });
+    groupReportEl.innerHTML='';
+    if(periodAttendanceLog.length===0) groupReportEl.innerHTML='<p class="text-gray-500">Students will appear here as they sign in.</p>';
+    else {
+      map.forEach((arr,grp)=>{
+        if(arr.length>0){
+          const div=document.createElement('div');
+          div.innerHTML = `<h4 class="font-bold text-md">Group ${grp} (${arr.length})</h4><ul class="text-sm list-disc list-inside mb-2">${arr.map(n=>`<li>${n}</li>`).join('')}</ul>`;
+          groupReportEl.appendChild(div);
+        }
+      });
+    }
+updateFullscreenGroupView(); // This keeps the big screen in sync
+  }
+
+  renderPeriodIndicator();
+  renderRosterDebug();
+}
+
+function renderPeriodIndicator(){
+  const p=periodSelect.value;
+  const sched = bellSchedules[scheduleName]||bellSchedules.Default;
+  const det = isOverride? null : (lastDetect || detectPeriod(new Date()));
+  const nowStr = fmtTime(new Date());
+  if(!p){
+    if(det && det.detected){
+      const t=sched[det.detected]||'';
+      periodIndicator.innerHTML = `Period <b>${det.detected}</b> (${t}) • ${scheduleName} • Auto — ${det.reason} <span class="opacity-80">(now ${nowStr}${det.nextPeriod?`, next P ${det.nextPeriod} @ ${det.nextTime}`:''})</span>`;
+    } else {
+      periodIndicator.textContent = `Period: Auto-detecting… • ${scheduleName} • now ${nowStr}`;
+    }
+    return;
+  }
+  const t = sched[p]||'';
+  const how = isOverride? 'Override' : 'Auto';
+  const reason = (!isOverride && det && det.detected===p)? ` — ${det.reason}` : '';
+  const next = (!isOverride && det && det.detected===p && det.nextPeriod)? ` <span class="opacity-80">(next P ${det.nextPeriod} @ ${det.nextTime})</span>` : '';
+  periodIndicator.innerHTML = `Period <b>${p}</b> (${t}) • ${scheduleName} • ${how}${reason} <span class="opacity-80">(now ${nowStr})</span>${next}`;
+}
+
+// ===== Tests =====
+function runParseTests(){
+  const lf='"1 - Period"\nStu#,Student Name\n1234,"Doe, Jane"\n5678,"Smith, John"';
+  const crlf='"2 - Period"\r\nStu#,Student Name\r\n1111,"Alpha, A"\r\n2222,"Beta, B"';
+  const A=parseRoster(lf), B=parseRoster(crlf);
+  console.assert(A['1'].length===2,'LF parse failed');
+  console.assert(A['1'][0].StudentID==='1234','LF first ID');
+  console.assert(B['2'].length===2,'CRLF parse failed');
+  console.assert(B['2'][1].LastName==='Beta','CRLF last name');
+  const mix='A\nB\r\nC\rD'.split(/\r\n|\n|\r/);
+  console.assert(mix.length===4,'newline split handling');
+  const row='"123","Smith, John",Math,"A,B"';
+  const cells=splitCSVRow(row);
+  console.assert(cells.length===4,'CSV split basic');
+  console.assert(cells[1]==='Smith, John','Quoted comma preserved');
+  const L=linesFromText('L1\r\nL2\nL3\rL4');
+  console.assert(L.length===4 && L[0]==='L1' && L[3]==='L4','linesFromText normalization');
+}
+function runCSVEdgeTests(){
+  const tricky='"3 - Period"\nStu#,Student Name\n"9000","Last, Jr., Bob"';
+  const P=parseRoster(tricky);
+  console.assert(P['3'].length===1,'quoted multi-comma name');
+  console.assert(P['3'][0].FirstName==='Jr., Bob','first name with comma kept');
+}
+function runDetectTests(){
+  const prev= scheduleName; scheduleName='Regular';
+  const mk=(h,m)=>{ const d=new Date(); d.setHours(h,m,0,0); return d; };
+  let a=detectPeriod(mk(7,10)); console.assert(a.detected==='0' && a.mode==='preFirst','preFirst detect');
+  a=detectPeriod(mk(8,40)); console.assert(a.detected==='1' && a.mode==='during','during detect');
+  a=detectPeriod(mk(9,27)); console.assert(a.detected==='2' && a.mode==='passing','passing detect');
+  a=detectPeriod(mk(15,10)); console.assert(a.detected==='6','afterLast detect'); scheduleName=prev;
+}
+function runGroupTests(){
+  const prevAP=[["A1","B1"]], prevFR=['S1'];
+  const prevLogs=[{StudentID:'B1',Group:5},{StudentID:'X',Group:1}];
+  exceptions.avoidPairs=prevAP; exceptions.frontRow=new Set(prevFR);
+  periodAttendanceLog=[...prevLogs];
+  const g1=pickGroup({StudentID:'S1'}); console.assert([1,2,12,13].includes(g1),'front-row preference');
+  const g2=pickGroup({StudentID:'A1'}); console.assert(g2!==5,'avoid-pair enforce');
+}
+
+</script>
+</body>
+</html>

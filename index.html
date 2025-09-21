@@ -222,7 +222,7 @@
       </div>
 
       <div id="message-view" class="w-full max-w-md text-center hidden"></div>
-    </div><!-- kiosk-panel -->
+</div><!-- kiosk-panel -->
 
   </div><!-- flex -->
 </div><!-- container -->
@@ -246,6 +246,21 @@
       </div>
       -->
     </div>
+  </div>
+</div>
+
+<div id="schedule-update-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+  <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+    <div class="space-y-1">
+      <h2 class="text-xl font-semibold text-gray-900">New Schedule Available</h2>
+      <p id="schedule-update-message" class="text-sm text-gray-600"></p>
+    </div>
+    <div id="schedule-update-details" class="text-xs text-gray-500 leading-relaxed"></div>
+    <div class="flex flex-col md:flex-row gap-3">
+      <button id="schedule-accept-btn" class="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-semibold text-white transition-all hover:bg-blue-700">Yes, use this schedule</button>
+      <button id="schedule-defer-btn" class="flex-1 rounded-lg bg-gray-200 py-2 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-300">No, keep current</button>
+    </div>
+    <button id="schedule-ignore-btn" class="w-full text-xs font-medium text-gray-500 underline transition-colors hover:text-gray-700">No, and don't ask again for this version</button>
   </div>
 </div>
 
@@ -386,8 +401,8 @@ async function handleScheduleUpload() {
     const text = await file.text();
     const lines = text.split(/\r?\n/);
 
-    const bellSchedules = {};
-    const calendarData = {};
+    const parsedBellSchedules = {};
+    const parsedCalendarData = {};
     let currentScheduleName = null;
 
     for (const line of lines) {
@@ -397,8 +412,8 @@ async function handleScheduleUpload() {
         for (const cell of cells) {
             if (cell.trim().endsWith("Schedule")) {
                 currentScheduleName = cell.trim();
-                if (!bellSchedules[currentScheduleName]) {
-                    bellSchedules[currentScheduleName] = {};
+                if (!parsedBellSchedules[currentScheduleName]) {
+                    parsedBellSchedules[currentScheduleName] = {};
                 }
                 isHeader = true;
                 break;
@@ -414,7 +429,7 @@ async function handleScheduleUpload() {
             if (periodMatch && periodMatch[1] && currentScheduleName) {
                 const periodNumber = periodMatch[1].toUpperCase();
                 const startTime24 = convertTo24Hour(timeText);
-                bellSchedules[currentScheduleName][periodNumber] = startTime24;
+                parsedBellSchedules[currentScheduleName][periodNumber] = startTime24;
             }
         }
         
@@ -431,13 +446,26 @@ async function handleScheduleUpload() {
                     if(formattedDate) {
                         // THE FIX IS APPLIED TO THE LINE BELOW
                         const cleanName = currentScheduleName.replace(' Schedule', '').replace('/PLC', '').replace('/', '-'); // Replace slash with hyphen
-                        calendarData[formattedDate] = cleanName;
+                        parsedCalendarData[formattedDate] = cleanName;
                     }
                 }
             }
         }
     }
     
+    statusEl.textContent = 'Parsing complete. Preparing upload...';
+
+    const schoolLabel = APP_ID || 'this school';
+    const uploaderName = teacherDisplayName(teacherAuthUser || (auth && auth.currentUser));
+    const confirmMessage = `Uploading this CSV will replace the shared schedule for all teachers at "${schoolLabel}". Continue?`;
+    if (!window.confirm(confirmMessage)) {
+        statusEl.textContent = 'Upload cancelled.';
+        statusEl.classList.remove('text-red-600', 'text-green-600');
+        statusEl.classList.add('text-gray-600');
+        uploadBtn.disabled = false;
+        return;
+    }
+
     statusEl.textContent = 'Parsing complete. Uploading to Firebase...';
 
     if (!db) {
@@ -450,26 +478,42 @@ async function handleScheduleUpload() {
     try {
         const uploadPromises = [];
 
-        for (const scheduleName in bellSchedules) {
-            // THE FIX IS APPLIED TO THE LINE BELOW
-            const cleanName = scheduleName.replace(' Schedule', '').replace('/PLC', '').replace('/', '-'); // Replace slash with hyphen
-            if (Object.keys(bellSchedules[scheduleName]).length > 0) {
+        const cleanScheduleNames = [];
+        for (const scheduleName in parsedBellSchedules) {
+            const cleanName = scheduleName.replace(' Schedule', '').replace('/PLC', '').replace('/', '-');
+            if (Object.keys(parsedBellSchedules[scheduleName]).length > 0) {
                 const docRef = doc(db, `artifacts/${APP_ID}/public/schedules/bell_schedules/${cleanName}`);
-                uploadPromises.push(setDoc(docRef, bellSchedules[scheduleName]));
+                uploadPromises.push(setDoc(docRef, parsedBellSchedules[scheduleName]));
+                cleanScheduleNames.push(cleanName);
             }
         }
 
         const calendarRef = doc(db, `artifacts/${APP_ID}/public/schedules/calendar/main`);
-        uploadPromises.push(setDoc(calendarRef, { dates: calendarData }));
+        uploadPromises.push(setDoc(calendarRef, { dates: parsedCalendarData }));
+
+        const metaRef = doc(db, `artifacts/${APP_ID}/public/schedules/meta/current`);
+        const uploaderUid = auth && auth.currentUser ? auth.currentUser.uid : null;
+        const versionId = `${Date.now()}-${Math.random().toString(36).slice(2,10)}`;
+        uploadPromises.push(setDoc(metaRef, {
+            version: versionId,
+            uploadedBy: uploaderName,
+            uploaderUid: uploaderUid || null,
+            uploadedAt: serverTimestamp(),
+            scheduleNames: cleanScheduleNames,
+            calendarDateCount: Object.keys(parsedCalendarData).length
+        }));
 
         await Promise.all(uploadPromises);
 
         statusEl.textContent = 'Success! All schedules and calendar dates have been uploaded.';
+        statusEl.classList.remove('text-red-600', 'text-gray-600');
         statusEl.classList.add('text-green-600');
-
+        fileInput.value = '';
+        uploadBtn.disabled = true;
     } catch (err) {
         console.error("Schedule upload failed:", err);
         statusEl.textContent = 'Error during upload. Check the console for details.';
+        statusEl.classList.remove('text-green-600', 'text-gray-600');
         statusEl.classList.add('text-red-600');
         uploadBtn.disabled = false;
     }
@@ -643,11 +687,11 @@ const APP_ID = typeof window.__app_id === 'string' ? window.__app_id : 'demo-app
 const FB_CONFIG = (typeof window.__firebase_config === 'object' && window.__firebase_config) ? window.__firebase_config : null;
 
 let db=null, auth=null;
-let unsubRosters=null, unsubExceptions=null, unsubAttendance=null;
+let unsubRosters=null, unsubExceptions=null, unsubAttendance=null, unsubScheduleMeta=null;
 
 // ===== Calendars & Schedules =====
-const calendarData = {"2025-08-14":"Late Start","2025-08-15":"Assembly Schedule","2025-08-21":"Back to School Night","2025-09-01":"Holiday","2025-10-16":"Shake Out","2025-11-03":"No Students","2025-11-11":"Holiday","2025-11-24":"Thanksgiving Week","2025-11-25":"Thanksgiving Week","2025-11-26":"Thanksgiving Week","2025-11-27":"Holiday","2025-11-28":"Holiday","2025-12-19":"Finals","2025-12-22":"Winter Break","2026-01-19":"Holiday","2026-01-20":"Holiday","2026-02-13":"Holiday","2026-02-16":"Holiday","2026-03-12":"Min Day","2026-03-13":"No Students","2026-04-06":"Spring Break","2026-05-07":"Late Start","2026-05-25":"Holiday","2026-06-02":"Finals","2026-06-03":"Finals","2026-06-04":"Finals"};
-const bellSchedules = {
+const defaultCalendarData = {"2025-08-14":"Late Start","2025-08-15":"Assembly Schedule","2025-08-21":"Back to School Night","2025-09-01":"Holiday","2025-10-16":"Shake Out","2025-11-03":"No Students","2025-11-11":"Holiday","2025-11-24":"Thanksgiving Week","2025-11-25":"Thanksgiving Week","2025-11-26":"Thanksgiving Week","2025-11-27":"Holiday","2025-11-28":"Holiday","2025-12-19":"Finals","2025-12-22":"Winter Break","2026-01-19":"Holiday","2026-01-20":"Holiday","2026-02-13":"Holiday","2026-02-16":"Holiday","2026-03-12":"Min Day","2026-03-13":"No Students","2026-04-06":"Spring Break","2026-05-07":"Late Start","2026-05-25":"Holiday","2026-06-02":"Finals","2026-06-03":"Finals","2026-06-04":"Finals"};
+const defaultBellSchedules = {
   Regular:{0:"07:28",1:"08:30",2:"09:32",3:"10:52",4:"11:54",5:"13:31",6:"14:33"},
   "Late Start":{0:"07:28",1:"09:30",2:"10:25",3:"11:32",4:"12:24",5:"13:51",6:"14:43"},
   "Assembly Schedule":{0:"07:37",1:"08:30","2A":"09:23","2B":"10:20",3:"11:27",4:"12:20",5:"13:52",6:"14:45"},
@@ -656,6 +700,9 @@ const bellSchedules = {
   "Min Day":{0:"07:28",1:"08:30",2:"09:15",3:"10:05",4:"10:50",5:"11:35",6:"12:20"},
   Default:{0:"07:28",1:"08:30",2:"09:32",3:"10:52",4:"11:54",5:"13:31",6:"14:33"}
 };
+
+let calendarData = { ...defaultCalendarData };
+let bellSchedules = cloneDefaultBellSchedules();
 
 // ===== State =====
 let allRosters = {};      // { period -> [{StudentID,LastName,FirstName}, ...] }
@@ -674,6 +721,16 @@ let reauthingAnonymous = false;
 let authPersistenceReady = false;
 
 let exceptions = { avoidPairs: [], frontRow: new Set() };
+
+const SCHEDULE_ACCEPTED_KEY = `scheduleAcceptedVersion:${APP_ID}`;
+const SCHEDULE_IGNORED_KEY = `scheduleIgnoredVersions:${APP_ID}`;
+let activeScheduleVersion = 'local-default';
+let latestScheduleVersionSeen = null;
+let latestScheduleMeta = null;
+let latestScheduleBundle = null;
+let pendingScheduleMeta = null;
+let pendingScheduleBundle = null;
+let dismissedScheduleVersion = null;
 
 // ===== DOM =====
 const $ = sel => document.querySelector(sel);
@@ -720,6 +777,12 @@ const saveTeacherConfigBtn = $('#save-teacher-config');
 const teacherConfigStatus = $('#teacher-config-status');
 const teacherSignOutButton = $('#teacher-sign-out');
 const teacherAuthIndicator = $('#teacher-auth-indicator');
+const scheduleUpdateModal = $('#schedule-update-modal');
+const scheduleUpdateMessage = $('#schedule-update-message');
+const scheduleUpdateDetails = $('#schedule-update-details');
+const scheduleAcceptBtn = $('#schedule-accept-btn');
+const scheduleDeferBtn = $('#schedule-defer-btn');
+const scheduleIgnoreBtn = $('#schedule-ignore-btn');
 
 // ===== Teacher auth & admin gating =====
 function normalizeTeacherEmail(email){
@@ -1077,6 +1140,351 @@ function getMaxConfiguredGroup(){
   return defaultTeacherConfig.maxGroup;
 }
 
+function cloneDefaultBellSchedules(){
+  return JSON.parse(JSON.stringify(defaultBellSchedules));
+}
+
+function resetScheduleDataToDefaults(){
+  calendarData = { ...defaultCalendarData };
+  bellSchedules = cloneDefaultBellSchedules();
+}
+
+function readAcceptedScheduleVersion(){
+  try{
+    const stored = localStorage.getItem(SCHEDULE_ACCEPTED_KEY);
+    return stored || null;
+  }catch(err){
+    console.warn('[schedule] Unable to read accepted version from localStorage', err);
+    return null;
+  }
+}
+
+function writeAcceptedScheduleVersion(version){
+  try{
+    if(version){
+      localStorage.setItem(SCHEDULE_ACCEPTED_KEY, version);
+    }else{
+      localStorage.removeItem(SCHEDULE_ACCEPTED_KEY);
+    }
+  }catch(err){
+    console.warn('[schedule] Unable to persist accepted version', err);
+  }
+}
+
+function readIgnoredScheduleVersions(){
+  try{
+    const raw = localStorage.getItem(SCHEDULE_IGNORED_KEY);
+    if(!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if(Array.isArray(parsed)){
+      return new Set(parsed.map(v=>String(v)).filter(Boolean));
+    }
+  }catch(err){
+    console.warn('[schedule] Unable to read ignored versions', err);
+  }
+  return new Set();
+}
+
+function writeIgnoredScheduleVersions(set){
+  try{
+    const arr = Array.from(set || []);
+    localStorage.setItem(SCHEDULE_IGNORED_KEY, JSON.stringify(arr));
+  }catch(err){
+    console.warn('[schedule] Unable to persist ignored versions', err);
+  }
+}
+
+function markScheduleVersionIgnored(version){
+  if(!version) return;
+  const ignored = readIgnoredScheduleVersions();
+  ignored.add(version);
+  writeIgnoredScheduleVersions(ignored);
+}
+
+function clearIgnoredScheduleVersion(version){
+  if(!version) return;
+  const ignored = readIgnoredScheduleVersions();
+  if(ignored.delete(version)){
+    writeIgnoredScheduleVersions(ignored);
+  }
+}
+
+function determineScheduleNameFromNote(note){
+  const trimmed = typeof note === 'string' ? note.trim() : '';
+  if(!trimmed) return 'Regular';
+  if(bellSchedules[trimmed]) return trimmed;
+  const lower = trimmed.toLowerCase();
+  if(lower.includes('late start') && bellSchedules['Late Start']) return 'Late Start';
+  if(lower.includes('assembly') && bellSchedules['Assembly Schedule']) return 'Assembly Schedule';
+  if(lower.includes('back to school') && bellSchedules['Back to School Night']) return 'Back to School Night';
+  if(lower.includes('final')) return 'Finals';
+  if(lower.includes('min day')) return 'Min Day';
+  if(lower.includes('holiday') || lower.includes('no student') || lower.includes('break')) return 'No School';
+  return 'Regular';
+}
+
+function determineScheduleNameForDate(dateString){
+  const note = calendarData && typeof calendarData[dateString] === 'string' ? calendarData[dateString] : '';
+  return determineScheduleNameFromNote(note);
+}
+
+function refreshScheduleUI(){
+  const today = new Date();
+  const dateString = nowISODate();
+  if(currentDateDisplay){
+    try{
+      currentDateDisplay.textContent = today.toLocaleDateString(undefined,{weekday:'long', year:'numeric', month:'long', day:'numeric'});
+    }catch{
+      currentDateDisplay.textContent = dateString;
+    }
+  }
+  scheduleName = determineScheduleNameForDate(dateString);
+  const todays = bellSchedules[scheduleName] || bellSchedules.Default || {};
+  if(periodSelect){
+    const options = ['<option value="">-- Auto-Detecting --</option>']
+      .concat(Object.keys(todays).map(p=>`<option value="${p}">Period ${p} (${todays[p]})</option>`));
+    periodSelect.innerHTML = options.join('');
+  }
+  if(studentScheduleNameEl){
+    studentScheduleNameEl.textContent = scheduleName;
+  }
+  if(studentBellScheduleEl){
+    const entries = Object.keys(todays).map(p=>`<div><strong>P ${p}:</strong> ${todays[p]}</div>`);
+    studentBellScheduleEl.innerHTML = entries.join('');
+  }
+  return todays;
+}
+
+function hideScheduleUpdatePrompt(){
+  if(scheduleUpdateModal){
+    scheduleUpdateModal.classList.add('hidden');
+    delete scheduleUpdateModal.dataset.version;
+  }
+}
+
+function showScheduleUpdatePrompt(meta){
+  if(!scheduleUpdateModal || !meta) return;
+  const version = meta.version ? String(meta.version) : '';
+  if(version && scheduleUpdateModal.dataset.version === version){
+    scheduleUpdateModal.classList.remove('hidden');
+    return;
+  }
+  const uploadedBy = meta.uploadedBy || 'Another teacher';
+  const uploadedAt = meta.uploadedAt instanceof Date
+    ? meta.uploadedAt.toLocaleString(undefined,{dateStyle:'medium', timeStyle:'short'})
+    : 'an unknown time';
+  const message = `A new schedule uploaded by ${uploadedBy} on ${uploadedAt} is available.`;
+  if(scheduleUpdateMessage){
+    scheduleUpdateMessage.textContent = message;
+  }
+  if(scheduleUpdateDetails){
+    const parts = [];
+    if(Array.isArray(meta.scheduleNames) && meta.scheduleNames.length){
+      parts.push(`Bell sets: ${meta.scheduleNames.join(', ')}`);
+    }
+    if(typeof meta.calendarDateCount === 'number'){
+      const label = meta.calendarDateCount === 1 ? 'calendar date' : 'calendar dates';
+      parts.push(`${meta.calendarDateCount} ${label}`);
+    }
+    scheduleUpdateDetails.textContent = parts.join(' • ');
+  }
+  scheduleUpdateModal.dataset.version = version;
+  scheduleUpdateModal.classList.remove('hidden');
+}
+
+async function fetchScheduleBundleFromCloud(){
+  if(!db) return null;
+  const bundle = { calendar: {}, bells: {} };
+  try{
+    const calendarRef = doc(db, `artifacts/${APP_ID}/public/schedules/calendar/main`);
+    const calendarSnap = await getDoc(calendarRef);
+    if(calendarSnap.exists()){
+      const data = calendarSnap.data();
+      const incoming = data && typeof data === 'object' && data.dates && typeof data.dates === 'object' ? data.dates : {};
+      for(const [key, value] of Object.entries(incoming || {})){
+        if(typeof key === 'string' && typeof value === 'string' && key){
+          bundle.calendar[key] = value;
+        }
+      }
+    }
+  }catch(err){
+    console.error('[schedule] Failed to load calendar from Firestore', err);
+  }
+  try{
+    const bellsRef = collection(db, `artifacts/${APP_ID}/public/schedules/bell_schedules`);
+    const bellsSnap = await getDocs(bellsRef);
+    bellsSnap.forEach(docSnap => {
+      const data = docSnap.data() || {};
+      const cleaned = {};
+      Object.entries(data).forEach(([period, time]) => {
+        if(typeof period === 'string' && typeof time === 'string' && time.trim()){
+          cleaned[period] = time.trim();
+        }
+      });
+      if(Object.keys(cleaned).length){
+        bundle.bells[docSnap.id] = cleaned;
+      }
+    });
+  }catch(err){
+    console.error('[schedule] Failed to load bell schedules from Firestore', err);
+  }
+  return bundle;
+}
+
+function applyScheduleBundle(bundle, meta){
+  if(!bundle){
+    console.warn('[schedule] No bundle to apply');
+    return;
+  }
+  latestScheduleBundle = bundle;
+  latestScheduleMeta = meta || null;
+  resetScheduleDataToDefaults();
+  if(bundle.calendar && typeof bundle.calendar === 'object'){
+    calendarData = { ...calendarData, ...bundle.calendar };
+  }
+  if(bundle.bells && typeof bundle.bells === 'object'){
+    for(const [name, schedule] of Object.entries(bundle.bells)){
+      if(schedule && typeof schedule === 'object' && Object.keys(schedule).length){
+        bellSchedules[name] = schedule;
+      }
+    }
+  }
+  if(meta && meta.version){
+    activeScheduleVersion = meta.version;
+    writeAcceptedScheduleVersion(meta.version);
+    clearIgnoredScheduleVersion(meta.version);
+  }
+  pendingScheduleMeta = null;
+  pendingScheduleBundle = null;
+  dismissedScheduleVersion = null;
+  hideScheduleUpdatePrompt();
+  refreshScheduleUI();
+  if(!isOverride){
+    doDetectAndMaybeSwitch();
+  }
+}
+
+function rememberScheduleDismissal(meta){
+  if(meta && meta.version){
+    dismissedScheduleVersion = meta.version;
+  }
+}
+
+async function processIncomingSchedule(meta, bundle, options={}){
+  if(!meta){
+    return;
+  }
+  const version = meta.version || null;
+  latestScheduleMeta = meta;
+  latestScheduleBundle = bundle || latestScheduleBundle;
+  latestScheduleVersionSeen = version;
+  const accepted = readAcceptedScheduleVersion();
+  if(version && version === accepted){
+    applyScheduleBundle(bundle || latestScheduleBundle || { calendar:{}, bells:{} }, meta);
+    return;
+  }
+  if(!version){
+    applyScheduleBundle(bundle || latestScheduleBundle || { calendar:{}, bells:{} }, meta);
+    return;
+  }
+  if(dismissedScheduleVersion && version !== dismissedScheduleVersion){
+    dismissedScheduleVersion = null;
+  }
+  const ignored = readIgnoredScheduleVersions();
+  if(ignored.has(version)){
+    return;
+  }
+  if(version === dismissedScheduleVersion){
+    return;
+  }
+  pendingScheduleMeta = meta;
+  pendingScheduleBundle = bundle || latestScheduleBundle || null;
+  if(options.silent){
+    return;
+  }
+  showScheduleUpdatePrompt(meta);
+}
+
+async function initializeScheduleSync(){
+  if(!db) return;
+  const accepted = readAcceptedScheduleVersion();
+  activeScheduleVersion = accepted || 'local-default';
+  try{
+    const metaRef = doc(db, `artifacts/${APP_ID}/public/schedules/meta/current`);
+    const metaSnap = await getDoc(metaRef);
+    if(metaSnap.exists()){
+      const metaData = metaSnap.data() || {};
+      const meta = normalizeScheduleMeta(metaData);
+      const bundle = await fetchScheduleBundleFromCloud();
+      await processIncomingSchedule(meta, bundle || { calendar:{}, bells:{} }, { silent: false });
+    }
+    if(unsubScheduleMeta){
+      unsubScheduleMeta();
+    }
+    unsubScheduleMeta = onSnapshot(metaRef, async snap => {
+      if(!snap.exists()) return;
+      const incoming = normalizeScheduleMeta(snap.data() || {});
+      if(incoming.version && incoming.version === latestScheduleVersionSeen){
+        return;
+      }
+      const bundle = await fetchScheduleBundleFromCloud();
+      await processIncomingSchedule(incoming, bundle || { calendar:{}, bells:{} }, { silent: false });
+    });
+  }catch(err){
+    console.error('[schedule] Failed to initialize schedule sync', err);
+  }
+}
+
+function normalizeScheduleMeta(raw){
+  const meta = Object.assign({}, raw || {});
+  const version = typeof meta.version === 'string' && meta.version.trim() ? meta.version.trim() : null;
+  const uploadedBy = typeof meta.uploadedBy === 'string' && meta.uploadedBy.trim() ? meta.uploadedBy.trim() : 'Another teacher';
+  const uploadedAt = meta.uploadedAt && typeof meta.uploadedAt.toDate === 'function' ? meta.uploadedAt.toDate() : null;
+  const scheduleNames = Array.isArray(meta.scheduleNames) ? meta.scheduleNames.filter(name => typeof name === 'string' && name.trim()).map(name => name.trim()) : [];
+  const calendarDateCount = typeof meta.calendarDateCount === 'number' ? meta.calendarDateCount : null;
+  return { version, uploadedBy, uploadedAt, scheduleNames, calendarDateCount };
+}
+
+async function handleScheduleAccept(){
+  if(!pendingScheduleMeta){
+    hideScheduleUpdatePrompt();
+    return;
+  }
+  if(!pendingScheduleBundle){
+    try{
+      const fetched = await fetchScheduleBundleFromCloud();
+      if(fetched){
+        pendingScheduleBundle = fetched;
+      }
+    }catch(err){
+      console.error('[schedule] Failed to fetch bundle during acceptance', err);
+    }
+  }
+  if(!pendingScheduleBundle){
+    setAdminAuthStatus('Unable to download the shared schedule. Please try again.', 'error');
+    return;
+  }
+  applyScheduleBundle(pendingScheduleBundle, pendingScheduleMeta);
+}
+
+function handleScheduleDefer(){
+  if(pendingScheduleMeta){
+    rememberScheduleDismissal(pendingScheduleMeta);
+  }
+  pendingScheduleMeta = null;
+  pendingScheduleBundle = null;
+  hideScheduleUpdatePrompt();
+}
+
+function handleScheduleIgnore(){
+  if(pendingScheduleMeta && pendingScheduleMeta.version){
+    markScheduleVersionIgnored(pendingScheduleMeta.version);
+  }
+  pendingScheduleMeta = null;
+  pendingScheduleBundle = null;
+  hideScheduleUpdatePrompt();
+}
+
 function computeMaxGroupForLog(){
   const configured = getMaxConfiguredGroup();
   const overrideMax = Object.keys(teacherConfig.groupCapOverrides||{}).reduce((max,key)=>{
@@ -1137,27 +1545,16 @@ async function init(){
     setTeacherLoggedOut('Teacher sign-in required for admin tools.');
     await initFirebase(); // Use new Firebase init function
     await loadTeacherConfig();
-    if(db) watchRostersFromCloud();
+    if(db){
+      await initializeScheduleSync();
+      watchRostersFromCloud();
+    }
     loadRostersLocal();
     loadExceptions();
     renderRosterSummary();
     renderRosterDebug();
 
-    // date + schedule setup
-    const today = new Date();
-    const dateString = nowISODate();
-    currentDateDisplay.textContent = today.toLocaleDateString(undefined,{weekday:'long', year:'numeric', month:'long', day:'numeric'});
-    const note = calendarData[dateString] || 'Regular';
-    scheduleName = note.includes('Late Start')? 'Late Start'
-                 : note.includes('Assembly')? 'Assembly Schedule'
-                 : note.includes('Back to School')? 'Back to School Night'
-                 : note.includes('Finals')? 'Finals'
-                 : note.includes('Min Day')? 'Min Day'
-                 : (note.includes('Holiday')||note.includes('No Student')||note.includes('Break'))? 'No School' : 'Regular';
-    const todays = bellSchedules[scheduleName] || bellSchedules.Default;
-    periodSelect.innerHTML = '<option value="">-- Auto-Detecting --</option>' + Object.keys(todays).map(p=>`<option value="${p}">Period ${p} (${todays[p]})</option>`).join('');
-    studentScheduleNameEl.textContent = scheduleName;
-    studentBellScheduleEl.innerHTML = Object.keys(todays).map(p=>`<div><strong>P ${p}:</strong> ${todays[p]}</div>`).join('');
+    refreshScheduleUI();
 
     if(sessionStorage.getItem('periodOverride')==='true'){ isOverride=true; }
     else { doDetectAndMaybeSwitch(); autoTimer = setInterval(doDetectAndMaybeSwitch, 30000); }
@@ -1188,6 +1585,16 @@ if (scheduleFileInput && uploadSchedulesBtn) {
     });
     uploadSchedulesBtn.addEventListener('click', handleScheduleUpload);
 }
+
+    if(scheduleAcceptBtn){
+      scheduleAcceptBtn.addEventListener('click', ()=>{ handleScheduleAccept().catch(err=>console.error('[schedule] Accept handler failed', err)); });
+    }
+    if(scheduleDeferBtn){
+      scheduleDeferBtn.addEventListener('click', ()=>{ handleScheduleDefer(); });
+    }
+    if(scheduleIgnoreBtn){
+      scheduleIgnoreBtn.addEventListener('click', ()=>{ handleScheduleIgnore(); });
+    }
 
     periodSelect.addEventListener('change', ()=>{ isOverride=true; sessionStorage.setItem('periodOverride','true'); onPeriodChange(); });
     rosterUpload.addEventListener('change', onRosterUpload);

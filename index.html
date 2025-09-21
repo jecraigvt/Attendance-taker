@@ -7,11 +7,25 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet"/>
 <style>
+  :root{
+    --kiosk-bg:#111827;
+    --kiosk-primary:#b91c1c;
+    --kiosk-accent:#ef4444;
+    --kiosk-text:#ffffff;
+    --kiosk-primary-rgb:185,28,28;
+  }
   body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
   .transition-all{transition:all .3s ease-in-out}
   @keyframes fadeIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
   .fade-in{animation:fadeIn .5s ease-out forwards}
   .file-input-button{cursor:pointer}
+  #kiosk-panel{background:linear-gradient(160deg,rgba(var(--kiosk-primary-rgb,185,28,28),0.18) 0%,rgba(var(--kiosk-primary-rgb,185,28,28),0.05) 45%,rgba(17,24,39,0.95) 100%),var(--kiosk-bg,#111827);color:var(--kiosk-text,#ffffff)}
+  .kiosk-input{border-color:var(--kiosk-primary,#b91c1c)!important}
+  .kiosk-input:focus{outline:none;box-shadow:0 0 0 4px rgba(var(--kiosk-primary-rgb,185,28,28),0.35)}
+  .kiosk-signin-btn{background-color:var(--kiosk-primary,#b91c1c);box-shadow:0 10px 25px rgba(0,0,0,.4);transform:translateY(0);transition:all .25s ease-in-out}
+  .kiosk-signin-btn:hover{background-color:var(--kiosk-accent,#ef4444);transform:translateY(-4px)}
+  .kiosk-signin-btn:disabled{background-color:rgba(255,255,255,.15);box-shadow:none;transform:none}
+  .brand-preview{border:1px solid rgba(255,255,255,.25);border-radius:.75rem;overflow:hidden}
 </style>
 <script>
   // Use the SAME app_id on every kiosk so they share data
@@ -47,7 +61,10 @@
                 <h2 class="text-2xl font-bold text-gray-900">Teacher Admin</h2>
                 <p id="current-date" class="text-sm text-gray-500"></p>
               </div>
-              <button id="teacher-sign-out" class="text-xs font-semibold text-red-500 hover:text-red-600 hidden">Sign Out</button>
+              <div class="flex flex-col items-end gap-2">
+                <button id="edit-setup-button" class="text-xs font-semibold text-blue-600 hover:text-blue-700 hidden">Edit Setup</button>
+                <button id="teacher-sign-out" class="text-xs font-semibold text-red-500 hover:text-red-600 hidden">Sign Out</button>
+              </div>
             </div>
             <p id="teacher-auth-indicator" class="text-xs text-gray-500"></p>
           </div>
@@ -197,18 +214,155 @@
 
         </div><!-- End Right Column -->
 
-      </div><!-- grid -->
-    </div><!-- admin-panel -->
+    </div><!-- grid -->
+  </div><!-- admin-panel -->
+
+    <!-- ================== TEACHER SETUP ================== -->
+    <div id="teacher-setup-panel" class="w-full hidden bg-gray-900 text-white p-6 overflow-y-auto">
+      <div class="w-full max-w-4xl mx-auto space-y-6">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h2 class="text-3xl font-semibold">Welcome! Let's get your classroom ready.</h2>
+            <p class="text-sm text-white/70">Complete this one-time setup to unlock the admin tools.</p>
+          </div>
+          <div id="setup-color-preview" class="brand-preview hidden md:flex md:flex-col items-center justify-center gap-2 w-32 h-32 bg-white/10">
+            <span class="text-[10px] uppercase tracking-wide text-white/70">Brand Preview</span>
+            <div class="w-10 h-10 rounded-full border border-white/50" style="background:var(--kiosk-primary,#b91c1c);"></div>
+            <div class="text-xs text-center leading-tight">
+              <div id="setup-preview-mascot">Warriors</div>
+              <div id="setup-preview-school" class="text-white/70">Warrior High</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white/5 rounded-2xl p-5 space-y-4">
+          <div class="flex items-center justify-between gap-3">
+            <h3 class="text-xl font-semibold">Step 1 · School & Branding</h3>
+            <span class="text-xs uppercase tracking-wide text-white/60">Shared with other kiosks</span>
+          </div>
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="space-y-2">
+              <label class="block text-xs font-semibold uppercase tracking-wide">Existing school</label>
+              <select id="setup-school-select" class="w-full p-2 rounded-md text-gray-900">
+                <option value="">Loading schools…</option>
+              </select>
+              <button id="setup-refresh-schools" class="text-xs text-blue-200 underline">Refresh list</button>
+            </div>
+            <div class="space-y-2">
+              <label class="block text-xs font-semibold uppercase tracking-wide">Create new school</label>
+              <label class="inline-flex items-center gap-2 text-sm text-white/80">
+                <input type="checkbox" id="setup-create-toggle" class="rounded border-white/30 bg-white/10"> I want to add a new school
+              </label>
+              <p class="text-xs text-white/60">Selecting this will create a new entry under <code>artifacts/&lt;APP_ID&gt;/schools</code>.</p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-3 gap-4 pt-2">
+            <div class="space-y-1">
+              <label for="setup-school-name" class="text-xs font-semibold uppercase tracking-wide">School name</label>
+              <input id="setup-school-name" type="text" class="w-full p-2 rounded-md text-gray-900" placeholder="e.g. Warrior High"/>
+            </div>
+            <div class="space-y-1">
+              <label for="setup-mascot" class="text-xs font-semibold uppercase tracking-wide">Mascot</label>
+              <input id="setup-mascot" type="text" class="w-full p-2 rounded-md text-gray-900" placeholder="Warriors"/>
+            </div>
+            <div class="grid grid-cols-3 gap-2">
+              <div class="space-y-1">
+                <label class="text-[10px] font-semibold uppercase tracking-wide">Primary</label>
+                <input id="setup-primary-color" type="color" class="w-full h-10 rounded-md border border-white/30" value="#b91c1c"/>
+              </div>
+              <div class="space-y-1">
+                <label class="text-[10px] font-semibold uppercase tracking-wide">Accent</label>
+                <input id="setup-accent-color" type="color" class="w-full h-10 rounded-md border border-white/30" value="#ef4444"/>
+              </div>
+              <div class="space-y-1">
+                <label class="text-[10px] font-semibold uppercase tracking-wide">Background</label>
+                <input id="setup-background-color" type="color" class="w-full h-10 rounded-md border border-white/30" value="#111827"/>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-3 gap-4">
+            <div class="space-y-1">
+              <label for="setup-schedule-name" class="text-xs font-semibold uppercase tracking-wide">Default schedule name</label>
+              <input id="setup-schedule-name" type="text" class="w-full p-2 rounded-md text-gray-900" placeholder="Regular"/>
+            </div>
+            <div class="space-y-1">
+              <label for="setup-day-start" class="text-xs font-semibold uppercase tracking-wide">First bell time</label>
+              <input id="setup-day-start" type="time" class="w-full p-2 rounded-md text-gray-900"/>
+            </div>
+            <div class="space-y-1">
+              <label for="setup-passing-minutes" class="text-xs font-semibold uppercase tracking-wide">Passing minutes</label>
+              <input id="setup-passing-minutes" type="number" min="0" class="w-full p-2 rounded-md text-gray-900" placeholder="7"/>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white/5 rounded-2xl p-5 space-y-4">
+          <div class="flex items-center justify-between gap-3">
+            <h3 class="text-xl font-semibold">Step 2 · Classroom Layout</h3>
+            <span class="text-xs uppercase tracking-wide text-white/60">Used for kiosk group assignments</span>
+          </div>
+          <div class="grid md:grid-cols-3 gap-4">
+            <div class="space-y-1">
+              <label for="setup-groups" class="text-xs font-semibold uppercase tracking-wide">Number of groups</label>
+              <input id="setup-groups" type="number" min="1" class="w-full p-2 rounded-md text-gray-900" placeholder="13"/>
+            </div>
+            <div class="space-y-1">
+              <label for="setup-seats" class="text-xs font-semibold uppercase tracking-wide">Seats per group</label>
+              <input id="setup-seats" type="number" min="1" class="w-full p-2 rounded-md text-gray-900" placeholder="3"/>
+            </div>
+            <div class="space-y-1">
+              <label for="setup-overrides" class="text-xs font-semibold uppercase tracking-wide">Group overrides</label>
+              <textarea id="setup-overrides" class="w-full p-2 rounded-md text-gray-900 h-20" placeholder="6=2"></textarea>
+            </div>
+            <div class="space-y-1 md:col-span-1">
+              <label for="setup-front-groups" class="text-xs font-semibold uppercase tracking-wide">Front row groups</label>
+              <input id="setup-front-groups" type="text" class="w-full p-2 rounded-md text-gray-900" placeholder="1,2,12,13"/>
+            </div>
+            <div class="space-y-1 md:col-span-1">
+              <label for="setup-late-groups" class="text-xs font-semibold uppercase tracking-wide">Slow third seat groups</label>
+              <input id="setup-late-groups" type="text" class="w-full p-2 rounded-md text-gray-900" placeholder="9,10"/>
+            </div>
+            <div class="space-y-1 md:col-span-1">
+              <label for="setup-layout-notes" class="text-xs font-semibold uppercase tracking-wide">Layout notes (optional)</label>
+              <textarea id="setup-layout-notes" class="w-full p-2 rounded-md text-gray-900 h-20" placeholder="Upload map link, room tips…"></textarea>
+            </div>
+          </div>
+
+          <div class="space-y-3 pt-2">
+            <p class="text-xs font-semibold uppercase tracking-wide text-white/70">Seating chart mode</p>
+            <label class="flex items-center gap-2 text-sm text-white/90">
+              <input type="radio" name="setup-seating-mode" id="setup-seating-random" value="random" checked class="border-white/30"> Randomized at sign-in
+            </label>
+            <label class="flex items-center gap-2 text-sm text-white/90">
+              <input type="radio" name="setup-seating-mode" id="setup-seating-upload" value="uploaded" class="border-white/30"> Use uploaded seating chart (CSV)
+            </label>
+            <input type="file" id="setup-chart-file" accept=".csv" class="block w-full text-sm text-white/80 hidden"/>
+            <p id="setup-chart-status" class="text-xs text-white/60 hidden"></p>
+          </div>
+        </div>
+
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <p id="setup-status" class="text-sm text-amber-200 min-h-[1.5rem]"></p>
+          <div class="flex gap-3 justify-end">
+            <button id="setup-cancel" class="px-4 py-2 rounded-lg bg-white/10 text-white hover:bg-white/20 transition-all">Back to kiosk</button>
+            <button id="setup-submit" class="px-4 py-2 rounded-lg bg-green-500 text-white font-semibold hover:bg-green-600 transition-all">Save & Continue</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- ================== KIOSK ================== -->
-    <div id="kiosk-panel" class="w-full p-8 md:p-12 flex flex-col items-center justify-center bg-gray-900 text-white min-h-[80vh] md:min-h-0">
+    <div id="kiosk-panel" class="w-full p-8 md:p-12 flex flex-col items-center justify-center text-white min-h-[80vh] md:min-h-0">
       <div id="kiosk-view" class="w-full max-w-sm text-center">
-        <h1 class="text-4xl font-bold mb-2">Welcome Warriors!</h1>
-        <p class="text-lg text-gray-400">Enter ID or Teacher Code.</p>
-        <p id="period-indicator" class="mt-2 text-sm text-white/90"></p>
+        <h1 id="kiosk-headline" class="text-4xl font-bold mb-1">Welcome Warriors!</h1>
+        <p id="kiosk-school-name" class="text-sm text-white/70">Warrior High</p>
+        <p id="kiosk-subheadline" class="text-lg text-gray-200 mt-3">Enter ID or Teacher Code.</p>
+        <p id="period-indicator" class="mt-3 text-sm text-white/90"></p>
 
-        <input type="text" id="student-id-input" maxlength="4" class="w-full mt-6 text-center text-5xl font-mono p-4 rounded-lg border-4 border-gray-600 bg-white text-gray-900 focus:outline-none focus:ring-4 focus:ring-red-500" placeholder="_ _ _ _"/>
-        <button id="sign-in-button" class="w-full mt-6 bg-red-700 text-white font-bold text-xl py-4 rounded-lg shadow-md hover:bg-red-800 transform hover:-translate-y-1 transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-white disabled:opacity-50 disabled:transform-none" disabled>Sign In</button>
+        <input type="text" id="student-id-input" maxlength="4" class="w-full mt-6 text-center text-5xl font-mono p-4 rounded-lg border-4 bg-white text-gray-900 kiosk-input" placeholder="_ _ _ _"/>
+        <button id="sign-in-button" class="w-full mt-6 text-white font-bold text-xl py-4 rounded-lg kiosk-signin-btn focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-white disabled:opacity-50" disabled>Sign In</button>
 
         <div id="student-schedule-display" class="mt-8 text-center">
           <h3 id="student-schedule-name" class="text-xl font-semibold text-gray-300"></h3>
@@ -646,7 +800,7 @@ import { getFirestore, collection, doc, onSnapshot, setDoc, serverTimestamp, get
 
 // ===== Config & Constants =====
 const TEACHER_CODE = "****";            // change in one place
-const PASSING_MIN = 7;                   // minutes before next bell to switch
+let PASSING_MIN = 7;                    // minutes before next bell to switch
 
 const defaultTeacherConfig = Object.freeze({
   maxGroup: 13,
@@ -654,6 +808,14 @@ const defaultTeacherConfig = Object.freeze({
   groupCapOverrides: { "6": 2 },
   frontGroups: [1, 2, 12, 13],
   lateThirdGroups: [9, 10]
+});
+
+const defaultBranding = Object.freeze({
+  schoolName: 'Warrior High',
+  mascot: 'Warriors',
+  primaryColor: '#b91c1c',
+  accentColor: '#ef4444',
+  backgroundColor: '#111827'
 });
 
 const RAW_TEACHER_ID = (typeof window.__teacher_id === 'string' && window.__teacher_id.trim())
@@ -681,6 +843,14 @@ const TEACHER_EMAIL_DOMAIN = typeof window.__teacher_domain === 'string'
 let teacherConfig = normalizeTeacherConfig(defaultTeacherConfig);
 let frontGroupSet = new Set(teacherConfig.frontGroups);
 let lateThirdSet = new Set(teacherConfig.lateThirdGroups);
+let teacherBranding = { ...defaultBranding };
+let teacherProfileDoc = null;
+let teacherSetupComplete = false;
+let teacherClassroomLayout = null;
+let teacherSchoolInfo = { id: null, name: defaultBranding.schoolName, mascot: defaultBranding.mascot };
+let teacherScheduleMetadata = { defaultScheduleName: 'Regular', firstBell: '', passingMinutes: PASSING_MIN };
+let availableSchools = [];
+let setupUploadedChart = null;
 
 // Cloud config passed in by host page (optional)
 const APP_ID = typeof window.__app_id === 'string' ? window.__app_id : 'demo-app';
@@ -783,6 +953,38 @@ const scheduleUpdateDetails = $('#schedule-update-details');
 const scheduleAcceptBtn = $('#schedule-accept-btn');
 const scheduleDeferBtn = $('#schedule-defer-btn');
 const scheduleIgnoreBtn = $('#schedule-ignore-btn');
+const teacherSetupPanel = $('#teacher-setup-panel');
+const setupSchoolSelect = $('#setup-school-select');
+const setupRefreshSchoolsBtn = $('#setup-refresh-schools');
+const setupCreateToggle = $('#setup-create-toggle');
+const setupSchoolNameInput = $('#setup-school-name');
+const setupMascotInput = $('#setup-mascot');
+const setupPrimaryColorInput = $('#setup-primary-color');
+const setupAccentColorInput = $('#setup-accent-color');
+const setupBackgroundColorInput = $('#setup-background-color');
+const setupScheduleNameInput = $('#setup-schedule-name');
+const setupDayStartInput = $('#setup-day-start');
+const setupPassingMinutesInput = $('#setup-passing-minutes');
+const setupGroupsInput = $('#setup-groups');
+const setupSeatsInput = $('#setup-seats');
+const setupOverridesInput = $('#setup-overrides');
+const setupFrontGroupsInput = $('#setup-front-groups');
+const setupLateGroupsInput = $('#setup-late-groups');
+const setupLayoutNotesInput = $('#setup-layout-notes');
+const setupSeatingRandomRadio = $('#setup-seating-random');
+const setupSeatingUploadRadio = $('#setup-seating-upload');
+const setupChartFileInput = $('#setup-chart-file');
+const setupChartStatus = $('#setup-chart-status');
+const setupStatus = $('#setup-status');
+const setupSubmitButton = $('#setup-submit');
+const setupCancelButton = $('#setup-cancel');
+const setupColorPreview = $('#setup-color-preview');
+const setupPreviewMascot = $('#setup-preview-mascot');
+const setupPreviewSchool = $('#setup-preview-school');
+const editSetupButton = $('#edit-setup-button');
+const kioskHeadline = $('#kiosk-headline');
+const kioskSchoolName = $('#kiosk-school-name');
+const kioskSubheadline = $('#kiosk-subheadline');
 
 // ===== Teacher auth & admin gating =====
 function normalizeTeacherEmail(email){
@@ -846,6 +1048,12 @@ function showAdminPanel(){
     pendingAdminOpen = false;
     return false;
   }
+  if(!teacherSetupComplete){
+    showTeacherSetup();
+    setAdminAuthStatus('Complete the quick setup to unlock the admin tools.', 'warn');
+    pendingAdminOpen = true;
+    return false;
+  }
   adminPanel.classList.remove('hidden');
   kioskPanel.classList.add('hidden');
   setAdminAuthStatus('', 'info');
@@ -876,6 +1084,9 @@ function setTeacherLoggedIn(user){
   if(teacherSignOutButton){
     teacherSignOutButton.classList.remove('hidden');
   }
+  if(editSetupButton){
+    editSetupButton.classList.remove('hidden');
+  }
   const name = teacherDisplayName(user);
   setAdminAuthStatus(`Signed in as ${name}. Tap to open admin tools.`, 'success');
   updateTeacherAuthIndicator(`Signed in as ${name}`, 'success');
@@ -891,9 +1102,443 @@ function setTeacherLoggedOut(message='Teacher sign-in required for admin tools.'
   if(teacherSignOutButton){
     teacherSignOutButton.classList.add('hidden');
   }
+  if(editSetupButton){
+    editSetupButton.classList.add('hidden');
+  }
   setAdminAuthStatus(message, tone);
   updateTeacherAuthIndicator('Admin tools locked.', 'info');
   hideAdminPanel();
+  hideTeacherSetup();
+}
+
+// ===== Teacher setup & branding helpers =====
+function hexToRgbComponents(hex){
+  if(typeof hex !== 'string') return [185,28,28];
+  let value = hex.trim();
+  if(!value) return [185,28,28];
+  if(value.startsWith('#')) value = value.slice(1);
+  if(value.length === 3){
+    value = value.split('').map(ch=>`${ch}${ch}`).join('');
+  }
+  if(value.length !== 6 || !/^[0-9a-fA-F]{6}$/.test(value)) return [185,28,28];
+  const num = parseInt(value, 16);
+  return [(num>>16)&255, (num>>8)&255, num&255];
+}
+
+function hexToRgba(hex, alpha=1){
+  const [r,g,b] = hexToRgbComponents(hex);
+  const a = typeof alpha === 'number' ? Math.max(0, Math.min(1, alpha)) : 1;
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+function computeBrandingFromProfile(data){
+  const branding = { ...defaultBranding };
+  if(!data || typeof data !== 'object') return branding;
+
+  const school = data.school || {};
+  if(typeof school.name === 'string' && school.name.trim()) branding.schoolName = school.name.trim();
+  else if(typeof data.schoolName === 'string' && data.schoolName.trim()) branding.schoolName = data.schoolName.trim();
+
+  if(typeof school.mascot === 'string' && school.mascot.trim()) branding.mascot = school.mascot.trim();
+  else if(typeof data.mascot === 'string' && data.mascot.trim()) branding.mascot = data.mascot.trim();
+
+  const theme = school.colors || data.kioskTheme || {};
+  if(typeof theme.primary === 'string' && theme.primary.trim()) branding.primaryColor = theme.primary.trim();
+  else if(typeof theme.primaryColor === 'string' && theme.primaryColor.trim()) branding.primaryColor = theme.primaryColor.trim();
+
+  if(typeof theme.accent === 'string' && theme.accent.trim()) branding.accentColor = theme.accent.trim();
+  else if(typeof theme.accentColor === 'string' && theme.accentColor.trim()) branding.accentColor = theme.accentColor.trim();
+
+  if(typeof theme.background === 'string' && theme.background.trim()) branding.backgroundColor = theme.background.trim();
+  else if(typeof theme.backgroundColor === 'string' && theme.backgroundColor.trim()) branding.backgroundColor = theme.backgroundColor.trim();
+
+  return branding;
+}
+
+function applyTeacherBranding(branding){
+  teacherBranding = { ...defaultBranding, ...(branding||{}) };
+  const root = document.documentElement;
+  root.style.setProperty('--kiosk-bg', teacherBranding.backgroundColor || defaultBranding.backgroundColor);
+  root.style.setProperty('--kiosk-primary', teacherBranding.primaryColor || defaultBranding.primaryColor);
+  root.style.setProperty('--kiosk-accent', teacherBranding.accentColor || teacherBranding.primaryColor || defaultBranding.accentColor);
+  const [pr,pg,pb] = hexToRgbComponents(teacherBranding.primaryColor);
+  root.style.setProperty('--kiosk-primary-rgb', `${pr},${pg},${pb}`);
+
+  if(kioskHeadline){
+    const mascot = teacherBranding.mascot || '';
+    kioskHeadline.textContent = mascot ? `Welcome ${mascot}!` : 'Welcome!';
+  }
+  if(kioskSchoolName){
+    kioskSchoolName.textContent = teacherBranding.schoolName || '';
+  }
+  if(kioskSubheadline){
+    kioskSubheadline.textContent = 'Enter ID or Teacher Code.';
+  }
+  if(studentIdInput){
+    studentIdInput.style.borderColor = teacherBranding.primaryColor || defaultBranding.primaryColor;
+  }
+  updateBrandPreview();
+}
+
+function updateBrandPreview(){
+  if(!setupColorPreview) return;
+  const primary = setupPrimaryColorInput ? (setupPrimaryColorInput.value || teacherBranding.primaryColor) : teacherBranding.primaryColor;
+  const accent = setupAccentColorInput ? (setupAccentColorInput.value || teacherBranding.accentColor) : teacherBranding.accentColor;
+  const background = setupBackgroundColorInput ? (setupBackgroundColorInput.value || teacherBranding.backgroundColor) : teacherBranding.backgroundColor;
+  setupColorPreview.style.background = `linear-gradient(155deg, ${hexToRgba(primary,0.45)} 0%, ${hexToRgba(accent,0.35)} 55%, ${hexToRgba(background,0.85)} 100%)`;
+  if(setupPreviewMascot){
+    const value = setupMascotInput && setupMascotInput.value ? setupMascotInput.value : teacherBranding.mascot;
+    setupPreviewMascot.textContent = value || '';
+  }
+  if(setupPreviewSchool){
+    const value = setupSchoolNameInput && setupSchoolNameInput.value ? setupSchoolNameInput.value : teacherBranding.schoolName;
+    setupPreviewSchool.textContent = value || '';
+  }
+}
+
+function applySchoolToForm(school){
+  if(!school || typeof school !== 'object') return;
+  if(setupSchoolNameInput) setupSchoolNameInput.value = school.name || '';
+  if(setupMascotInput) setupMascotInput.value = school.mascot || '';
+  const colors = school.colors || {};
+  if(setupPrimaryColorInput && colors.primary) setupPrimaryColorInput.value = colors.primary;
+  if(setupAccentColorInput && colors.accent) setupAccentColorInput.value = colors.accent;
+  if(setupBackgroundColorInput && colors.background) setupBackgroundColorInput.value = colors.background;
+  const schedule = school.schedule || {};
+  if(setupScheduleNameInput && schedule.default) setupScheduleNameInput.value = schedule.default;
+  if(setupDayStartInput && schedule.firstBell) setupDayStartInput.value = schedule.firstBell;
+  if(setupPassingMinutesInput && schedule.passingMinutes !== undefined){
+    setupPassingMinutesInput.value = schedule.passingMinutes;
+  }
+  updateBrandPreview();
+}
+
+function renderSchoolOptions(selectedId){
+  if(!setupSchoolSelect) return;
+  setupSchoolSelect.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Select existing school…';
+  setupSchoolSelect.appendChild(placeholder);
+  const sorted = [...availableSchools];
+  sorted.sort((a,b)=>{
+    const nameA = (a && (a.name || a.id) || '').toString().toLowerCase();
+    const nameB = (b && (b.name || b.id) || '').toString().toLowerCase();
+    return nameA.localeCompare(nameB);
+  });
+  sorted.forEach(school=>{
+    const option = document.createElement('option');
+    option.value = school.id;
+    option.textContent = school.name || school.id;
+    setupSchoolSelect.appendChild(option);
+  });
+  if(selectedId){
+    setupSchoolSelect.value = selectedId;
+  }
+}
+
+async function loadSchoolsList(preselectId=''){
+  if(!db || !setupSchoolSelect) return;
+  setupSchoolSelect.innerHTML = '';
+  const loading = document.createElement('option');
+  loading.value = '';
+  loading.textContent = 'Loading schools…';
+  setupSchoolSelect.appendChild(loading);
+  try{
+    const colRef = collection(db, `artifacts/${APP_ID}/schools`);
+    const snap = await getDocs(colRef);
+    availableSchools = snap.docs.map(docSnap=>({ id: docSnap.id, ...(docSnap.data()||{}) }));
+    renderSchoolOptions(preselectId || (teacherSchoolInfo && teacherSchoolInfo.id));
+  }catch(err){
+    console.warn('[setup] Failed to load school list', err);
+    setupSchoolSelect.innerHTML = '';
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'Unable to load schools';
+    setupSchoolSelect.appendChild(opt);
+  }
+}
+
+function toggleChartUploadVisibility(){
+  if(!setupChartFileInput) return;
+  const shouldShow = !!(setupSeatingUploadRadio && setupSeatingUploadRadio.checked);
+  setupChartFileInput.classList.toggle('hidden', !shouldShow);
+  if(setupChartStatus){
+    if(shouldShow){
+      setupChartStatus.classList.remove('hidden');
+      setupChartStatus.classList.remove('text-red-300');
+      setupChartStatus.textContent = setupUploadedChart ? `Loaded seating chart (${setupUploadedChart.split(/\r?\n/).length} rows).` : 'Attach a CSV seating chart to lock seats.';
+    } else {
+      setupChartStatus.classList.add('hidden');
+    }
+  }
+}
+
+function populateSetupFormFromProfile(){
+  if(setupSchoolNameInput) setupSchoolNameInput.value = teacherSchoolInfo.name || teacherBranding.schoolName || '';
+  if(setupMascotInput) setupMascotInput.value = teacherSchoolInfo.mascot || teacherBranding.mascot || '';
+  if(setupPrimaryColorInput) setupPrimaryColorInput.value = teacherBranding.primaryColor || defaultBranding.primaryColor;
+  if(setupAccentColorInput) setupAccentColorInput.value = teacherBranding.accentColor || defaultBranding.accentColor;
+  if(setupBackgroundColorInput) setupBackgroundColorInput.value = teacherBranding.backgroundColor || defaultBranding.backgroundColor;
+  if(setupScheduleNameInput) setupScheduleNameInput.value = teacherScheduleMetadata.defaultScheduleName || '';
+  if(setupDayStartInput) setupDayStartInput.value = teacherScheduleMetadata.firstBell || '';
+  if(setupPassingMinutesInput) setupPassingMinutesInput.value = teacherScheduleMetadata.passingMinutes ?? '';
+
+  const layout = teacherClassroomLayout || {};
+  if(setupGroupsInput) setupGroupsInput.value = layout.totalGroups || teacherConfig.maxGroup || defaultTeacherConfig.maxGroup;
+  if(setupSeatsInput) setupSeatsInput.value = layout.defaultSeatsPerGroup || teacherConfig.defaultGroupCap || defaultTeacherConfig.defaultGroupCap;
+  if(setupOverridesInput){
+    const overrides = layout.groupOverrides || teacherConfig.groupCapOverrides || {};
+    const lines = Object.keys(overrides||{}).sort((a,b)=>Number(a)-Number(b)).map(key=>`${key}=${overrides[key]}`);
+    setupOverridesInput.value = lines.join('\n');
+  }
+  if(setupFrontGroupsInput){
+    const frontGroups = layout.frontGroups || teacherConfig.frontGroups || [];
+    setupFrontGroupsInput.value = (frontGroups||[]).join(', ');
+  }
+  if(setupLateGroupsInput){
+    const late = layout.lateThirdGroups || teacherConfig.lateThirdGroups || [];
+    setupLateGroupsInput.value = (late||[]).join(', ');
+  }
+  if(setupLayoutNotesInput) setupLayoutNotesInput.value = layout.notes || '';
+
+  const mode = layout.seatingMode === 'uploaded' ? 'uploaded' : 'random';
+  if(setupSeatingRandomRadio) setupSeatingRandomRadio.checked = mode !== 'uploaded';
+  if(setupSeatingUploadRadio) setupSeatingUploadRadio.checked = mode === 'uploaded';
+  setupUploadedChart = mode === 'uploaded' ? (layout.uploadedChart || null) : null;
+  if(setupChartStatus){
+    setupChartStatus.classList.toggle('hidden', mode !== 'uploaded');
+    if(mode === 'uploaded'){
+      setupChartStatus.textContent = setupUploadedChart ? `Loaded seating chart (${setupUploadedChart.split(/\r?\n/).length} rows).` : 'Attach a CSV seating chart to lock seats.';
+    } else {
+      setupChartStatus.textContent = '';
+    }
+  }
+  if(setupCreateToggle){
+    setupCreateToggle.checked = !teacherSchoolInfo.id;
+  }
+  if(setupSchoolSelect && teacherSchoolInfo.id){
+    setupSchoolSelect.value = teacherSchoolInfo.id;
+  }
+  updateBrandPreview();
+  toggleChartUploadVisibility();
+}
+
+function showTeacherSetup(){
+  if(!teacherSetupPanel) return;
+  teacherSetupPanel.classList.remove('hidden');
+  adminPanel.classList.add('hidden');
+  kioskPanel.classList.add('hidden');
+  if(setupStatus){
+    setupStatus.textContent = '';
+    setupStatus.classList.remove('text-green-200','text-red-300');
+    setupStatus.classList.add('text-amber-200');
+  }
+  populateSetupFormFromProfile();
+  if(db){
+    loadSchoolsList(teacherSchoolInfo && teacherSchoolInfo.id ? teacherSchoolInfo.id : '').catch(err=>console.warn('[setup] Unable to refresh schools', err));
+  } else {
+    availableSchools = [];
+    renderSchoolOptions('');
+  }
+}
+
+function hideTeacherSetup(){
+  if(!teacherSetupPanel) return;
+  teacherSetupPanel.classList.add('hidden');
+  if(teacherSetupComplete && isTeacherAuthorized() && pendingAdminOpen === false){
+    adminPanel.classList.remove('hidden');
+    kioskPanel.classList.add('hidden');
+  } else if(kioskPanel && kioskPanel.classList.contains('hidden') && adminPanel.classList.contains('hidden')){
+    kioskPanel.classList.remove('hidden');
+  }
+}
+
+function collectSetupFormValues(){
+  if(!setupSchoolNameInput) throw new Error('Setup form is unavailable.');
+  const schoolName = (setupSchoolNameInput.value || '').trim();
+  if(!schoolName) throw new Error('Please provide a school name.');
+  const mascot = (setupMascotInput && setupMascotInput.value ? setupMascotInput.value : schoolName).trim();
+  const primaryColor = setupPrimaryColorInput && setupPrimaryColorInput.value ? setupPrimaryColorInput.value : teacherBranding.primaryColor;
+  const accentColor = setupAccentColorInput && setupAccentColorInput.value ? setupAccentColorInput.value : teacherBranding.accentColor;
+  const backgroundColor = setupBackgroundColorInput && setupBackgroundColorInput.value ? setupBackgroundColorInput.value : teacherBranding.backgroundColor;
+  const scheduleName = setupScheduleNameInput && setupScheduleNameInput.value ? setupScheduleNameInput.value.trim() : teacherScheduleMetadata.defaultScheduleName;
+  const firstBell = setupDayStartInput && setupDayStartInput.value ? setupDayStartInput.value : '';
+  const passingMinutesRaw = setupPassingMinutesInput && setupPassingMinutesInput.value !== '' ? Number(setupPassingMinutesInput.value) : teacherScheduleMetadata.passingMinutes;
+  const passingMinutes = Number.isFinite(passingMinutesRaw) && passingMinutesRaw >= 0 ? passingMinutesRaw : PASSING_MIN;
+
+  const totalGroups = Number(setupGroupsInput && setupGroupsInput.value ? setupGroupsInput.value : teacherConfig.maxGroup);
+  if(!Number.isFinite(totalGroups) || totalGroups <= 0) throw new Error('Enter how many groups you have.');
+  const defaultSeats = Number(setupSeatsInput && setupSeatsInput.value ? setupSeatsInput.value : teacherConfig.defaultGroupCap);
+  if(!Number.isFinite(defaultSeats) || defaultSeats <= 0) throw new Error('Enter seats per group.');
+  const overridesRaw = setupOverridesInput ? setupOverridesInput.value : '';
+  const overrides = parseGroupCapOverrides(overridesRaw || {});
+  const frontGroups = parseNumericList(setupFrontGroupsInput && setupFrontGroupsInput.value ? setupFrontGroupsInput.value : []);
+  const lateGroups = parseNumericList(setupLateGroupsInput && setupLateGroupsInput.value ? setupLateGroupsInput.value : []);
+  const notes = setupLayoutNotesInput && setupLayoutNotesInput.value ? setupLayoutNotesInput.value.trim() : '';
+  const seatingMode = setupSeatingUploadRadio && setupSeatingUploadRadio.checked ? 'uploaded' : 'random';
+  const chartData = seatingMode === 'uploaded' ? (setupUploadedChart || '') : '';
+
+  const createNew = setupCreateToggle ? setupCreateToggle.checked : false;
+  const selectedSchoolId = setupSchoolSelect ? setupSchoolSelect.value : '';
+
+  return {
+    createNew,
+    selectedSchoolId,
+    schoolName,
+    mascot,
+    primaryColor,
+    accentColor,
+    backgroundColor,
+    scheduleName,
+    firstBell,
+    passingMinutes,
+    totalGroups,
+    defaultSeats,
+    overrides,
+    frontGroups,
+    lateGroups,
+    seatingMode,
+    chartData,
+    notes
+  };
+}
+
+async function saveTeacherSetup(){
+  if(!db){
+    if(setupStatus){
+      setupStatus.textContent = 'Firebase connection required to save setup.';
+      setupStatus.classList.remove('text-green-200');
+      setupStatus.classList.add('text-red-300');
+    }
+    return;
+  }
+  try{
+    const form = collectSetupFormValues();
+    if(setupStatus){
+      setupStatus.textContent = 'Saving setup…';
+      setupStatus.classList.remove('text-green-200','text-red-300');
+      setupStatus.classList.add('text-amber-200');
+    }
+
+    let schoolDocId = form.selectedSchoolId || null;
+    const schoolPayload = {
+      name: form.schoolName,
+      mascot: form.mascot,
+      colors: {
+        primary: form.primaryColor,
+        accent: form.accentColor,
+        background: form.backgroundColor
+      },
+      schedule: {
+        default: form.scheduleName,
+        firstBell: form.firstBell,
+        passingMinutes: form.passingMinutes
+      },
+      updatedAt: serverTimestamp(),
+      updatedBy: auth && auth.currentUser ? auth.currentUser.uid : null
+    };
+
+    if(form.createNew || !schoolDocId){
+      const schoolsCol = collection(db, `artifacts/${APP_ID}/schools`);
+      const newDocRef = await addDoc(schoolsCol, schoolPayload);
+      schoolDocId = newDocRef.id;
+    } else {
+      const schoolRef = doc(db, `artifacts/${APP_ID}/schools/${schoolDocId}`);
+      await setDoc(schoolRef, schoolPayload, { merge: true });
+    }
+
+    const classroomLayout = {
+      totalGroups: form.totalGroups,
+      defaultSeatsPerGroup: form.defaultSeats,
+      groupOverrides: form.overrides,
+      frontGroups: form.frontGroups,
+      lateThirdGroups: form.lateGroups,
+      seatingMode: form.seatingMode,
+      uploadedChart: form.chartData,
+      notes: form.notes
+    };
+
+    const teacherPayload = {
+      setupComplete: true,
+      setupCompletedAt: serverTimestamp(),
+      school: {
+        id: schoolDocId,
+        name: form.schoolName,
+        mascot: form.mascot,
+        colors: {
+          primary: form.primaryColor,
+          accent: form.accentColor,
+          background: form.backgroundColor
+        },
+        schedule: {
+          default: form.scheduleName,
+          firstBell: form.firstBell,
+          passingMinutes: form.passingMinutes
+        }
+      },
+      kioskTheme: {
+        primary: form.primaryColor,
+        accent: form.accentColor,
+        background: form.backgroundColor
+      },
+      classroomLayout,
+      maxGroup: form.totalGroups,
+      defaultGroupCap: form.defaultSeats,
+      groupCapOverrides: form.overrides,
+      frontGroups: form.frontGroups,
+      lateThirdGroups: form.lateGroups
+    };
+
+    const teacherRef = doc(db, `artifacts/${APP_ID}/teachers/${TEACHER_ID}`);
+    await setDoc(teacherRef, teacherPayload, { merge: true });
+
+    teacherProfileDoc = { ...(teacherProfileDoc || {}), ...teacherPayload };
+    teacherSetupComplete = true;
+    teacherSchoolInfo = { id: schoolDocId, name: form.schoolName, mascot: form.mascot };
+    teacherScheduleMetadata = { defaultScheduleName: form.scheduleName, firstBell: form.firstBell, passingMinutes: form.passingMinutes };
+    if(Number.isFinite(form.passingMinutes)) PASSING_MIN = form.passingMinutes;
+    teacherClassroomLayout = classroomLayout;
+    applyTeacherConfig(teacherPayload);
+    persistTeacherConfigLocal();
+    renderTeacherConfigInputs();
+    applyTeacherBranding(computeBrandingFromProfile(teacherPayload));
+    const displaySchool = {
+      id: schoolDocId,
+      name: form.schoolName,
+      mascot: form.mascot,
+      colors: {
+        primary: form.primaryColor,
+        accent: form.accentColor,
+        background: form.backgroundColor
+      },
+      schedule: {
+        default: form.scheduleName,
+        firstBell: form.firstBell,
+        passingMinutes: form.passingMinutes
+      }
+    };
+    availableSchools = Array.isArray(availableSchools) ? availableSchools.filter(s=>s && s.id !== schoolDocId) : [];
+    availableSchools.push(displaySchool);
+    renderSchoolOptions(schoolDocId);
+    if(setupCreateToggle) setupCreateToggle.checked = false;
+
+    if(setupStatus){
+      setupStatus.textContent = 'Setup saved! Opening admin tools…';
+      setupStatus.classList.remove('text-amber-200','text-red-300');
+      setupStatus.classList.add('text-green-200');
+    }
+    hideTeacherSetup();
+    pendingAdminOpen = true;
+    showAdminPanel();
+  }catch(err){
+    console.error('[setup] Failed to save onboarding data', err);
+    if(setupStatus){
+      setupStatus.textContent = err && err.message ? err.message : 'Failed to save setup. Check console for details.';
+      setupStatus.classList.remove('text-amber-200','text-green-200');
+      setupStatus.classList.add('text-red-300');
+    }
+  }
 }
 
 async function ensureAnonymousAuth(){
@@ -971,8 +1616,14 @@ async function handleTeacherAuthState(user){
   if(user && !user.isAnonymous){
     if(isTeacherAuthorized(user)){
       setTeacherLoggedIn(user);
-      if(pendingAdminOpen){
+      await loadTeacherConfig();
+      if(!teacherSetupComplete){
+        showTeacherSetup();
+        setAdminAuthStatus('Complete the quick setup to unlock the admin tools.', 'warn');
+      } else if(pendingAdminOpen){
         showAdminPanel();
+      } else {
+        hideTeacherSetup();
       }
     } else {
       setAdminAuthStatus('This Google account is not authorized for teacher admin access.', 'error');
@@ -1109,6 +1760,27 @@ function normalizeTeacherConfig(raw){
     base.lateThirdGroups = parseNumericList(raw.lateThirdGroups);
   }
 
+  if(raw.classroomLayout && typeof raw.classroomLayout === 'object'){
+    const layout = raw.classroomLayout;
+    if(Object.prototype.hasOwnProperty.call(layout,'totalGroups')){
+      const lg = Number(layout.totalGroups);
+      if(Number.isFinite(lg) && lg>0) base.maxGroup = Math.floor(lg);
+    }
+    if(Object.prototype.hasOwnProperty.call(layout,'defaultSeatsPerGroup')){
+      const ds = Number(layout.defaultSeatsPerGroup);
+      if(Number.isFinite(ds) && ds>0) base.defaultGroupCap = Math.floor(ds);
+    }
+    if(Object.prototype.hasOwnProperty.call(layout,'groupOverrides')){
+      base.groupCapOverrides = parseGroupCapOverrides(layout.groupOverrides);
+    }
+    if(Object.prototype.hasOwnProperty.call(layout,'frontGroups')){
+      base.frontGroups = parseNumericList(layout.frontGroups);
+    }
+    if(Object.prototype.hasOwnProperty.call(layout,'lateThirdGroups')){
+      base.lateThirdGroups = parseNumericList(layout.lateThirdGroups);
+    }
+  }
+
   return base;
 }
 
@@ -1116,6 +1788,19 @@ function applyTeacherConfig(raw){
   teacherConfig = normalizeTeacherConfig(raw);
   frontGroupSet = new Set((teacherConfig.frontGroups||[]).map(n=>Number(n)));
   lateThirdSet = new Set((teacherConfig.lateThirdGroups||[]).map(n=>Number(n)));
+  if(raw && typeof raw === 'object' && raw.classroomLayout){
+    const layout = raw.classroomLayout;
+    teacherClassroomLayout = {
+      totalGroups: layout.totalGroups !== undefined ? layout.totalGroups : teacherConfig.maxGroup,
+      defaultSeatsPerGroup: layout.defaultSeatsPerGroup !== undefined ? layout.defaultSeatsPerGroup : teacherConfig.defaultGroupCap,
+      groupOverrides: layout.groupOverrides || teacherConfig.groupCapOverrides || {},
+      frontGroups: layout.frontGroups || teacherConfig.frontGroups || [],
+      lateThirdGroups: layout.lateThirdGroups || teacherConfig.lateThirdGroups || [],
+      seatingMode: layout.seatingMode || 'random',
+      uploadedChart: layout.uploadedChart || '',
+      notes: layout.notes || ''
+    };
+  }
 }
 
 function getTeacherConfigSnapshot(){
@@ -1542,6 +2227,7 @@ document.addEventListener('DOMContentLoaded', init);
 async function init(){
   try{
     console.log('[init] starting');
+    applyTeacherBranding(teacherBranding);
     setTeacherLoggedOut('Teacher sign-in required for admin tools.');
     await initFirebase(); // Use new Firebase init function
     await loadTeacherConfig();
@@ -1627,6 +2313,113 @@ if (scheduleFileInput && uploadSchedulesBtn) {
     saveExceptionsBtn.addEventListener('click', saveExceptions);
     if(saveTeacherConfigBtn){
       saveTeacherConfigBtn.addEventListener('click', saveTeacherConfig);
+    }
+    if(editSetupButton){
+      editSetupButton.addEventListener('click', evt=>{
+        evt.preventDefault();
+        showTeacherSetup();
+      });
+    }
+    if(setupSubmitButton){
+      setupSubmitButton.addEventListener('click', async evt=>{
+        evt.preventDefault();
+        await saveTeacherSetup();
+      });
+    }
+    if(setupCancelButton){
+      setupCancelButton.addEventListener('click', evt=>{
+        evt.preventDefault();
+        pendingAdminOpen = false;
+        hideTeacherSetup();
+        if(!teacherSetupComplete){
+          setAdminAuthStatus('Setup is required before using admin tools.', 'warn');
+        }
+      });
+    }
+    if(setupRefreshSchoolsBtn){
+      setupRefreshSchoolsBtn.addEventListener('click', evt=>{
+        evt.preventDefault();
+        if(db){
+          const preferred = setupSchoolSelect && setupSchoolSelect.value ? setupSchoolSelect.value : (teacherSchoolInfo && teacherSchoolInfo.id ? teacherSchoolInfo.id : '');
+          loadSchoolsList(preferred).catch(err=>console.warn('[setup] Refresh schools failed', err));
+        }
+      });
+    }
+    if(setupSchoolSelect){
+      setupSchoolSelect.addEventListener('change', ()=>{
+        const id = setupSchoolSelect.value;
+        if(id){
+          const found = availableSchools.find(s=>s.id === id);
+          if(setupCreateToggle) setupCreateToggle.checked = false;
+          if(found) applySchoolToForm(found);
+          teacherSchoolInfo.id = id;
+        } else if(setupCreateToggle){
+          setupCreateToggle.checked = true;
+        }
+        updateBrandPreview();
+      });
+    }
+    if(setupCreateToggle){
+      setupCreateToggle.addEventListener('change', ()=>{
+        if(setupCreateToggle.checked && setupSchoolSelect){
+          setupSchoolSelect.value = '';
+        }
+      });
+    }
+    [setupSchoolNameInput, setupMascotInput].forEach(input=>{
+      if(input){
+        input.addEventListener('input', ()=>updateBrandPreview());
+      }
+    });
+    [setupPrimaryColorInput, setupAccentColorInput, setupBackgroundColorInput].forEach(input=>{
+      if(input){
+        input.addEventListener('input', ()=>updateBrandPreview());
+      }
+    });
+    if(setupSeatingRandomRadio){
+      setupSeatingRandomRadio.addEventListener('change', ()=>{
+        if(setupSeatingRandomRadio.checked){
+          toggleChartUploadVisibility();
+        }
+      });
+    }
+    if(setupSeatingUploadRadio){
+      setupSeatingUploadRadio.addEventListener('change', ()=>{
+        if(setupSeatingUploadRadio.checked && setupChartStatus){
+          setupChartStatus.classList.remove('hidden');
+          setupChartStatus.textContent = setupUploadedChart ? `Loaded seating chart (${setupUploadedChart.split(/\r?\n/).length} rows).` : 'Attach a CSV seating chart to lock seats.';
+        }
+        toggleChartUploadVisibility();
+      });
+    }
+    if(setupChartFileInput){
+      setupChartFileInput.addEventListener('change', async ()=>{
+        const file = setupChartFileInput.files && setupChartFileInput.files[0];
+        if(!file){
+          setupUploadedChart = null;
+          if(setupChartStatus){
+            setupChartStatus.textContent = setupSeatingUploadRadio && setupSeatingUploadRadio.checked ? 'Attach a CSV seating chart to lock seats.' : '';
+            setupChartStatus.classList.remove('text-red-300');
+          }
+          return;
+        }
+        try{
+          const text = await file.text();
+          setupUploadedChart = text;
+          if(setupChartStatus){
+            const rows = text.split(/\r?\n/).filter(Boolean).length;
+            setupChartStatus.textContent = `Loaded ${file.name} (${rows} rows).`;
+            setupChartStatus.classList.remove('text-red-300');
+          }
+        }catch(err){
+          console.error('[setup] Failed to read seating chart', err);
+          setupUploadedChart = null;
+          if(setupChartStatus){
+            setupChartStatus.textContent = 'Could not read file. Please try again.';
+            setupChartStatus.classList.add('text-red-300');
+          }
+        }
+      });
     }
     studentIdInput.addEventListener('input', ()=>{ signInButton.disabled = studentIdInput.value.length<4; });
     studentIdInput.addEventListener('keyup', e=>{ if(e.key==='Enter' && !signInButton.disabled) signInButton.click(); });
@@ -1904,6 +2697,7 @@ async function loadTeacherConfig(){
   renderTeacherConfigInputs();
 
   if(!db){
+    applyTeacherBranding(teacherBranding);
     return teacherConfig;
   }
 
@@ -1912,9 +2706,38 @@ async function loadTeacherConfig(){
     const snap = await getDoc(docRef);
     if(snap.exists()){
       const data = snap.data() || {};
+      teacherProfileDoc = data;
+      teacherSetupComplete = !!data.setupComplete;
+      teacherClassroomLayout = data.classroomLayout || null;
+      const school = data.school || {};
+      teacherSchoolInfo = {
+        id: school.id || null,
+        name: (school.name || teacherSchoolInfo.name || defaultBranding.schoolName),
+        mascot: (school.mascot || teacherSchoolInfo.mascot || defaultBranding.mascot)
+      };
+      const schedule = school.schedule || {};
+      const scheduledPassing = schedule.passingMinutes !== undefined ? Number(schedule.passingMinutes) : undefined;
+      teacherScheduleMetadata = {
+        defaultScheduleName: schedule.default || teacherScheduleMetadata.defaultScheduleName || 'Regular',
+        firstBell: schedule.firstBell || teacherScheduleMetadata.firstBell || '',
+        passingMinutes: Number.isFinite(scheduledPassing) ? scheduledPassing : teacherScheduleMetadata.passingMinutes
+      };
+      if(Number.isFinite(teacherScheduleMetadata.passingMinutes)){
+        PASSING_MIN = teacherScheduleMetadata.passingMinutes;
+      }
       applyTeacherConfig(data);
       persistTeacherConfigLocal();
       renderTeacherConfigInputs();
+      applyTeacherBranding(computeBrandingFromProfile(data));
+      setupUploadedChart = teacherClassroomLayout && teacherClassroomLayout.uploadedChart ? teacherClassroomLayout.uploadedChart : null;
+    } else {
+      teacherProfileDoc = null;
+      teacherSetupComplete = false;
+      teacherClassroomLayout = null;
+      teacherSchoolInfo = { id: null, name: defaultBranding.schoolName, mascot: defaultBranding.mascot };
+      teacherScheduleMetadata = { defaultScheduleName: 'Regular', firstBell: '', passingMinutes: PASSING_MIN };
+      setupUploadedChart = null;
+      applyTeacherBranding(defaultBranding);
     }
   }catch(err){
     console.warn('[config] Failed to load teacher config from Firestore', err);
@@ -1936,11 +2759,29 @@ async function saveTeacherConfig(){
   persistTeacherConfigLocal();
   renderTeacherConfigInputs();
   setTeacherConfigStatus('Saved locally');
+  teacherClassroomLayout = {
+    ...(teacherClassroomLayout || {}),
+    totalGroups: teacherConfig.maxGroup,
+    defaultSeatsPerGroup: teacherConfig.defaultGroupCap,
+    groupOverrides: teacherConfig.groupCapOverrides,
+    frontGroups: teacherConfig.frontGroups,
+    lateThirdGroups: teacherConfig.lateThirdGroups,
+    seatingMode: teacherClassroomLayout && teacherClassroomLayout.seatingMode ? teacherClassroomLayout.seatingMode : 'random',
+    uploadedChart: teacherClassroomLayout && teacherClassroomLayout.uploadedChart ? teacherClassroomLayout.uploadedChart : '',
+    notes: teacherClassroomLayout && teacherClassroomLayout.notes ? teacherClassroomLayout.notes : ''
+  };
 
   if(db){
     try{
       const docRef = doc(db, `artifacts/${APP_ID}/teachers/${TEACHER_ID}`);
-      await setDoc(docRef, { ...getTeacherConfigSnapshot(), updatedAt: serverTimestamp() }, { merge: true });
+      await setDoc(docRef, { ...getTeacherConfigSnapshot(), classroomLayout: teacherClassroomLayout, updatedAt: serverTimestamp() }, { merge: true });
+      if(teacherProfileDoc){
+        teacherProfileDoc = {
+          ...teacherProfileDoc,
+          ...getTeacherConfigSnapshot(),
+          classroomLayout: teacherClassroomLayout
+        };
+      }
       setTeacherConfigStatus('Saved to cloud');
     }catch(err){
       console.error('[config] Failed to save teacher config to Firestore', err);
@@ -2370,14 +3211,15 @@ function showMessage(type,title,html){
   dismissTimer = setTimeout(()=>{ dismissMessage(); }, 2500);
 }
 function showGroup(group,status,first){
-  const red700 = '#b91c1c';
-  const red500 = '#ef4444';
-  const glow   = '0 0 48px rgba(185,28,28,.55), 0 0 120px rgba(185,28,28,.35), inset 0 0 60px rgba(185,28,28,.25)';
+  const primary = teacherBranding.primaryColor || '#b91c1c';
+  const accent = teacherBranding.accentColor || primary;
+  const backdrop = teacherBranding.backgroundColor || '#000';
+  const glow = `0 0 48px ${hexToRgba(primary,0.55)}, 0 0 120px ${hexToRgba(primary,0.35)}, inset 0 0 60px ${hexToRgba(primary,0.25)}`;
   messageView.innerHTML = `
-    <div class="fade-in p-8 rounded-2xl ring-4" style="background:#000; border-color:${red700}; box-shadow:${glow}">
+    <div class="fade-in p-8 rounded-2xl ring-4" style="background:${backdrop}; border-color:${primary}; box-shadow:${glow}">
       <div class="text-2xl font-semibold" style="color:#ffffff">${first}, you are</div>
-      <div class="mt-2 text-6xl md:text-7xl font-extrabold tracking-tight" style="color:${red500}">GROUP ${group}</div>
-      <div class="mt-2 text-lg" style="color:#ffffff">Status: <span class="font-bold" style="color:${red500}">${status}</span></div>
+      <div class="mt-2 text-6xl md:text-7xl font-extrabold tracking-tight" style="color:${accent}">GROUP ${group}</div>
+      <div class="mt-2 text-lg" style="color:#ffffff">Status: <span class="font-bold" style="color:${accent}">${status}</span></div>
       <div class="mt-4 text-sm" style="color:#ffffff">Press <span class="font-semibold">Enter</span> to continue</div>
     </div>`;
   kioskView.classList.add('hidden'); messageView.classList.remove('hidden');

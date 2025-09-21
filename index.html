@@ -835,8 +835,20 @@ function setTeacherLoggedOut(message='Teacher sign-in required for admin tools.'
 
 async function ensureAnonymousAuth(){
   if(!auth || reauthingAnonymous) return;
-  const current = auth.currentUser;
+  try{
+    if(typeof auth.authStateReady === 'function'){
+      await auth.authStateReady();
+    }
+  }catch(err){
+    console.warn('[auth] authStateReady() failed', err);
+  }
+  let current = auth.currentUser;
   if(current) return;
+  if(typeof auth.authStateReady !== 'function'){
+    await new Promise(resolve=>setTimeout(resolve, 250));
+    current = auth.currentUser;
+    if(current) return;
+  }
   reauthingAnonymous = true;
   try{
     await signInAnonymously(auth);

@@ -348,10 +348,31 @@ async function handleScheduleUpload() {
     function formatCSVDate(dateStr) {
         const parts = dateStr.split('/');
         if (parts.length !== 3) return null;
-        const m = parts[0].padStart(2, '0');
-        const d = parts[1].padStart(2, '0');
-        const y = parseInt(parts[2], 10) < 50 ? `20${parts[2]}` : `19${parts[2]}`;
-        return `${y}-${m}-${d}`;
+
+        const [monthPart, dayPart, yearPart] = parts.map(part => part.trim());
+        if (!monthPart || !dayPart || !yearPart) return null;
+
+        const monthNum = Number(monthPart);
+        const dayNum = Number(dayPart);
+        let yearNum = Number(yearPart);
+
+        if (!Number.isInteger(monthNum) || !Number.isInteger(dayNum) || !Number.isInteger(yearNum)) {
+            return null;
+        }
+
+        if (yearPart.length === 2) {
+            yearNum += yearNum < 50 ? 2000 : 1900;
+        } else if (yearPart.length === 4) {
+            // Use the parsed four-digit year as-is.
+        } else {
+            return null;
+        }
+
+        const month = String(monthNum).padStart(2, '0');
+        const day = String(dayNum).padStart(2, '0');
+        const year = String(yearNum).padStart(4, '0');
+
+        return `${year}-${month}-${day}`;
     }
 
     const file = fileInput.files[0];

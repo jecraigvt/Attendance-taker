@@ -310,17 +310,24 @@ function updateFullscreenGroupView() {
 // Helper function to convert time like "1:30 PM" to "13:30"
 function convertTo24Hour(timeStr) {
     if (!timeStr || typeof timeStr !== 'string') return '';
-    const lowerTime = timeStr.toLowerCase();
-    let [time, modifier] = lowerTime.split(' ');
-    let [hours, minutes] = time.split(':');
 
-    if (hours === '12') {
-        hours = '00';
+    const normalized = timeStr.trim().toLowerCase();
+    const match = normalized.match(/^(\d{1,2})(?::(\d{2}))?\s*(a\.?m?\.?|p\.?m?\.?)?$/i);
+    if (!match) return '';
+
+    let hours = parseInt(match[1], 10);
+    let minutes = match[2] !== undefined ? parseInt(match[2], 10) : 0;
+    const period = match[3] ? match[3].replace(/\./g, '') : '';
+
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) return '';
+
+    if (period.startsWith('p') && hours !== 12) {
+        hours += 12;
     }
-    if (modifier === 'pm' || modifier === 'p.m.') {
-        hours = parseInt(hours, 10) + 12;
+    if (period.startsWith('a') && hours === 12) {
+        hours = 0;
     }
-    return `${String(hours).padStart(2, '0')}:${minutes}`;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
 // Helper function to format dates from M/D/YY to YYYY-MM-DD
@@ -1214,7 +1221,7 @@ const exportRangeBtn = document.getElementById('export-range-csv');
 
     updateUI();
     studentIdInput.focus();
-    try{ runParseTests(); runDetectTests(); runGroupTests(); runCSVEdgeTests(); }catch{}
+    try{ runParseTests(); runDetectTests(); runGroupTests(); runCSVEdgeTests(); runScheduleParserTests(); }catch{}
   }catch(err){
     console.error('[init] fatal', err);
     alert('Init error: '+(err&&err.message?err.message:err));
@@ -2085,6 +2092,11 @@ function runCSVEdgeTests(){
   const P=parseRoster(tricky);
   console.assert(P['3'].length===1,'quoted multi-comma name');
   console.assert(P['3'][0].FirstName==='Jr., Bob','first name with comma kept');
+}
+function runScheduleParserTests(){
+  console.assert(convertTo24Hour('7:28AM')==='07:28','time parsing handles missing space');
+  console.assert(convertTo24Hour('12:00 am')==='00:00','midnight converts to 00:00');
+  console.assert(convertTo24Hour('14:45')==='14:45','24-hour input unchanged');
 }
 function runDetectTests(){
   const prev= scheduleName; scheduleName='Regular';

@@ -795,7 +795,7 @@ async function exportDateRangeCSV() {
 }
 // ===== Import modern Firebase SDK =====
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, setPersistence, browserLocalPersistence, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, doc, onSnapshot, setDoc, serverTimestamp, getDoc, addDoc, where, query, getDocs, deleteDoc, documentId } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ===== Config & Constants =====
@@ -886,7 +886,18 @@ let teacherConfigStatusTimeout = null;
 let teacherAuthUser = null;
 let teacherAuthInitialized = false;
 let teacherLoginInProgress = false;
+const PENDING_ADMIN_SESSION_KEY = `pendingAdminOpen:${APP_ID}`;
 let pendingAdminOpen = false;
+let pendingAdminSessionAvailable = true;
+try{
+  if(sessionStorage.getItem(PENDING_ADMIN_SESSION_KEY)==='true'){
+    setPendingAdminOpen(true, { persist: false });
+    sessionStorage.removeItem(PENDING_ADMIN_SESSION_KEY);
+  }
+}catch(err){
+  pendingAdminSessionAvailable = false;
+  console.warn('[state] Unable to access sessionStorage', err);
+}
 let reauthingAnonymous = false;
 let authPersistenceReady = false;
 
@@ -1042,22 +1053,38 @@ function updateTeacherAuthIndicator(message='', tone='info'){
   teacherAuthIndicator.classList.add(cls);
 }
 
+function setPendingAdminOpen(next, options={}){
+  const { persist = true } = options;
+  pendingAdminOpen = !!next;
+  if(!persist || !pendingAdminSessionAvailable) return;
+  try{
+    if(pendingAdminOpen){
+      sessionStorage.setItem(PENDING_ADMIN_SESSION_KEY, 'true');
+    } else {
+      sessionStorage.removeItem(PENDING_ADMIN_SESSION_KEY);
+    }
+  }catch(err){
+    pendingAdminSessionAvailable = false;
+    console.warn('[state] Unable to update sessionStorage', err);
+  }
+}
+
 function showAdminPanel(){
   if(!isTeacherAuthorized()){
     setAdminAuthStatus('Sign in with an authorized teacher account to open the admin tools.', 'warn');
-    pendingAdminOpen = false;
+    setPendingAdminOpen(false);
     return false;
   }
   if(!teacherSetupComplete){
     showTeacherSetup();
     setAdminAuthStatus('Complete the quick setup to unlock the admin tools.', 'warn');
-    pendingAdminOpen = true;
+    setPendingAdminOpen(true);
     return false;
   }
   adminPanel.classList.remove('hidden');
   kioskPanel.classList.add('hidden');
   setAdminAuthStatus('', 'info');
-  pendingAdminOpen = false;
+  setPendingAdminOpen(false);
   const name = teacherDisplayName(teacherAuthUser || (auth && auth.currentUser));
   updateTeacherAuthIndicator(`Signed in as ${name}`, 'success');
   return true;
@@ -1094,7 +1121,7 @@ function setTeacherLoggedIn(user){
 
 function setTeacherLoggedOut(message='Teacher sign-in required for admin tools.', tone='warn'){
   teacherAuthUser = null;
-  pendingAdminOpen = false;
+  setPendingAdminOpen(false);
   if(showAdminButton){
     showAdminButton.disabled = false;
     showAdminButton.textContent = 'Teacher Admin';
@@ -1529,7 +1556,7 @@ async function saveTeacherSetup(){
       setupStatus.classList.add('text-green-200');
     }
     hideTeacherSetup();
-    pendingAdminOpen = true;
+    setPendingAdminOpen(true, { persist: false });
     showAdminPanel();
   }catch(err){
     console.error('[setup] Failed to save onboarding data', err);
@@ -1568,29 +1595,41 @@ async function ensureAnonymousAuth(){
   }
 }
 
+async function ensureAuthPersistenceReady(){
+  if(!auth || authPersistenceReady) return;
+  try{
+    await setPersistence(auth, browserLocalPersistence);
+    authPersistenceReady = true;
+  }catch(err){
+    console.warn('[auth] Failed to set persistence', err);
+  }
+}
+
+async function beginTeacherRedirect(provider){
+  if(!auth) throw new Error('Firebase authentication is unavailable.');
+  await ensureAuthPersistenceReady();
+  setAdminAuthStatus('Redirecting to Google sign-in…', 'info');
+  setPendingAdminOpen(true);
+  await signInWithRedirect(auth, provider);
+  return true;
+}
+
 async function startTeacherLogin(){
   if(teacherLoginInProgress){
     return false;
   }
   if(!auth){
     setAdminAuthStatus('Firebase authentication is unavailable.', 'error');
-    pendingAdminOpen = false;
+    setPendingAdminOpen(false);
     return false;
   }
   teacherLoginInProgress = true;
   if(showAdminButton) showAdminButton.disabled = true;
   setAdminAuthStatus('Launching Google sign-in…', 'info');
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
   try{
-    if(!authPersistenceReady){
-      try{
-        await setPersistence(auth, browserLocalPersistence);
-        authPersistenceReady = true;
-      }catch(err){
-        console.warn('[auth] Failed to set persistence', err);
-      }
-    }
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
+    await ensureAuthPersistenceReady();
     await signInWithPopup(auth, provider);
     return true;
   }catch(err){
@@ -1598,16 +1637,61 @@ async function startTeacherLogin(){
     const code = err && err.code ? String(err.code) : '';
     if(code === 'auth/popup-closed-by-user'){
       setAdminAuthStatus('Google sign-in was closed before completing.', 'warn');
-    } else if(code === 'auth/cancelled-popup-request'){
+      setPendingAdminOpen(false);
+      return false;
+    }
+    if(code === 'auth/cancelled-popup-request'){
       setAdminAuthStatus('A Google sign-in window is already open.', 'warn');
+      setPendingAdminOpen(false);
+      return false;
+    }
+    if(code === 'auth/unauthorized-domain'){
+      setAdminAuthStatus('This domain is not authorized for Google sign-in. Update Firebase Auth settings.', 'error');
+      setPendingAdminOpen(false);
+      return false;
+    }
+    if(code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment'){
+      const statusMsg = code === 'auth/popup-blocked'
+        ? 'Popup blocked. Redirecting to Google sign-in…'
+        : 'Browser blocked popup sign-in. Redirecting…';
+      setAdminAuthStatus(statusMsg, 'warn');
+      try{
+        await beginTeacherRedirect(provider);
+        return true;
+      }catch(redirectErr){
+        console.error('[auth] Google redirect sign-in failed', redirectErr);
+        setAdminAuthStatus('Google sign-in failed. Please try again.', 'error');
+      }
     } else {
       setAdminAuthStatus('Google sign-in failed. Please try again.', 'error');
     }
-    pendingAdminOpen = false;
+    setPendingAdminOpen(false);
     return false;
   } finally {
     teacherLoginInProgress = false;
     if(showAdminButton) showAdminButton.disabled = false;
+  }
+}
+
+async function resumeRedirectSignIn(){
+  if(!auth) return;
+  try{
+    const result = await getRedirectResult(auth);
+    if(result && result.user && !result.user.isAnonymous && !pendingAdminOpen){
+      setPendingAdminOpen(true, { persist: false });
+    }
+  }catch(err){
+    const code = err && err.code ? String(err.code) : '';
+    if(code === 'auth/no-auth-event') return;
+    if(code === 'auth/redirect-cancelled-by-user'){
+      setAdminAuthStatus('Google sign-in was closed before completing.', 'warn');
+    } else if(code === 'auth/unauthorized-domain'){
+      setAdminAuthStatus('This domain is not authorized for Google sign-in. Update Firebase Auth settings.', 'error');
+    } else {
+      console.error('[auth] Failed to resume redirect sign-in', err);
+      setAdminAuthStatus('Google sign-in failed. Please try again.', 'error');
+    }
+    setPendingAdminOpen(false);
   }
 }
 
@@ -2292,14 +2376,14 @@ if (scheduleFileInput && uploadSchedulesBtn) {
         if(isTeacherAuthorized()){
           showAdminPanel();
         } else {
-          pendingAdminOpen = true;
+          setPendingAdminOpen(true);
           await startTeacherLogin();
         }
       });
     }
     if(teacherSignOutButton){
       teacherSignOutButton.addEventListener('click', async ()=>{
-        pendingAdminOpen = false;
+        setPendingAdminOpen(false);
         if(auth){
           try{
             await signOut(auth);
@@ -2329,7 +2413,7 @@ if (scheduleFileInput && uploadSchedulesBtn) {
     if(setupCancelButton){
       setupCancelButton.addEventListener('click', evt=>{
         evt.preventDefault();
-        pendingAdminOpen = false;
+        setPendingAdminOpen(false);
         hideTeacherSetup();
         if(!teacherSetupComplete){
           setAdminAuthStatus('Setup is required before using admin tools.', 'warn');
@@ -2452,15 +2536,11 @@ async function initFirebase(){
     const app = initializeApp(FB_CONFIG);
     db = getFirestore(app);
     auth = getAuth(app);
-    try{
-      await setPersistence(auth, browserLocalPersistence);
-      authPersistenceReady = true;
-    }catch(err){
-      console.warn('[auth] Unable to set persistence', err);
-    }
+    await ensureAuthPersistenceReady();
     onAuthStateChanged(auth, user=>{
       handleTeacherAuthState(user);
     });
+    await resumeRedirectSignIn();
     await ensureAnonymousAuth();
     rosterStatus.textContent = 'Cloud Sync Ready: rosters and exceptions will sync.';
     rosterStatus.classList.remove('text-red-600');
@@ -3076,7 +3156,7 @@ async function handleSignIn(){
       if(isTeacherAuthorized()){
         showAdminPanel();
       } else {
-        pendingAdminOpen = true;
+        setPendingAdminOpen(true);
         await startTeacherLogin();
       }
       return;

@@ -280,6 +280,90 @@ def clear_failed_students() -> None:
         logger.error(f"Failed to clear failed students file: {e}")
 
 
+# Audit log file template (daily files)
+AUDIT_LOG_FILE_TEMPLATE = "sync_audit_{date}.log"
+
+
+def log_sync_intent(
+    student_id: str,
+    period: str,
+    intended_status: str,
+    source_status: str,
+    timestamp: datetime
+) -> None:
+    """
+    Log sync intent BEFORE checkbox interaction
+
+    Args:
+        student_id: Student ID being processed
+        period: Period number
+        intended_status: What we plan to set (Absent, Tardy, Present)
+        source_status: Original status from Firebase/CSV
+        timestamp: When the intent was logged
+
+    Log file format: sync_audit_{YYYY-MM-DD}.log (daily file)
+    Each line is a JSON object for easy parsing
+    """
+    log_file = AUDIT_LOG_FILE_TEMPLATE.format(date=timestamp.strftime('%Y-%m-%d'))
+
+    log_entry = {
+        "type": "intent",
+        "timestamp": timestamp.isoformat(),
+        "student_id": student_id,
+        "period": period,
+        "intended_status": intended_status,
+        "source_status": source_status
+    }
+
+    try:
+        with open(log_file, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(log_entry) + '\n')
+    except Exception as e:
+        logger.error(f"Failed to write audit intent log: {e}")
+
+
+def log_sync_action(
+    student_id: str,
+    period: str,
+    action_taken: str,
+    checkbox_state: dict,
+    success: bool,
+    timestamp: datetime
+) -> None:
+    """
+    Log sync action AFTER checkbox interaction
+
+    Args:
+        student_id: Student ID being processed
+        period: Period number
+        action_taken: What we did (checked_absent, unchecked_absent, checked_tardy,
+                      unchecked_tardy, no_change, skipped_locked, corrected_to_present, failed)
+        checkbox_state: Final state {'absent': bool/None, 'tardy': bool/None}
+        success: Whether the action completed without error
+        timestamp: When the action was logged
+
+    Log file format: sync_audit_{YYYY-MM-DD}.log (daily file)
+    Each line is a JSON object for easy parsing
+    """
+    log_file = AUDIT_LOG_FILE_TEMPLATE.format(date=timestamp.strftime('%Y-%m-%d'))
+
+    log_entry = {
+        "type": "action",
+        "timestamp": timestamp.isoformat(),
+        "student_id": student_id,
+        "period": period,
+        "action_taken": action_taken,
+        "checkbox_state": checkbox_state,
+        "success": success
+    }
+
+    try:
+        with open(log_file, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(log_entry) + '\n')
+    except Exception as e:
+        logger.error(f"Failed to write audit action log: {e}")
+
+
 def log_sync_failure(
     student_id: str,
     period: str,

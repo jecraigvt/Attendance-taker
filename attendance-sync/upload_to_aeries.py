@@ -7,11 +7,12 @@ from datetime import datetime
 import csv
 import os
 import time
+from sync_utils import retry_with_backoff, SyncError, log_sync_failure
 
 def read_attendance_csv(csv_filepath):
     """Reads the CSV and groups data by Period"""
     attendance_data = {}
-    
+
     with open(csv_filepath, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         for row in reader:
@@ -19,8 +20,36 @@ def read_attendance_csv(csv_filepath):
             if period not in attendance_data:
                 attendance_data[period] = []
             attendance_data[period].append(row)
-            
+
     return attendance_data
+
+
+@retry_with_backoff(max_retries=3, base_delay=5)
+def _login_to_aeries(page, username, password, login_url):
+    """
+    Login to Aeries with retry logic
+
+    Retries up to 3 times with exponential backoff: 5s, 15s, 45s
+    Raises SyncError on final failure
+    """
+    try:
+        page.goto(login_url, timeout=30000)
+
+        page.wait_for_selector('input[type="text"]', timeout=30000)
+        page.fill('input[name="portalAccountUsername"], input[type="text"]', username)
+        page.fill('input[name="portalAccountPassword"], input[type="password"]', password)
+        page.click('button[type="submit"], input[type="submit"]')
+
+        page.wait_for_url(lambda url: "Login.aspx" not in url, timeout=40000)
+        print("   ✓ Login complete")
+
+    except Exception as e:
+        # Convert to SyncError for consistent error handling
+        raise SyncError(
+            message=f"Login failed: {str(e)}",
+            error_type='login_failed',
+            original_exception=e
+        )
 
 def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
     """
@@ -49,15 +78,7 @@ def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
         try:
             # --- LOGIN PHASE ---
             print("   Step 1: Logging in...")
-            page.goto(LOGIN_URL, timeout=30000)
-            
-            page.wait_for_selector('input[type="text"]', timeout=30000)
-            page.fill('input[name="portalAccountUsername"], input[type="text"]', username)
-            page.fill('input[name="portalAccountPassword"], input[type="password"]', password)
-            page.click('button[type="submit"], input[type="submit"]')
-            
-            page.wait_for_url(lambda url: "Login.aspx" not in url, timeout=40000)
-            print("   ✓ Login complete")
+            _login_to_aeries(page, username, password, LOGIN_URL)
             
             # --- NAVIGATION PHASE ---
             print("   Step 2: Navigating to Attendance Screen...")
@@ -72,7 +93,8 @@ def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
             # --- PROCESS EACH PERIOD ---
             for period, students in period_groups.items():
                 print(f"\n   Processing Period {period} ({len(students)} students)...")
-                
+                failed_students = []  # Track failed students for this period
+
                 # Select the Period
                 try:
                     target_select = None
@@ -190,10 +212,24 @@ def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
                                 
                     except Exception as e:
                         # Print a shorter error message to avoid cluttering logs
-                        error_msg = str(e).split('\n')[0] 
+                        error_msg = str(e).split('\n')[0]
                         print(f"        ❌ Error processing {student_id}: {error_msg}")
-                
-                print(f"   ✓ Period {period} verified. Updates made: {updates_count}")
+
+                        # Log failure to persistent error log
+                        log_sync_failure(
+                            student_id=student_id,
+                            period=period,
+                            error=error_msg,
+                            attempt_count=1,
+                            timestamp=datetime.now()
+                        )
+                        failed_students.append(student_id)
+
+                # Report period summary
+                if failed_students:
+                    print(f"   ✓ Period {period} complete. Updates: {updates_count}, Failed: {len(failed_students)}")
+                else:
+                    print(f"   ✓ Period {period} verified. Updates made: {updates_count}")
             
             # Save
             try:

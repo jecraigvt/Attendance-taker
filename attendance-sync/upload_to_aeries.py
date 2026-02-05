@@ -7,7 +7,11 @@ from datetime import datetime
 import csv
 import os
 import time
-from sync_utils import retry_with_backoff, SyncError, log_sync_failure
+from sync_utils import (
+    retry_with_backoff, SyncError, log_sync_failure,
+    find_element_with_fallback, SELECTOR_STRATEGIES,
+    load_failed_students, save_failed_students, clear_failed_students
+)
 
 def read_attendance_csv(csv_filepath):
     """Reads the CSV and groups data by Period"""
@@ -68,6 +72,29 @@ def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
     if not period_groups:
         print("   ⚠ No data found in CSV.")
         return
+
+    # Load any students that failed in previous sync
+    previously_failed = load_failed_students()
+    current_failures = []
+
+    # Merge previously failed students into period groups for retry
+    if previously_failed.get('students'):
+        retry_count = 0
+        for failed in previously_failed['students']:
+            period = failed['period']
+            if period in period_groups:
+                # Check if this student is already in the list (avoid duplicates)
+                existing_ids = [s['StudentID'] for s in period_groups[period]]
+                if failed['student_id'] not in existing_ids:
+                    # Reconstruct student record for processing
+                    period_groups[period].append({
+                        'StudentID': failed['student_id'],
+                        'Period': period,
+                        'Status': 'Absent',  # Assume absent since they failed to sync
+                    })
+                    retry_count += 1
+        if retry_count > 0:
+            print(f"   🔄 Retrying {retry_count} students from previous sync cycle")
 
     with sync_playwright() as p:
         # slow_mo helps globally, but we add specific waits below for the grid
@@ -151,12 +178,12 @@ def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
                         status = 'Present'
                     
                     try:
-                        # 1. Find the exact cell with the student ID
-                        cell = page.locator(f"td[data-studentid='{student_id}']")
+                        # 1. Find the exact cell with the student ID using fallback selectors
+                        cell, _ = find_element_with_fallback(page, 'student_cell', {'student_id': student_id})
                         if cell.count() == 0:
                             print(f"        ⚠ Cell not found for ID {student_id}")
                             continue
-                            
+
                         # 2. Get the specific parent row using XPath ".."
                         row = cell.locator("xpath=..")
                         
@@ -167,10 +194,10 @@ def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
                             print(f"        🔒 Skipping student {student_id}: Locked as '{locked_text}'")
                             continue
                             
-                        # 4. Now search for checkboxes ONLY inside this specific row
-                        absent_box = row.locator("span[data-cd='A'] input")
-                        tardy_box = row.locator("span[data-cd='T'] input")
-                        
+                        # 4. Now search for checkboxes ONLY inside this specific row using fallback selectors
+                        absent_box, _ = find_element_with_fallback(row, 'absent_checkbox', {})
+                        tardy_box, _ = find_element_with_fallback(row, 'tardy_checkbox', {})
+
                         # Safety check: bypass if boxes aren't found for some reason
                         if absent_box.count() == 0 or tardy_box.count() == 0:
                             print(f"        ⚠ Skipping student {student_id}: Checkboxes not found")
@@ -225,6 +252,14 @@ def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
                         )
                         failed_students.append(student_id)
 
+                        # Track failure for retry in next sync cycle
+                        current_failures.append({
+                            'student_id': student_id,
+                            'period': period,
+                            'error': error_msg,
+                            'timestamp': datetime.now().isoformat()
+                        })
+
                 # Report period summary
                 if failed_students:
                     print(f"   ✓ Period {period} complete. Updates: {updates_count}, Failed: {len(failed_students)}")
@@ -243,11 +278,18 @@ def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
             page.screenshot(path=f'aeries_grid_{timestamp}.png', full_page=True)
             print(f"   📸 Final screenshot saved")
 
+            # Save any failures for next sync cycle
+            if current_failures:
+                save_failed_students(current_failures)
+                print(f"   💾 {len(current_failures)} students saved for retry in next sync")
+            else:
+                clear_failed_students()  # All succeeded, clear the retry queue
+
         except Exception as e:
             print(f"\n❌ Error during automation: {e}")
             page.screenshot(path='error_state.png')
             raise
-        
+
         finally:
             browser.close()
 

@@ -25,15 +25,33 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Sync schedule (7 times per day)
+# Sync schedule (every 20 minutes during school hours)
 SYNC_SCHEDULE = {
-    "08:40": "Period 1 (10 min in)",
-    "09:42": "Period 2 (10 min in)",
-    "11:02": "Period 3 (10 min in)",
-    "12:04": "Period 4 (10 min in)",
-    "13:41": "Period 5 (10 min in)",
-    "14:43": "Period 6 (10 min in)",
-    "15:30": "END OF DAY - FINAL SYNC"
+    "08:00": "Morning sync 1",
+    "08:20": "Morning sync 2",
+    "08:40": "Morning sync 3",
+    "09:00": "Morning sync 4",
+    "09:20": "Morning sync 5",
+    "09:40": "Morning sync 6",
+    "10:00": "Mid-morning sync 1",
+    "10:20": "Mid-morning sync 2",
+    "10:40": "Mid-morning sync 3",
+    "11:00": "Mid-morning sync 4",
+    "11:20": "Late morning sync 1",
+    "11:40": "Late morning sync 2",
+    "12:00": "Lunch sync 1",
+    "12:20": "Lunch sync 2",
+    "12:40": "Lunch sync 3",
+    "13:00": "Afternoon sync 1",
+    "13:20": "Afternoon sync 2",
+    "13:40": "Afternoon sync 3",
+    "14:00": "Afternoon sync 4",
+    "14:20": "Late afternoon sync 1",
+    "14:40": "Late afternoon sync 2",
+    "15:00": "Late afternoon sync 3",
+    "15:20": "Late afternoon sync 4",
+    "15:40": "Pre-final sync",
+    "15:45": "END OF DAY - FINAL SYNC"
 }
 
 # Time window in minutes (increased from 2 to 5 for reliability)

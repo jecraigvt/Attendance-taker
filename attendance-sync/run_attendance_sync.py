@@ -6,7 +6,7 @@ Runs 7 times daily: after each period starts + end of day final sync
 from datetime import datetime
 from attendance_to_aeries import export_attendance_to_csv
 from upload_to_aeries import upload_to_aeries
-from sync_utils import SyncError
+from sync_utils import SyncError, generate_verification_report
 import os
 import sys
 import logging
@@ -124,7 +124,41 @@ def sync_attendance_to_aeries(force=False):
         logger.info("")
         logger.info("STEP 2: Uploading to Aeries")
         logger.info("-" * 70)
+        sync_start_time = datetime.now()  # Record for verification report
         upload_to_aeries(csv_file, AERIES_URL, AERIES_USERNAME, AERIES_PASSWORD)
+
+        # Step 3: Generate verification report
+        logger.info("")
+        logger.info("STEP 3: Generating Verification Report")
+        logger.info("-" * 70)
+        verification_passed = True
+        try:
+            report = generate_verification_report(
+                csv_filepath=csv_file,
+                run_start_timestamp=sync_start_time,
+                output_dir="."
+            )
+
+            # Log summary
+            summary = report['summary']
+            logger.info(f"   Total students: {summary['total_students']}")
+            logger.info(f"   Synced: {summary['total_synced']}")
+            logger.info(f"   Failed: {summary['total_failed']}")
+            logger.info(f"   Skipped (locked): {summary['total_skipped_locked']}")
+
+            if summary['total_discrepancies'] > 0:
+                verification_passed = False
+                logger.warning(f"   !! DISCREPANCIES FOUND: {summary['total_discrepancies']}")
+                for disc in report['discrepancies'][:5]:  # Show first 5
+                    logger.warning(f"      - {disc['type']}: Student {disc['student_id']} Period {disc['period']}")
+                if len(report['discrepancies']) > 5:
+                    logger.warning(f"      ... and {len(report['discrepancies']) - 5} more (see report file)")
+            else:
+                logger.info("   No discrepancies found")
+
+        except Exception as e:
+            logger.error(f"   Failed to generate verification report: {e}")
+            verification_passed = False
 
         # Count failures from error log for summary
         error_log_file = f'sync_errors_{log_date}.log'
@@ -144,12 +178,14 @@ def sync_attendance_to_aeries(force=False):
             except:
                 pass
 
-        # Success with retry summary
+        # Success with verification and retry summary
+        verification_status = 'PASSED' if verification_passed else 'DISCREPANCIES FOUND'
         success_msg = f"""
 {'='*70}
-  ✓✓✓ SYNC COMPLETE ✓✓✓
+  SYNC COMPLETE
   Successfully synced attendance for {today}
   Sync Type: {sync_label}
+  Verification: {verification_status}
 """
         if student_failures > 0:
             success_msg += f"  Note: {student_failures} student(s) failed and were logged\n"

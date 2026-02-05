@@ -713,3 +713,177 @@ def _write_verification_report_json(report: Dict, output_dir: str, timestamp_str
             json.dump(report, f, indent=2)
     except Exception as e:
         logger.error(f"Failed to write verification report JSON: {e}")
+
+
+def generate_daily_summary(date_str: str, output_dir: str = ".") -> Dict:
+    """
+    Generate end-of-day summary report aggregating all sync runs
+
+    Args:
+        date_str: Date in YYYY-MM-DD format
+        output_dir: Directory to write report (default: current)
+
+    Returns:
+        Dict with daily totals and breakdown by sync run
+    """
+    # 1. Read all audit entries for the date
+    audit_entries = get_audit_entries(date_str)
+
+    # 2. Read sync_errors file and filter to today
+    year_month = date_str[:7]  # YYYY-MM
+    error_log_file = f"sync_errors_{year_month}.log"
+    retries_from_error_log = 0
+
+    if os.path.exists(error_log_file):
+        try:
+            with open(error_log_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            entry = json.loads(line)
+                            if entry.get('timestamp', '').startswith(date_str):
+                                retries_from_error_log += 1
+                        except json.JSONDecodeError:
+                            # Handle non-JSON format lines
+                            if date_str in line:
+                                retries_from_error_log += 1
+        except Exception as e:
+            logger.warning(f"Failed to read error log: {e}")
+
+    # 3. Read failed_students.json for unresolved failures
+    unresolved_failures = []
+    if os.path.exists(FAILED_STUDENTS_FILE):
+        try:
+            with open(FAILED_STUDENTS_FILE, 'r', encoding='utf-8') as f:
+                failed_data = json.load(f)
+                if failed_data.get('date') == date_str:
+                    unresolved_failures = failed_data.get('students', [])
+        except Exception as e:
+            logger.warning(f"Failed to read failed students file: {e}")
+
+    # 4. Aggregate totals from audit entries
+    intents = [e for e in audit_entries if e.get('type') == 'intent']
+    actions = [e for e in audit_entries if e.get('type') == 'action']
+
+    # Unique student_id + period combinations from intents
+    unique_student_periods = set()
+    for intent in intents:
+        key = (intent.get('student_id'), intent.get('period'))
+        unique_student_periods.add(key)
+    total_students_processed = len(unique_student_periods)
+
+    # Count distinct time windows (by truncating timestamp to minute)
+    sync_run_times = set()
+    for entry in audit_entries:
+        ts = entry.get('timestamp', '')
+        if ts:
+            # Truncate to 5-minute window to group entries from same sync run
+            minute_ts = ts[:16]  # YYYY-MM-DDTHH:MM
+            sync_run_times.add(minute_ts)
+    total_sync_runs = len(sync_run_times)
+
+    # Count action outcomes
+    total_successful_actions = 0
+    total_failed_actions = 0
+    total_skipped_locked = 0
+
+    for action in actions:
+        action_taken = action.get('action_taken', '')
+        success = action.get('success', False)
+
+        if action_taken == 'skipped_locked':
+            total_skipped_locked += 1
+        elif action_taken == 'failed' or not success:
+            total_failed_actions += 1
+        else:
+            total_successful_actions += 1
+
+    # 5. Build summary
+    summary = {
+        'date': date_str,
+        'total_students_processed': total_students_processed,
+        'total_sync_runs': total_sync_runs,
+        'total_successful_actions': total_successful_actions,
+        'total_failed_actions': total_failed_actions,
+        'total_skipped_locked': total_skipped_locked,
+        'total_retries_from_error_log': retries_from_error_log,
+        'unresolved_failures': unresolved_failures
+    }
+
+    # Write summary files
+    _write_daily_summary_txt(summary, output_dir, date_str)
+    _write_daily_summary_json(summary, output_dir, date_str)
+
+    logger.info(f"Daily summary generated: daily_summary_{date_str}.txt/.json")
+
+    return summary
+
+
+def _write_daily_summary_txt(summary: Dict, output_dir: str, date_str: str) -> None:
+    """
+    Write human-readable daily summary to text file
+
+    Args:
+        summary: Summary dict
+        output_dir: Directory to write to
+        date_str: Date string for filename
+    """
+    filepath = os.path.join(output_dir, f"daily_summary_{date_str}.txt")
+
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write("=" * 70 + "\n")
+            f.write("DAILY SYNC SUMMARY\n")
+            f.write(f"Date: {date_str}\n")
+            f.write("=" * 70 + "\n\n")
+
+            f.write("TOTALS\n")
+            f.write("-" * 70 + "\n")
+            f.write(f"  Total sync runs:           {summary['total_sync_runs']}\n")
+            f.write(f"  Students processed:        {summary['total_students_processed']}\n")
+            f.write(f"  Successful actions:        {summary['total_successful_actions']}\n")
+            f.write(f"  Failed actions:            {summary['total_failed_actions']}\n")
+            f.write(f"  Skipped (locked):          {summary['total_skipped_locked']}\n")
+            f.write(f"  Retries (from error log):  {summary['total_retries_from_error_log']}\n")
+            f.write("\n")
+
+            # Unresolved failures section
+            unresolved = summary.get('unresolved_failures', [])
+            if unresolved:
+                f.write("UNRESOLVED FAILURES\n")
+                f.write("-" * 70 + "\n")
+                for i, failure in enumerate(unresolved, 1):
+                    f.write(f"  {i}. Student {failure.get('student_id')} Period {failure.get('period')}\n")
+                    f.write(f"     Error: {failure.get('error', 'Unknown')}\n")
+                f.write("\n")
+            else:
+                f.write("UNRESOLVED FAILURES\n")
+                f.write("-" * 70 + "\n")
+                f.write("  None - all students synced successfully.\n")
+                f.write("\n")
+
+            f.write("=" * 70 + "\n")
+            f.write("END OF DAILY SUMMARY\n")
+            f.write("=" * 70 + "\n")
+
+    except Exception as e:
+        logger.error(f"Failed to write daily summary TXT: {e}")
+
+
+def _write_daily_summary_json(summary: Dict, output_dir: str, date_str: str) -> None:
+    """
+    Write daily summary to JSON file
+
+    Args:
+        summary: Summary dict
+        output_dir: Directory to write to
+        date_str: Date string for filename
+    """
+    filepath = os.path.join(output_dir, f"daily_summary_{date_str}.json")
+
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(summary, f, indent=2)
+    except Exception as e:
+        logger.error(f"Failed to write daily summary JSON: {e}")

@@ -1,12 +1,12 @@
 """
 Main script to run attendance sync from Firebase to Aeries
-Runs 7 times daily: after each period starts + end of day final sync
+Runs every 20 minutes during school hours (8:00 AM - 3:45 PM)
 """
 
 from datetime import datetime
 from attendance_to_aeries import export_attendance_to_csv
 from upload_to_aeries import upload_to_aeries
-from sync_utils import SyncError, generate_verification_report
+from sync_utils import SyncError, generate_verification_report, generate_daily_summary
 import os
 import sys
 import logging
@@ -177,6 +177,23 @@ def sync_attendance_to_aeries(force=False):
         except Exception as e:
             logger.error(f"   Failed to generate verification report: {e}")
             verification_passed = False
+
+        # Step 4: Generate daily summary (only at END OF DAY sync)
+        if "END OF DAY" in sync_label:
+            logger.info("")
+            logger.info("STEP 4: Generating Daily Summary")
+            logger.info("-" * 70)
+            try:
+                daily_summary = generate_daily_summary(today, output_dir=".")
+                logger.info(f"   Total sync runs today: {daily_summary['total_sync_runs']}")
+                logger.info(f"   Total students processed: {daily_summary['total_students_processed']}")
+                logger.info(f"   Successful: {daily_summary['total_successful_actions']}")
+                logger.info(f"   Failed: {daily_summary['total_failed_actions']}")
+                logger.info(f"   Locked (skipped): {daily_summary['total_skipped_locked']}")
+                if daily_summary.get('unresolved_failures'):
+                    logger.warning(f"   !! UNRESOLVED: {len(daily_summary['unresolved_failures'])} students")
+            except Exception as e:
+                logger.error(f"   Failed to generate daily summary: {e}")
 
         # Count failures from error log for summary
         error_log_file = f'sync_errors_{log_date}.log'

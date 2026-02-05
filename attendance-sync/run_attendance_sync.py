@@ -6,9 +6,11 @@ Runs 7 times daily: after each period starts + end of day final sync
 from datetime import datetime
 from attendance_to_aeries import export_attendance_to_csv
 from upload_to_aeries import upload_to_aeries
+from sync_utils import SyncError
 import os
 import sys
 import logging
+import json
 
 # Configure logging with date-based log file
 log_date = datetime.now().strftime('%Y-%m')
@@ -117,25 +119,65 @@ def sync_attendance_to_aeries(force=False):
         logger.info("STEP 1: Exporting attendance from Firebase")
         logger.info("-" * 70)
         csv_file = export_attendance_to_csv(today)
-        
+
         # Step 2: Upload to Aeries
         logger.info("")
         logger.info("STEP 2: Uploading to Aeries")
         logger.info("-" * 70)
         upload_to_aeries(csv_file, AERIES_URL, AERIES_USERNAME, AERIES_PASSWORD)
-        
-        # Success
+
+        # Count failures from error log for summary
+        error_log_file = f'sync_errors_{log_date}.log'
+        student_failures = 0
+        if os.path.exists(error_log_file):
+            try:
+                with open(error_log_file, 'r', encoding='utf-8') as f:
+                    # Count JSON lines from today's sync
+                    today_str = datetime.now().strftime('%Y-%m-%d')
+                    for line in f:
+                        try:
+                            entry = json.loads(line.strip())
+                            if entry.get('timestamp', '').startswith(today_str):
+                                student_failures += 1
+                        except:
+                            pass
+            except:
+                pass
+
+        # Success with retry summary
         success_msg = f"""
 {'='*70}
   ✓✓✓ SYNC COMPLETE ✓✓✓
   Successfully synced attendance for {today}
   Sync Type: {sync_label}
-{'='*70}
 """
+        if student_failures > 0:
+            success_msg += f"  Note: {student_failures} student(s) failed and were logged\n"
+        success_msg += f"{'='*70}\n"
         logger.info(success_msg)
-        
+
+    except SyncError as e:
+        # SyncError with enhanced context
+        error_msg = f"""
+{'='*70}
+  ✗ SYNC FAILED ✗
+  Error Type: {e.error_type}
+  Error: {e.message}
+"""
+        if e.student_id:
+            error_msg += f"  Student ID: {e.student_id}\n"
+        if e.period:
+            error_msg += f"  Period: {e.period}\n"
+        error_msg += f"{'='*70}\n"
+        logger.error(error_msg)
+
+        # Log error to dedicated error file with date
+        error_log_file = f'sync_errors_{log_date}.log'
+        with open(error_log_file, 'a', encoding='utf-8') as f:
+            f.write(f"{datetime.now()} - FAILED - {sync_label} - {e.error_type}: {e.message}\n")
+
     except Exception as e:
-        # Failure
+        # Generic exception fallback
         error_msg = f"""
 {'='*70}
   ✗ SYNC FAILED ✗
@@ -143,7 +185,7 @@ def sync_attendance_to_aeries(force=False):
 {'='*70}
 """
         logger.error(error_msg)
-        
+
         # Log error to dedicated error file with date
         error_log_file = f'sync_errors_{log_date}.log'
         with open(error_log_file, 'a', encoding='utf-8') as f:

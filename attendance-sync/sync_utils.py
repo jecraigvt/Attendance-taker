@@ -8,7 +8,7 @@ import time
 import json
 import os
 from datetime import datetime
-from typing import Optional, Callable, Any, Tuple
+from typing import Optional, Callable, Any, Tuple, List
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -362,6 +362,61 @@ def log_sync_action(
             f.write(json.dumps(log_entry) + '\n')
     except Exception as e:
         logger.error(f"Failed to write audit action log: {e}")
+
+
+def get_audit_entries(date_str: str) -> list:
+    """
+    Get all audit log entries for a given date
+
+    Args:
+        date_str: Date string in YYYY-MM-DD format
+
+    Returns:
+        List of parsed JSON objects from the audit log
+        Returns empty list if file doesn't exist
+    """
+    log_file = AUDIT_LOG_FILE_TEMPLATE.format(date=date_str)
+
+    if not os.path.exists(log_file):
+        return []
+
+    entries = []
+    try:
+        with open(log_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        entries.append(json.loads(line))
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"Skipping malformed audit log line: {e}")
+    except Exception as e:
+        logger.error(f"Failed to read audit log file: {e}")
+
+    return entries
+
+
+def get_sync_run_entries(date_str: str, run_start_timestamp: str) -> list:
+    """
+    Get audit log entries from a specific sync run
+
+    Args:
+        date_str: Date string in YYYY-MM-DD format
+        run_start_timestamp: ISO format timestamp of when the sync run started
+
+    Returns:
+        List of parsed JSON objects where timestamp >= run_start_timestamp
+        Useful for generating verification report for just the current run
+    """
+    all_entries = get_audit_entries(date_str)
+
+    # Filter entries where timestamp >= run_start_timestamp
+    run_entries = [
+        entry for entry in all_entries
+        if entry.get('timestamp', '') >= run_start_timestamp
+    ]
+
+    return run_entries
 
 
 def log_sync_failure(

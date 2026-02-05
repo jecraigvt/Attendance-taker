@@ -14,6 +14,10 @@ from typing import Optional, Callable, Any, Tuple
 logger = logging.getLogger(__name__)
 
 
+# Failed students tracking file
+FAILED_STUDENTS_FILE = "failed_students.json"
+
+
 # Selector strategies with fallback options for Aeries UI resilience
 SELECTOR_STRATEGIES = {
     'student_cell': [
@@ -208,6 +212,72 @@ def _log_selector_alert(element_type: str, fallback_index: int, selector_used: s
             f.write(json.dumps(alert_entry) + '\n')
     except Exception as e:
         logger.error(f"Failed to write selector alert: {e}")
+
+
+def load_failed_students() -> dict:
+    """
+    Load failed students from previous sync cycle
+
+    Returns:
+        Dict with structure {"date": "YYYY-MM-DD", "students": [{"student_id": "...", "period": "...", "error": "...", "timestamp": "..."}]}
+        Returns empty structure if file doesn't exist or date doesn't match today
+    """
+    today = datetime.now().strftime('%Y-%m-%d')
+
+    try:
+        if not os.path.exists(FAILED_STUDENTS_FILE):
+            return {"date": today, "students": []}
+
+        with open(FAILED_STUDENTS_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        # If date doesn't match today, return empty (old failures)
+        if data.get('date') != today:
+            logger.info(f"Failed students file is from {data.get('date')}, not today - starting fresh")
+            return {"date": today, "students": []}
+
+        logger.info(f"Loaded {len(data.get('students', []))} failed students from previous sync")
+        return data
+
+    except Exception as e:
+        logger.error(f"Failed to load failed students file: {e}")
+        return {"date": today, "students": []}
+
+
+def save_failed_students(failed_list: list) -> None:
+    """
+    Save failed students to JSON file for retry in next sync cycle
+
+    Args:
+        failed_list: List of dicts with student_id, period, error, timestamp
+    """
+    today = datetime.now().strftime('%Y-%m-%d')
+
+    data = {
+        "date": today,
+        "students": failed_list
+    }
+
+    try:
+        with open(FAILED_STUDENTS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
+
+        logger.info(f"Saved {len(failed_list)} failed students for retry")
+
+    except Exception as e:
+        logger.error(f"Failed to save failed students file: {e}")
+
+
+def clear_failed_students() -> None:
+    """
+    Clear the failed students file (all succeeded or end of day)
+    """
+    try:
+        if os.path.exists(FAILED_STUDENTS_FILE):
+            os.remove(FAILED_STUDENTS_FILE)
+            logger.info("Cleared failed students file")
+    except Exception as e:
+        logger.error(f"Failed to clear failed students file: {e}")
 
 
 def log_sync_failure(

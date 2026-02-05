@@ -7,8 +7,9 @@ import logging
 import time
 import json
 import os
+import csv
 from datetime import datetime
-from typing import Optional, Callable, Any, Tuple, List
+from typing import Optional, Callable, Any, Tuple, List, Dict
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -459,3 +460,256 @@ def log_sync_failure(
         )
     except Exception as e:
         logger.error(f"Failed to write to error log: {e}")
+
+
+# Verification report file template
+VERIFICATION_REPORT_TEMPLATE = "sync_verification_{timestamp}"
+
+
+def generate_verification_report(
+    csv_filepath: str,
+    run_start_timestamp: datetime,
+    output_dir: str = "."
+) -> Dict:
+    """
+    Generate verification report comparing CSV source data against audit log
+
+    Args:
+        csv_filepath: Path to the CSV file that was synced (Firebase export)
+        run_start_timestamp: datetime object of when the sync run started
+        output_dir: Directory to write report files (default: current dir)
+
+    Returns:
+        Dict with summary, by_period breakdown, and discrepancies list
+
+    The CSV file IS the authoritative Firebase export - comparing CSV to audit log
+    IS comparing Firebase source data to sync actions.
+    """
+    report_timestamp = datetime.now()
+    timestamp_str = report_timestamp.strftime('%Y-%m-%d_%H%M%S')
+    date_str = run_start_timestamp.strftime('%Y-%m-%d')
+    run_start_iso = run_start_timestamp.isoformat()
+
+    # Read CSV source data
+    csv_students = _read_csv_students(csv_filepath)
+
+    # Get audit log entries for this sync run
+    audit_entries = get_sync_run_entries(date_str, run_start_iso)
+
+    # Build lookup dicts from audit entries
+    intent_lookup = {}  # (student_id, period) -> intent entry
+    action_lookup = {}  # (student_id, period) -> action entry
+
+    for entry in audit_entries:
+        key = (entry.get('student_id'), entry.get('period'))
+        if entry.get('type') == 'intent':
+            intent_lookup[key] = entry
+        elif entry.get('type') == 'action':
+            action_lookup[key] = entry
+
+    # Compare CSV against audit log
+    discrepancies = []
+    by_period = {}
+    total_synced = 0
+    total_failed = 0
+    total_skipped_locked = 0
+
+    for student in csv_students:
+        student_id = student['student_id']
+        period = student['period']
+        expected_status = student['status']
+        key = (student_id, period)
+
+        # Initialize period stats
+        if period not in by_period:
+            by_period[period] = {'synced': 0, 'failed': 0, 'locked': 0}
+
+        intent = intent_lookup.get(key)
+        action = action_lookup.get(key)
+
+        # Check for discrepancies
+        if not intent:
+            # No intent logged - processing was skipped entirely
+            discrepancies.append({
+                'type': 'missing_intent',
+                'student_id': student_id,
+                'period': period,
+                'expected_status': expected_status,
+                'actual': 'No intent logged'
+            })
+        elif not action:
+            # Intent logged but no action - processing started but didn't complete
+            discrepancies.append({
+                'type': 'missing_action',
+                'student_id': student_id,
+                'period': period,
+                'expected_status': expected_status,
+                'actual': 'No action logged'
+            })
+        else:
+            # Check if intent status matches expected
+            intent_status = intent.get('intended_status', '')
+            if intent_status.lower() != expected_status.lower():
+                # Status mismatch between CSV and intent (normalization issue)
+                discrepancies.append({
+                    'type': 'status_mismatch',
+                    'student_id': student_id,
+                    'period': period,
+                    'expected_status': expected_status,
+                    'actual': f'Intent logged as {intent_status}'
+                })
+
+            # Check action success
+            action_taken = action.get('action_taken', '')
+            success = action.get('success', False)
+
+            if action_taken == 'skipped_locked':
+                total_skipped_locked += 1
+                by_period[period]['locked'] += 1
+            elif action_taken == 'failed' or not success:
+                total_failed += 1
+                by_period[period]['failed'] += 1
+                discrepancies.append({
+                    'type': 'action_failed',
+                    'student_id': student_id,
+                    'period': period,
+                    'expected_status': expected_status,
+                    'actual': f'Action failed: {action_taken}'
+                })
+            else:
+                total_synced += 1
+                by_period[period]['synced'] += 1
+
+    # Build report dict
+    report = {
+        'timestamp': report_timestamp.isoformat(),
+        'csv_file': os.path.basename(csv_filepath),
+        'summary': {
+            'total_students': len(csv_students),
+            'total_synced': total_synced,
+            'total_failed': total_failed,
+            'total_skipped_locked': total_skipped_locked,
+            'total_discrepancies': len(discrepancies)
+        },
+        'by_period': by_period,
+        'discrepancies': discrepancies
+    }
+
+    # Write report files
+    _write_verification_report_txt(report, output_dir, timestamp_str)
+    _write_verification_report_json(report, output_dir, timestamp_str)
+
+    logger.info(f"Verification report generated: sync_verification_{timestamp_str}.txt/.json")
+
+    return report
+
+
+def _read_csv_students(csv_filepath: str) -> List[Dict]:
+    """
+    Read student records from CSV file
+
+    Args:
+        csv_filepath: Path to CSV file
+
+    Returns:
+        List of dicts with student_id, period, status
+    """
+    students = []
+
+    try:
+        with open(csv_filepath, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # Handle different possible column names
+                student_id = row.get('student_id') or row.get('StudentID') or row.get('id')
+                period = row.get('period') or row.get('Period')
+                status = row.get('status') or row.get('Status')
+
+                if student_id and period and status:
+                    students.append({
+                        'student_id': str(student_id),
+                        'period': str(period),
+                        'status': status
+                    })
+    except Exception as e:
+        logger.error(f"Failed to read CSV file {csv_filepath}: {e}")
+
+    return students
+
+
+def _write_verification_report_txt(report: Dict, output_dir: str, timestamp_str: str) -> None:
+    """
+    Write human-readable verification report to text file
+
+    Args:
+        report: Report dict
+        output_dir: Directory to write to
+        timestamp_str: Timestamp string for filename
+    """
+    filepath = os.path.join(output_dir, f"sync_verification_{timestamp_str}.txt")
+
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write("=" * 70 + "\n")
+            f.write("SYNC VERIFICATION REPORT\n")
+            f.write(f"Generated: {report['timestamp']}\n")
+            f.write(f"CSV File: {report['csv_file']}\n")
+            f.write("=" * 70 + "\n\n")
+
+            # Summary section
+            summary = report['summary']
+            f.write("SUMMARY\n")
+            f.write("-" * 70 + "\n")
+            f.write(f"  Total students in CSV:    {summary['total_students']}\n")
+            f.write(f"  Successfully synced:      {summary['total_synced']}\n")
+            f.write(f"  Failed:                   {summary['total_failed']}\n")
+            f.write(f"  Skipped (locked):         {summary['total_skipped_locked']}\n")
+            f.write(f"  Discrepancies found:      {summary['total_discrepancies']}\n")
+            f.write("\n")
+
+            # By Period section
+            f.write("BY PERIOD\n")
+            f.write("-" * 70 + "\n")
+            for period in sorted(report['by_period'].keys(), key=lambda x: int(x) if x.isdigit() else 999):
+                stats = report['by_period'][period]
+                f.write(f"  Period {period}: {stats['synced']} synced, {stats['failed']} failed, {stats['locked']} locked\n")
+            f.write("\n")
+
+            # Discrepancies section
+            if report['discrepancies']:
+                f.write("DISCREPANCIES\n")
+                f.write("-" * 70 + "\n")
+                for i, disc in enumerate(report['discrepancies'], 1):
+                    f.write(f"  {i}. [{disc['type']}] Student {disc['student_id']} Period {disc['period']}\n")
+                    f.write(f"     Expected: {disc['expected_status']}\n")
+                    f.write(f"     Actual: {disc['actual']}\n")
+                    f.write("\n")
+            else:
+                f.write("DISCREPANCIES\n")
+                f.write("-" * 70 + "\n")
+                f.write("  No discrepancies found. All students synced as expected.\n")
+
+            f.write("\n" + "=" * 70 + "\n")
+            f.write("END OF REPORT\n")
+            f.write("=" * 70 + "\n")
+
+    except Exception as e:
+        logger.error(f"Failed to write verification report TXT: {e}")
+
+
+def _write_verification_report_json(report: Dict, output_dir: str, timestamp_str: str) -> None:
+    """
+    Write verification report to JSON file
+
+    Args:
+        report: Report dict
+        output_dir: Directory to write to
+        timestamp_str: Timestamp string for filename
+    """
+    filepath = os.path.join(output_dir, f"sync_verification_{timestamp_str}.json")
+
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(report, f, indent=2)
+    except Exception as e:
+        logger.error(f"Failed to write verification report JSON: {e}")

@@ -147,8 +147,8 @@ Sync gracefully handles partial failures (some students sync, others fail).
 | REQ-SYNC-01 | Phase 1 | Complete |
 | REQ-SYNC-02 | Phase 3 | Pending |
 | REQ-SYNC-03 | Phase 1 | Complete |
-| REQ-AUDIT-01 | Phase 2 | Pending |
-| REQ-AUDIT-02 | Phase 2 | Pending |
+| REQ-AUDIT-01 | Phase 2 | Complete |
+| REQ-AUDIT-02 | Phase 2 | Complete |
 | REQ-AUDIT-03 | Phase 3 | Pending |
 | REQ-TARDY-01 | Phase 4 | Pending |
 | REQ-TARDY-02 | Phase 4 | Pending |

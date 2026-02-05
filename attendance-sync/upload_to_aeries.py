@@ -10,7 +10,8 @@ import time
 from sync_utils import (
     retry_with_backoff, SyncError, log_sync_failure,
     find_element_with_fallback, SELECTOR_STRATEGIES,
-    load_failed_students, save_failed_students, clear_failed_students
+    load_failed_students, save_failed_students, clear_failed_students,
+    log_sync_intent, log_sync_action
 )
 
 def read_attendance_csv(csv_filepath):
@@ -171,12 +172,21 @@ def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
                     student_id = student['StudentID']
                     
                     # 1. NORMALIZE STATUS (Map App codes to Aeries)
-                    status = raw_status 
+                    status = raw_status
                     if raw_status in ['Late', 'Truant', 'Cut', 'Late > 20']:
-                        status = 'Tardy'  
+                        status = 'Tardy'
                     elif raw_status in ['On Time', 'Present', 'Excused']:
                         status = 'Present'
-                    
+
+                    # Log intent BEFORE checkbox interaction
+                    log_sync_intent(
+                        student_id=student_id,
+                        period=period,
+                        intended_status=status,
+                        source_status=raw_status,
+                        timestamp=datetime.now()
+                    )
+
                     try:
                         # 1. Find the exact cell with the student ID using fallback selectors
                         cell, _ = find_element_with_fallback(page, 'student_cell', {'student_id': student_id})
@@ -192,6 +202,14 @@ def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
                         if locked_indicator.count() > 0 and locked_indicator.is_visible():
                             locked_text = locked_indicator.inner_text().strip()
                             print(f"        🔒 Skipping student {student_id}: Locked as '{locked_text}'")
+                            log_sync_action(
+                                student_id=student_id,
+                                period=period,
+                                action_taken='skipped_locked',
+                                checkbox_state={'absent': None, 'tardy': None},
+                                success=True,
+                                timestamp=datetime.now()
+                            )
                             continue
                             
                         # 4. Now search for checkboxes ONLY inside this specific row using fallback selectors
@@ -203,44 +221,88 @@ def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
                             print(f"        ⚠ Skipping student {student_id}: Checkboxes not found")
                             continue
 
+                        # CAPTURE PRE-CHANGE CHECKBOX STATE (before any checkbox clicks)
+                        was_already_absent = absent_box.is_checked()
+                        was_already_tardy = tardy_box.is_checked()
+
                         # --- CHECKBOX LOGIC WITH DELAYS ---
                         if status == 'Absent':
-                            if not absent_box.is_checked():
+                            if not was_already_absent:
                                 print(f"      - Marking {student_id} as ABSENT")
                                 absent_box.check()
-                                page.wait_for_timeout(500) # Added Delay
+                                page.wait_for_timeout(500)  # Added Delay
                                 updates_count += 1
-                            if tardy_box.is_checked(): 
+                            if was_already_tardy:
                                 tardy_box.uncheck()
-                                page.wait_for_timeout(500) # Added Delay
+                                page.wait_for_timeout(500)  # Added Delay
+                            # Log action AFTER checkbox interaction
+                            log_sync_action(
+                                student_id=student_id,
+                                period=period,
+                                action_taken='checked_absent' if not was_already_absent else 'no_change',
+                                checkbox_state={'absent': True, 'tardy': False},
+                                success=True,
+                                timestamp=datetime.now()
+                            )
 
                         elif status == 'Tardy':
-                            if not tardy_box.is_checked():
+                            if not was_already_tardy:
                                 print(f"      - Marking {student_id} as TARDY (was '{raw_status}')")
                                 tardy_box.check()
-                                page.wait_for_timeout(500) # Added Delay
+                                page.wait_for_timeout(500)  # Added Delay
                                 updates_count += 1
-                            if absent_box.is_checked(): 
+                            if was_already_absent:
                                 absent_box.uncheck()
-                                page.wait_for_timeout(500) # Added Delay
+                                page.wait_for_timeout(500)  # Added Delay
+                            # Log action AFTER checkbox interaction
+                            log_sync_action(
+                                student_id=student_id,
+                                period=period,
+                                action_taken='checked_tardy' if not was_already_tardy else 'no_change',
+                                checkbox_state={'absent': False, 'tardy': True},
+                                success=True,
+                                timestamp=datetime.now()
+                            )
 
                         elif status == 'Present':
                             # Correction logic: Uncheck if they were marked by mistake
-                            if absent_box.is_checked():
+                            made_correction = False
+                            if was_already_absent:
                                 print(f"      - Correcting {student_id}: Was Absent, now Present")
                                 absent_box.uncheck()
-                                page.wait_for_timeout(500) # Added Delay
+                                page.wait_for_timeout(500)  # Added Delay
                                 updates_count += 1
-                            if tardy_box.is_checked():
+                                made_correction = True
+                            if was_already_tardy:
                                 print(f"      - Correcting {student_id}: Was Tardy, now Present")
                                 tardy_box.uncheck()
-                                page.wait_for_timeout(500) # Added Delay
+                                page.wait_for_timeout(500)  # Added Delay
                                 updates_count += 1
+                                made_correction = True
+                            # Log action AFTER checkbox interaction
+                            log_sync_action(
+                                student_id=student_id,
+                                period=period,
+                                action_taken='corrected_to_present' if made_correction else 'no_change',
+                                checkbox_state={'absent': False, 'tardy': False},
+                                success=True,
+                                timestamp=datetime.now()
+                            )
                                 
                     except Exception as e:
                         # Print a shorter error message to avoid cluttering logs
                         error_msg = str(e).split('\n')[0]
                         print(f"        ❌ Error processing {student_id}: {error_msg}")
+
+                        # Log failed action to audit log
+                        log_sync_action(
+                            student_id=student_id,
+                            period=period,
+                            action_taken='failed',
+                            checkbox_state={'absent': None, 'tardy': None},
+                            success=False,
+                            timestamp=datetime.now()
+                        )
 
                         # Log failure to persistent error log
                         log_sync_failure(

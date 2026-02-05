@@ -6,11 +6,37 @@ import functools
 import logging
 import time
 import json
+import os
 from datetime import datetime
-from typing import Optional, Callable, Any
+from typing import Optional, Callable, Any, Tuple
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+
+# Selector strategies with fallback options for Aeries UI resilience
+SELECTOR_STRATEGIES = {
+    'student_cell': [
+        "td[data-studentid='{student_id}']",           # Primary: data attribute
+        "td:has-text('{student_id}')",                 # Fallback 1: text content
+        "//td[contains(@id, '{student_id}')]",         # Fallback 2: XPath id contains
+    ],
+    'absent_checkbox': [
+        "span[data-cd='A'] input",                     # Primary: data-cd attribute
+        "input[type='checkbox'][name*='Absent']",      # Fallback 1: name contains
+        "span:has-text('A') input[type='checkbox']",   # Fallback 2: text label
+    ],
+    'tardy_checkbox': [
+        "span[data-cd='T'] input",                     # Primary: data-cd attribute
+        "input[type='checkbox'][name*='Tardy']",       # Fallback 1: name contains
+        "span:has-text('T') input[type='checkbox']",   # Fallback 2: text label
+    ],
+    'period_dropdown': [
+        "select",                                      # Primary: any select
+        "select[id*='Period']",                        # Fallback 1: id contains Period
+        "//select[contains(@name, 'Period')]",         # Fallback 2: XPath name contains
+    ],
+}
 
 
 class SyncError(Exception):
@@ -104,6 +130,84 @@ def retry_with_backoff(
 
         return wrapper
     return decorator
+
+
+def find_element_with_fallback(page, element_type: str, format_args: dict) -> Tuple[Any, int]:
+    """
+    Find element using fallback selector strategies
+
+    Args:
+        page: Playwright page or locator object
+        element_type: Key from SELECTOR_STRATEGIES dict
+        format_args: Dict of values for string formatting (e.g., {'student_id': '123456'})
+
+    Returns:
+        Tuple of (element, strategy_index) where strategy_index is 0 for primary, 1+ for fallbacks
+
+    Raises:
+        SyncError: If all selector strategies fail
+    """
+    if element_type not in SELECTOR_STRATEGIES:
+        raise ValueError(f"Unknown element_type: {element_type}")
+
+    strategies = SELECTOR_STRATEGIES[element_type]
+
+    for index, selector_template in enumerate(strategies):
+        try:
+            # Format selector with provided args
+            selector = selector_template.format(**format_args)
+
+            # Try to locate element
+            element = page.locator(selector)
+
+            # Check if element exists
+            if element.count() > 0:
+                # Log warning if using fallback
+                if index > 0:
+                    logger.warning(
+                        f"Using fallback selector {index} for {element_type} - Aeries UI may have changed"
+                    )
+
+                    # Also log to alerts file for admin visibility
+                    _log_selector_alert(element_type, index, selector)
+
+                return (element, index)
+
+        except Exception as e:
+            # Continue to next strategy
+            logger.debug(f"Selector strategy {index} failed for {element_type}: {e}")
+            continue
+
+    # All strategies failed
+    raise SyncError(
+        message=f"All selector strategies failed for {element_type}",
+        error_type='selector_failed'
+    )
+
+
+def _log_selector_alert(element_type: str, fallback_index: int, selector_used: str) -> None:
+    """
+    Log selector fallback usage to monthly alert file
+
+    Args:
+        element_type: Type of element (from SELECTOR_STRATEGIES keys)
+        fallback_index: Which fallback was used (1, 2, etc.)
+        selector_used: The actual selector string that worked
+    """
+    alert_file = f"selector_alerts_{datetime.now().strftime('%Y-%m')}.log"
+
+    alert_entry = {
+        "timestamp": datetime.now().isoformat(),
+        "element_type": element_type,
+        "fallback_index": fallback_index,
+        "selector_used": selector_used
+    }
+
+    try:
+        with open(alert_file, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(alert_entry) + '\n')
+    except Exception as e:
+        logger.error(f"Failed to write selector alert: {e}")
 
 
 def log_sync_failure(

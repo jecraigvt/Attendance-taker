@@ -1263,36 +1263,29 @@
     }
 
     function statusForNow(pendingEntry = null) {
-      // Get logs for the current period, sorted by timestamp
-      // Include any pending entry that hasn't been persisted yet to avoid race conditions
-      let allLogs = [...periodAttendanceLog];
+      // Get the current period from the UI
+      const p = periodSelect.value;
+      if (!p) return 'On Time';  // No period selected, default to on time
 
-      // Add pending entry if provided (for counting purposes during new sign-in)
-      if (pendingEntry && !allLogs.some(l => l.StudentID === pendingEntry.StudentID)) {
-        allLogs.push(pendingEntry);
-      }
-
-      const logs = allLogs
-        .map(l => ({ ...l, _ts: getTimestampMs(l) }))
-        .filter(l => l._ts !== null)
-        .sort((a, b) => a._ts - b._ts);
-
-      // If fewer than 5 students have signed in, everyone is On Time
-      if (logs.length < 5) {
+      // Get the period start time from bell schedule
+      const periodStart = getPeriodStartTime(p, scheduleName);
+      if (!periodStart) {
+        // Period not in schedule (edge case), fall back to on-time
+        console.warn(`[statusForNow] Period ${p} not found in ${scheduleName} schedule`);
         return 'On Time';
       }
 
-      // Get the 5th student's sign-in time (0-indexed, so index 4)
-      const fifthStudentTs = logs[4]._ts;
-      const lateThreshold = fifthStudentTs + (8 * 60 * 1000); // 8 minutes in ms
+      // Calculate the tardy threshold
+      const tardyThreshold = new Date(periodStart.getTime() + TARDY_GRACE_MINUTES * 60 * 1000);
 
-      const now = Date.now();
+      // Compare current time to threshold
+      const now = new Date();
 
-      if (now > lateThreshold) {
-        return 'Late';
+      if (now <= tardyThreshold) {
+        return 'On Time';
       }
 
-      return 'On Time';
+      return 'Late';
     }
 
     // ===== Context Switching Helpers =====

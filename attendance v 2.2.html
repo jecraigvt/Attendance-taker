@@ -1248,19 +1248,8 @@
     }
 
     // ===== Attendance helpers =====
-
-    // Helper to robustly extract milliseconds from a log entry's Timestamp
-    function getTimestampMs(logEntry) {
-      if (!logEntry || !logEntry.Timestamp) return null;
-      const ts = logEntry.Timestamp;
-      // Firestore Timestamp object
-      if (typeof ts.toMillis === 'function') return ts.toMillis();
-      // Already a number (local mode)
-      if (typeof ts === 'number') return ts;
-      // Firestore Timestamp with seconds/nanoseconds
-      if (typeof ts.seconds === 'number') return ts.seconds * 1000;
-      return null;
-    }
+    // Note: getTimestampMs() removed - was only used for 5th-student tardy calculation
+    //       which has been replaced with bell-schedule-based logic
 
     function statusForNow(pendingEntry = null) {
       // Get the current period from the UI

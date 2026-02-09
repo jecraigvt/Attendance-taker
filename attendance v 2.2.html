@@ -431,6 +431,9 @@
 
         await Promise.all(uploadPromises);
 
+        // Refresh in-memory schedules so current session reflects the upload
+        await loadSchedulesFromFirebase();
+
         statusEl.textContent = 'Success! All schedules and calendar dates have been uploaded.';
         statusEl.classList.add('text-green-600');
 
@@ -572,7 +575,7 @@
     let unsubRosters = null, unsubExceptions = null, unsubAttendance = null;
 
     // ===== Calendars & Schedules =====
-    const calendarData = {
+    let calendarData = {
       "2025-08-14": "Late Start",
       "2025-08-15": "Assembly Schedule",
       "2025-08-21": "Back to School Night",
@@ -614,7 +617,7 @@
       "2026-06-03": "Finals",
       "2026-06-04": "Finals"
     };
-    const bellSchedules = {
+    let bellSchedules = {
       Regular: { 0: "07:28", 1: "08:30", 2: "09:32", 3: "10:52", 4: "11:54", 5: "13:31", 6: "14:33" },
       "Late Start": { 0: "08:37", 1: "09:30", 2: "10:23", 3: "11:28", 4: "12:21", 5: "13:49", 6: "14:42", 7: "15:45" },
       "Assembly Schedule": { 0: "07:37", 1: "08:30", "2A": "09:23", "2B": "10:20", 3: "11:27", 4: "12:20", 5: "13:52", 6: "14:45" },
@@ -734,6 +737,7 @@
       try {
         console.log('[init] starting');
         await initFirebase(); // Use new Firebase init function
+        if (db) await loadSchedulesFromFirebase();
         if (db) watchRostersFromCloud();
         loadRostersLocal();
         loadExceptions();
@@ -745,12 +749,8 @@
         const dateString = nowISODate();
         currentDateDisplay.textContent = today.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         const note = calendarData[dateString] || 'Regular';
-        scheduleName = note.includes('Late Start') ? 'Late Start'
-          : note.includes('Assembly') ? 'Assembly Schedule'
-            : note.includes('Back to School') ? 'Back to School Night'
-              : note.includes('Finals') ? 'Finals'
-                : note.includes('Min Day') ? 'Min Day'
-                  : (note.includes('Holiday') || note.includes('No Student') || note.includes('Break')) ? 'No School' : 'Regular';
+        const noSchool = /holiday|no student|break/i.test(note);
+        scheduleName = noSchool ? 'No School' : note;
         const todays = bellSchedules[scheduleName] || bellSchedules.Default;
         periodSelect.innerHTML = '<option value="">-- Auto-Detecting --</option>' + Object.keys(todays).map(p => `<option value="${p}">Period ${p} (${todays[p]})</option>`).join('');
         studentScheduleNameEl.textContent = scheduleName;
@@ -821,6 +821,38 @@
         await signInAnonymously(auth);
         rosterStatus.textContent = 'Cloud Sync Ready: rosters and exceptions will sync.';
       } catch (err) { console.error(err); rosterStatus.textContent = 'Cloud error — Local Mode enabled.'; rosterStatus.classList.add('text-red-600'); db = null; auth = null; }
+    }
+
+    async function loadSchedulesFromFirebase() {
+      try {
+        // Load bell schedules
+        const bellSnap = await getDocs(collection(db, `artifacts/${APP_ID}/public/schedules/bell_schedules`));
+        if (!bellSnap.empty) {
+          const loaded = {};
+          bellSnap.forEach(d => { loaded[d.id] = d.data(); });
+          bellSchedules = loaded;
+          if (!bellSchedules.Default) {
+            bellSchedules.Default = bellSchedules.Regular || Object.values(bellSchedules)[0];
+          }
+          console.log('[loadSchedules] bell schedules loaded from Firebase:', Object.keys(bellSchedules));
+        } else {
+          console.log('[loadSchedules] no bell schedules in Firebase, using hardcoded');
+        }
+
+        // Load calendar data
+        const calSnap = await getDoc(doc(db, `artifacts/${APP_ID}/public/schedules/calendar/main`));
+        if (calSnap.exists()) {
+          const data = calSnap.data();
+          if (data.dates && typeof data.dates === 'object') {
+            calendarData = data.dates;
+            console.log('[loadSchedules] calendar loaded from Firebase:', Object.keys(calendarData).length, 'dates');
+          }
+        } else {
+          console.log('[loadSchedules] no calendar in Firebase, using hardcoded');
+        }
+      } catch (err) {
+        console.warn('[loadSchedules] failed to load from Firebase, using hardcoded fallback:', err);
+      }
     }
 
     // ===== Rosters: load/save/watch =====

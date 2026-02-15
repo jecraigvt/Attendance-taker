@@ -6,13 +6,15 @@ from playwright.sync_api import sync_playwright
 from datetime import datetime
 import csv
 import os
-import time
+import logging
 from sync_utils import (
     retry_with_backoff, SyncError, log_sync_failure,
     find_element_with_fallback, SELECTOR_STRATEGIES,
     load_failed_students, save_failed_students, clear_failed_students,
     log_sync_intent, log_sync_action
 )
+
+logger = logging.getLogger(__name__)
 
 def read_attendance_csv(csv_filepath):
     """Reads the CSV and groups data by Period"""
@@ -46,7 +48,7 @@ def _login_to_aeries(page, username, password, login_url):
         page.click('button[type="submit"], input[type="submit"]')
 
         page.wait_for_url(lambda url: "Login.aspx" not in url, timeout=40000)
-        print("   ✓ Login complete")
+        logger.info("Login complete")
 
     except Exception as e:
         # Convert to SyncError for consistent error handling
@@ -56,22 +58,22 @@ def _login_to_aeries(page, username, password, login_url):
             original_exception=e
         )
 
-def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
+def upload_to_aeries(csv_filepath, username, password):
     """
     Automates the Teacher Attendance grid view with strict row targeting
     """
-    
+
     LOGIN_URL = "https://adn.fjuhsd.org/Aeries.net/Login.aspx"
     ATTENDANCE_URL = "https://adn.fjuhsd.org/Aeries.net/TeacherAttendance.aspx"
-    
-    print(f"🌐 Starting UI Automation for {csv_filepath}...")
-    
+
+    logger.info(f"Starting UI Automation for {csv_filepath}")
+
     if not os.path.exists(csv_filepath):
         raise FileNotFoundError(f"CSV file not found: {csv_filepath}")
-    
+
     period_groups = read_attendance_csv(csv_filepath)
     if not period_groups:
-        print("   ⚠ No data found in CSV.")
+        logger.warning("No data found in CSV")
         return
 
     # Load any students that failed in previous sync
@@ -87,40 +89,39 @@ def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
                 # Check if this student is already in the list (avoid duplicates)
                 existing_ids = [s['StudentID'] for s in period_groups[period]]
                 if failed['student_id'] not in existing_ids:
-                    # Reconstruct student record for processing
+                    # Reconstruct student record for processing, preserving original status
                     period_groups[period].append({
                         'StudentID': failed['student_id'],
                         'Period': period,
-                        'Status': 'Absent',  # Assume absent since they failed to sync
+                        'Status': failed.get('status', 'Absent'),
                     })
                     retry_count += 1
         if retry_count > 0:
-            print(f"   🔄 Retrying {retry_count} students from previous sync cycle")
+            logger.info(f"Retrying {retry_count} students from previous sync cycle")
 
     with sync_playwright() as p:
-        # slow_mo helps globally, but we add specific waits below for the grid
-        browser = p.chromium.launch(headless=False, slow_mo=50) 
+        browser = p.chromium.launch(headless=True, slow_mo=50)
         context = browser.new_context(viewport={'width': 1600, 'height': 900})
         page = context.new_page()
-        
+
         try:
             # --- LOGIN PHASE ---
-            print("   Step 1: Logging in...")
+            logger.info("Step 1: Logging in...")
             _login_to_aeries(page, username, password, LOGIN_URL)
-            
+
             # --- NAVIGATION PHASE ---
-            print("   Step 2: Navigating to Attendance Screen...")
+            logger.info("Step 2: Navigating to Attendance Screen...")
             page.goto(ATTENDANCE_URL, timeout=60000)
-            
+
             try:
                 page.wait_for_selector("select", timeout=30000)
-                print("   ✓ Attendance page loaded")
-            except:
-                print("   ⚠ Page load wait timed out, but continuing...")
+                logger.info("Attendance page loaded")
+            except Exception as e:
+                logger.warning(f"Page load wait timed out, continuing: {e}")
 
             # --- PROCESS EACH PERIOD ---
             for period, students in period_groups.items():
-                print(f"\n   Processing Period {period} ({len(students)} students)...")
+                logger.info(f"Processing Period {period} ({len(students)} students)")
                 failed_students = []  # Track failed students for this period
 
                 # Select the Period
@@ -137,20 +138,20 @@ def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
                                 target_option_label = opt
                                 break
                         if target_select: break
-                    
+
                     if target_select:
                         current_text = target_select.locator("option:checked").inner_text()
                         if target_option_label not in current_text:
-                            print(f"   Switching to: {target_option_label}...")
+                            logger.info(f"Switching to: {target_option_label}")
                             target_select.select_option(label=target_option_label)
-                            page.wait_for_timeout(3000) 
+                            page.wait_for_timeout(3000)
                         else:
-                            print(f"   Already on {target_option_label}")
+                            logger.info(f"Already on {target_option_label}")
                     else:
-                        print(f"   ⚠ Could not find dropdown for Period {period}")
+                        logger.warning(f"Could not find dropdown for Period {period}")
                         continue
                 except Exception as e:
-                    print(f"   ⚠ Error switching period: {e}")
+                    logger.warning(f"Error switching period: {e}")
                     continue
 
                 # Click "All Remaining Students Are Present"
@@ -158,19 +159,22 @@ def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
                     all_present_btn = page.locator("a, input, button").filter(has_text="All Remaining Students Are Present").first
                     if all_present_btn.is_visible():
                         all_present_btn.click()
-                        print("   ✓ Clicked 'All Remaining Students Are Present'")
-                        try: page.keyboard.press("Enter") 
-                        except: pass
+                        logger.info("Clicked 'All Remaining Students Are Present'")
+                        try:
+                            page.keyboard.press("Enter")
+                        except Exception as e:
+                            logger.debug(f"Enter key press after 'All Present' failed: {e}")
                         page.wait_for_timeout(1000)
-                except: pass
+                except Exception as e:
+                    logger.debug(f"'All Remaining Students Are Present' button not found: {e}")
 
                 # --- PROCESS STUDENTS ---
                 updates_count = 0
-                
+
                 for student in students:
                     raw_status = student['Status']
                     student_id = student['StudentID']
-                    
+
                     # 1. NORMALIZE STATUS (Map App codes to Aeries)
                     status = raw_status
                     if raw_status in ['Late', 'Truant', 'Cut', 'Late > 20']:
@@ -191,17 +195,17 @@ def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
                         # 1. Find the exact cell with the student ID using fallback selectors
                         cell, _ = find_element_with_fallback(page, 'student_cell', {'student_id': student_id})
                         if cell.count() == 0:
-                            print(f"        ⚠ Cell not found for ID {student_id}")
+                            logger.warning(f"Cell not found for ID {student_id}")
                             continue
 
                         # 2. Get the specific parent row using XPath ".."
                         row = cell.locator("xpath=..")
-                        
+
                         # 3. Check if attendance is locked for this student
                         locked_indicator = row.locator("span[id$='lblLocked']")
                         if locked_indicator.count() > 0 and locked_indicator.is_visible():
                             locked_text = locked_indicator.inner_text().strip()
-                            print(f"        🔒 Skipping student {student_id}: Locked as '{locked_text}'")
+                            logger.info(f"Skipping student {student_id}: Locked as '{locked_text}'")
                             log_sync_action(
                                 student_id=student_id,
                                 period=period,
@@ -211,14 +215,14 @@ def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
                                 timestamp=datetime.now()
                             )
                             continue
-                            
+
                         # 4. Now search for checkboxes ONLY inside this specific row using fallback selectors
                         absent_box, _ = find_element_with_fallback(row, 'absent_checkbox', {})
                         tardy_box, _ = find_element_with_fallback(row, 'tardy_checkbox', {})
 
                         # Safety check: bypass if boxes aren't found for some reason
                         if absent_box.count() == 0 or tardy_box.count() == 0:
-                            print(f"        ⚠ Skipping student {student_id}: Checkboxes not found")
+                            logger.warning(f"Skipping student {student_id}: Checkboxes not found")
                             continue
 
                         # CAPTURE PRE-CHANGE CHECKBOX STATE (before any checkbox clicks)
@@ -228,7 +232,7 @@ def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
                         # --- CHECKBOX LOGIC WITH DELAYS ---
                         if status == 'Absent':
                             if not was_already_absent:
-                                print(f"      - Marking {student_id} as ABSENT")
+                                logger.info(f"Marking {student_id} as ABSENT")
                                 absent_box.check()
                                 page.wait_for_timeout(500)  # Added Delay
                                 updates_count += 1
@@ -247,7 +251,7 @@ def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
 
                         elif status == 'Tardy':
                             if not was_already_tardy:
-                                print(f"      - Marking {student_id} as TARDY (was '{raw_status}')")
+                                logger.info(f"Marking {student_id} as TARDY (was '{raw_status}')")
                                 tardy_box.check()
                                 page.wait_for_timeout(500)  # Added Delay
                                 updates_count += 1
@@ -268,13 +272,13 @@ def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
                             # Correction logic: Uncheck if they were marked by mistake
                             made_correction = False
                             if was_already_absent:
-                                print(f"      - Correcting {student_id}: Was Absent, now Present")
+                                logger.info(f"Correcting {student_id}: Was Absent, now Present")
                                 absent_box.uncheck()
                                 page.wait_for_timeout(500)  # Added Delay
                                 updates_count += 1
                                 made_correction = True
                             if was_already_tardy:
-                                print(f"      - Correcting {student_id}: Was Tardy, now Present")
+                                logger.info(f"Correcting {student_id}: Was Tardy, now Present")
                                 tardy_box.uncheck()
                                 page.wait_for_timeout(500)  # Added Delay
                                 updates_count += 1
@@ -288,11 +292,11 @@ def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
                                 success=True,
                                 timestamp=datetime.now()
                             )
-                                
+
                     except Exception as e:
                         # Print a shorter error message to avoid cluttering logs
                         error_msg = str(e).split('\n')[0]
-                        print(f"        ❌ Error processing {student_id}: {error_msg}")
+                        logger.error(f"Error processing {student_id}: {error_msg}")
 
                         # Log failed action to audit log
                         log_sync_action(
@@ -314,41 +318,46 @@ def upload_to_aeries(csv_filepath, aeries_base_url, username, password):
                         )
                         failed_students.append(student_id)
 
-                        # Track failure for retry in next sync cycle
+                        # Track failure for retry in next sync cycle (preserve original status)
                         current_failures.append({
                             'student_id': student_id,
                             'period': period,
+                            'status': raw_status,
                             'error': error_msg,
                             'timestamp': datetime.now().isoformat()
                         })
 
                 # Report period summary
                 if failed_students:
-                    print(f"   ✓ Period {period} complete. Updates: {updates_count}, Failed: {len(failed_students)}")
+                    logger.info(f"Period {period} complete. Updates: {updates_count}, Failed: {len(failed_students)}")
                 else:
-                    print(f"   ✓ Period {period} verified. Updates made: {updates_count}")
-            
+                    logger.info(f"Period {period} verified. Updates made: {updates_count}")
+
             # Save
             try:
                 save_btn = page.locator("input[value='Save'], button:has-text('Save')").first
                 if save_btn.is_visible():
                     save_btn.click()
-                    print("   ✓ Clicked Save")
-            except: pass
+                    logger.info("Clicked Save")
+                else:
+                    logger.warning("Save button not visible - changes may not be persisted")
+            except Exception as e:
+                logger.error(f"CRITICAL: Failed to click Save button - changes may be lost: {e}")
+                page.screenshot(path='save_error_state.png')
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             page.screenshot(path=f'aeries_grid_{timestamp}.png', full_page=True)
-            print(f"   📸 Final screenshot saved")
+            logger.info("Final screenshot saved")
 
             # Save any failures for next sync cycle
             if current_failures:
                 save_failed_students(current_failures)
-                print(f"   💾 {len(current_failures)} students saved for retry in next sync")
+                logger.info(f"{len(current_failures)} students saved for retry in next sync")
             else:
                 clear_failed_students()  # All succeeded, clear the retry queue
 
         except Exception as e:
-            print(f"\n❌ Error during automation: {e}")
+            logger.error(f"Error during automation: {e}")
             page.screenshot(path='error_state.png')
             raise
 
@@ -359,5 +368,5 @@ if __name__ == "__main__":
     TEST_CSV = "attendance_2024-12-18.csv"
     USERNAME = os.getenv('AERIES_USER')
     PASSWORD = os.getenv('AERIES_PASS')
-    
-    upload_to_aeries(TEST_CSV, "", USERNAME, PASSWORD)
+
+    upload_to_aeries(TEST_CSV, USERNAME, PASSWORD)

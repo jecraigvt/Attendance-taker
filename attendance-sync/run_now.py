@@ -1,7 +1,8 @@
 import os
 import time
+import logging
 from datetime import datetime
-from attendance_to_aeries import export_attendance_to_csv # <--- ADDED THIS IMPORT
+from attendance_to_aeries import export_attendance_to_csv
 from upload_to_aeries import upload_to_aeries
 
 # --- CONFIG ---
@@ -17,8 +18,10 @@ def cleanup_old_files():
             filepath = os.path.join(FOLDER_PATH, filename)
             file_age = (current_time - os.path.getmtime(filepath)) / day_in_seconds
             if file_age > CLEANUP_DAYS:
-                try: os.remove(os.path.join(FOLDER_PATH, filename))
-                except: pass
+                try:
+                    os.remove(os.path.join(FOLDER_PATH, filename))
+                except Exception as e:
+                    logging.warning(f"Failed to remove old file {filename}: {e}")
 
 if __name__ == "__main__":
     print(f"--- 🚀 Starting Sync Job: {datetime.now().strftime('%H:%M:%S')} ---")
@@ -36,7 +39,7 @@ if __name__ == "__main__":
             
             # STEP 2: Upload that new CSV to Aeries
             print(f"Step 2: Uploading {csv_filename}...")
-            upload_to_aeries(csv_full_path, "", aeries_user, aeries_pass)
+            upload_to_aeries(csv_full_path, aeries_user, aeries_pass)
             
             # STEP 3: Cleanup
             cleanup_old_files()

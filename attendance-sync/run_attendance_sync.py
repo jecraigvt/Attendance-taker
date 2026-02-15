@@ -115,7 +115,6 @@ def sync_attendance_to_aeries(force=False):
     logger.info(header)
     
     # Configuration
-    AERIES_URL = "https://adn.fjuhsd.org/Aeries.net/Login.aspx"
     AERIES_USERNAME = os.getenv('AERIES_USER')
     AERIES_PASSWORD = os.getenv('AERIES_PASS')
     
@@ -143,7 +142,7 @@ def sync_attendance_to_aeries(force=False):
         logger.info("STEP 2: Uploading to Aeries")
         logger.info("-" * 70)
         sync_start_time = datetime.now()  # Record for verification report
-        upload_to_aeries(csv_file, AERIES_URL, AERIES_USERNAME, AERIES_PASSWORD)
+        upload_to_aeries(csv_file, AERIES_USERNAME, AERIES_PASSWORD)
 
         # Step 3: Generate verification report
         logger.info("")
@@ -208,10 +207,10 @@ def sync_attendance_to_aeries(force=False):
                             entry = json.loads(line.strip())
                             if entry.get('timestamp', '').startswith(today_str):
                                 student_failures += 1
-                        except:
-                            pass
-            except:
-                pass
+                        except json.JSONDecodeError:
+                            pass  # Non-JSON lines (e.g. plain-text error entries)
+            except Exception as e:
+                logger.warning(f"Failed to read error log for summary: {e}")
 
         # Success with verification and retry summary
         verification_status = 'PASSED' if verification_passed else 'DISCREPANCIES FOUND'

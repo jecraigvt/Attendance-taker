@@ -68,11 +68,12 @@ Plans:
   2. Bell schedule times are configurable in the system
   3. Tardy status is determined by comparing sign-in time to actual period start time
   4. Analysis shows whether new logic reduces dispute rate
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
+- [ ] 04-01-PLAN.md - Document current tardy logic and analyze edge cases
+- [ ] 04-02-PLAN.md - Implement bell-schedule-based tardy calculation
+- [ ] 04-03-PLAN.md - Validate new logic and analyze projected dispute reduction
 
 ## Progress
 
@@ -84,4 +85,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 1. Core Reliability | 2/2 | Complete | 2026-02-05 |
 | 2. Audit & Verification | 2/2 | Complete | 2026-02-05 |
 | 3. Schedule Improvements | 1/1 | Complete | 2026-02-05 |
-| 4. Tardy Logic Review | 0/TBD | Not started | - |
+| 4. Tardy Logic Review | 0/3 | Not started | - |

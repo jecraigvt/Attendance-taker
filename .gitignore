@@ -1,0 +1,32 @@
+# Credentials & secrets
+attendance-sync/attendance-key.json
+attendance-sync/.env
+*.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Sync artifacts (screenshots, CSVs, logs)
+attendance-sync/aeries_grid_*.png
+attendance-sync/aeries_error_*.png
+attendance-sync/error_state.png
+attendance-sync/login_test.png
+attendance-sync/save_error_state.png
+attendance-sync/attendance_*.csv
+attendance-sync/sync_log_*.txt
+attendance-sync/sync_errors_*.log
+attendance-sync/sync_audit_*.log
+attendance-sync/sync_verification_*
+attendance-sync/daily_summary_*
+attendance-sync/selector_alerts_*.log
+attendance-sync/failed_students.json
+
+# Analysis artifacts
+firebase_analysis.csv
+attendance_corrections.csv
+
+# Temp files
+nul
+diff.txt
+patch.txt

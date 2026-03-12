@@ -172,8 +172,11 @@ def upload_to_aeries(csv_filepath, username, password):
                 updates_count = 0
 
                 for student in students:
-                    raw_status = student['Status']
-                    student_id = student['StudentID']
+                    raw_status = student.get('Status', 'Absent')
+                    student_id = student.get('StudentID', '')
+                    if not student_id:
+                        logger.warning("Skipping student with empty StudentID")
+                        continue
 
                     # 1. NORMALIZE STATUS (Map App codes to Aeries)
                     status = raw_status
@@ -333,17 +336,19 @@ def upload_to_aeries(csv_filepath, username, password):
                 else:
                     logger.info(f"Period {period} verified. Updates made: {updates_count}")
 
-            # Save
+            # Save — scroll to ensure visibility, then click
             try:
                 save_btn = page.locator("input[value='Save'], button:has-text('Save')").first
-                if save_btn.is_visible():
-                    save_btn.click()
-                    logger.info("Clicked Save")
-                else:
-                    logger.warning("Save button not visible - changes may not be persisted")
+                save_btn.scroll_into_view_if_needed(timeout=5000)
+                save_btn.click()
+                logger.info("Clicked Save")
             except Exception as e:
-                logger.error(f"CRITICAL: Failed to click Save button - changes may be lost: {e}")
                 page.screenshot(path='save_error_state.png')
+                raise SyncError(
+                    message=f"Failed to click Save button - changes may be lost: {e}",
+                    error_type='save_failed',
+                    original_exception=e
+                )
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             page.screenshot(path=f'aeries_grid_{timestamp}.png', full_page=True)

@@ -10,16 +10,18 @@ FOLDER_PATH = os.path.dirname(os.path.abspath(__file__))
 CLEANUP_DAYS = 30
 
 def cleanup_old_files():
-    """Deletes old CSVs to keep folder clean"""
+    """Deletes old CSVs and screenshots to keep folder clean"""
     current_time = time.time()
     day_in_seconds = 86400
     for filename in os.listdir(FOLDER_PATH):
-        if filename.startswith("attendance_") and filename.endswith(".csv"):
+        is_old_csv = filename.startswith("attendance_") and filename.endswith(".csv")
+        is_old_screenshot = filename.startswith("aeries_grid_") and filename.endswith(".png")
+        if is_old_csv or is_old_screenshot:
             filepath = os.path.join(FOLDER_PATH, filename)
             file_age = (current_time - os.path.getmtime(filepath)) / day_in_seconds
             if file_age > CLEANUP_DAYS:
                 try:
-                    os.remove(os.path.join(FOLDER_PATH, filename))
+                    os.remove(filepath)
                 except Exception as e:
                     logging.warning(f"Failed to remove old file {filename}: {e}")
 
@@ -34,12 +36,11 @@ if __name__ == "__main__":
         try:
             # STEP 1: Fetch latest data from Firebase (Creates the CSV)
             print("Step 1: Fetching from Firebase...")
-            csv_filename = export_attendance_to_csv(today_str)
-            csv_full_path = os.path.join(FOLDER_PATH, csv_filename)
-            
+            csv_path = export_attendance_to_csv(today_str)
+
             # STEP 2: Upload that new CSV to Aeries
-            print(f"Step 2: Uploading {csv_filename}...")
-            upload_to_aeries(csv_full_path, aeries_user, aeries_pass)
+            print(f"Step 2: Uploading {os.path.basename(csv_path)}...")
+            upload_to_aeries(csv_path, aeries_user, aeries_pass)
             
             # STEP 3: Cleanup
             cleanup_old_files()

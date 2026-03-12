@@ -50,7 +50,7 @@ SYNC_SCHEDULE = {
     "14:40": "Late afternoon sync 2",
     "15:00": "Late afternoon sync 3",
     "15:20": "Late afternoon sync 4",
-    "15:40": "Pre-final sync",
+    "15:35": "Pre-final sync",
     "15:45": "END OF DAY - FINAL SYNC"
 }
 
@@ -60,22 +60,26 @@ SYNC_WINDOW_MINUTES = 5
 
 def get_current_sync_label():
     """
-    Check if current time matches a scheduled sync time
-    Returns the label if it's time to sync, None otherwise
+    Check if current time matches a scheduled sync time.
+    Returns the label of the nearest matching sync time, None otherwise.
+    Only matches times at or after the scheduled time (not before).
     """
     now = datetime.now()
-    
-    # Check if we're within the window of a scheduled sync time
+    best_label = None
+    best_diff = float('inf')
+
     for sync_time, label in SYNC_SCHEDULE.items():
         scheduled = datetime.strptime(sync_time, "%H:%M").replace(
             year=now.year, month=now.month, day=now.day
         )
-        diff_minutes = abs((now - scheduled).total_seconds() / 60)
-        
-        if diff_minutes <= SYNC_WINDOW_MINUTES:
-            return label
-    
-    return None
+        diff_minutes = (now - scheduled).total_seconds() / 60
+
+        # Only match if we're at or past the scheduled time, within the window
+        if 0 <= diff_minutes <= SYNC_WINDOW_MINUTES and diff_minutes < best_diff:
+            best_diff = diff_minutes
+            best_label = label
+
+    return best_label
 
 
 def sync_attendance_to_aeries(force=False):
@@ -143,6 +147,7 @@ def sync_attendance_to_aeries(force=False):
         logger.info("-" * 70)
         sync_start_time = datetime.now()  # Record for verification report
         upload_to_aeries(csv_file, AERIES_USERNAME, AERIES_PASSWORD)
+        logger.info(f"Using CSV: {csv_file}")
 
         # Step 3: Generate verification report
         logger.info("")

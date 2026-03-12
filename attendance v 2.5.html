@@ -474,7 +474,7 @@
     const FRONT_SET = new Set([1, 2, 12, 13]);  // "front of room" groups
     const LATE_TO_THIRD = new Set([9, 10]);   // groups that should be last to receive a 3rd person
     const TARDY_AFTER_NTH = 5;              // Start marking tardy after Nth sign-in for the period
-    const TARDY_GRACE_MINUTES = 8;           // Minutes after Nth sign-in before marking late
+    const TARDY_GRACE_MINUTES = 5;           // Minutes after Nth sign-in before marking late
     const PERIOD_SWITCH_NTH = 2;             // Switch global period after Nth student from new period
 
     // CSV RFC 4180 quoting — doubles internal quotes
@@ -1011,11 +1011,11 @@
           const id = String(s.StudentID || '');
           const last4 = id.length >= 4 ? id.slice(-4) : id;
           if (!tails.has(last4)) tails.set(last4, []);
-          tails.get(last4).push(`${s.FirstName || ''} ${s.LastName || ''}`);
+          tails.get(last4).push(`${escHtml((s.FirstName || '') + ' ' + (s.LastName || ''))}`);
         });
         tails.forEach((names, tail) => {
           if (tail && names.length > 1) {
-            html += `<div><strong>P.${p} Warning:</strong> ID ending in <strong>${tail}</strong> is shared by: ${names.join(', ')}</div>`;
+            html += `<div><strong>P.${escHtml(p)} Warning:</strong> ID ending in <strong>${escHtml(tail)}</strong> is shared by: ${names.join(', ')}</div>`;
           }
         });
       }
@@ -1044,8 +1044,8 @@
       const r = resolveRosterKey(p);
       const lenCur = (currentRoster || []).length;
       const lenAll = r ? (allRosters[r] || []).length : 0;
-      rosterDebug.innerHTML =
-        p ? `Selected period: <b>${p}</b> • Using roster key: <b>${r || '—'}</b> • currentRoster=${lenCur} • allRosters[${r || '—'}]=${lenAll}`
+      rosterDebug.textContent =
+        p ? `Selected period: ${p} • Using roster key: ${r || '—'} • currentRoster=${lenCur} • allRosters[${r || '—'}]=${lenAll}`
           : 'No period selected';
     }
 
@@ -1236,8 +1236,16 @@
             student = (currentRoster || []).find(s => String(s.StudentID || '').slice(-4) === code);
             wasSmartSwitched = true;
 
+            // Directly fetch attendance for the new period so statusForNow() has accurate data
+            // (onSnapshot may not have fired yet after onPeriodChange)
+            if (db) {
+              const switchDate = nowISODate();
+              const switchColRef = collection(db, `artifacts/${APP_ID}/public/data/attendance/${switchDate}/periods/${p}/students`);
+              const switchSnap = await getDocs(switchColRef);
+              periodAttendanceLog = switchSnap.docs.map(d => d.data());
+            }
+
             showMessage('admin', `Switched to Period ${p}`, `Found you in Period ${p}. Signing in...`);
-            await new Promise(r => setTimeout(r, 500));
           }
         }
         // --- END: SMART SWITCH LOGIC ---
@@ -1334,7 +1342,8 @@
     async function exportCSV() {
       const today = nowISODate();
       const rows = [["Date", "Period", "StudentID", "LastName", "FirstName", "Status", "SignInTime", "Group"]];
-      for (const p of Object.keys(allRosters)) {
+      const masterPeriodList = ["0", "1", "2", "2A", "2B", "3", "4", "5", "6", "7"];
+      for (const p of masterPeriodList) {
         const present = new Map();
         if (db) {
           const colRef = collection(db, `artifacts/${APP_ID}/public/data/attendance/${today}/periods/${p}/students`);
@@ -1543,11 +1552,13 @@
       // 3. Assign Group
       const g = pickGroup(student);
 
-      // 4. Save
+      // 4. Save (skip if already signed in)
       if (db) {
         // Firestore logic
         const ref = doc(db, `artifacts/${APP_ID}/public/data/attendance/${today}/periods/${p}/students/${studentId}`);
         try {
+          const existingSnap = await getDoc(ref);
+          if (existingSnap.exists()) return; // Already signed in — don't overwrite
           await setDoc(ref, buildLogEntry(student, p, status, g, true));
         } catch (err) {
           console.error("Manual check-in failed:", err);
@@ -1555,6 +1566,7 @@
       } else {
         // Local logic
         let list = getLocalLogs(today, p);
+        if (list.find(x => x.StudentID === studentId)) return; // Already signed in
         list.push(buildLogEntry(student, p, status, g, false));
         setLocalLogs(today, p, list);
         periodAttendanceLog = list;

@@ -24,7 +24,7 @@ SELECTOR_STRATEGIES = {
     'student_cell': [
         "td[data-studentid='{student_id}']",           # Primary: data attribute
         "td:has-text('{student_id}')",                 # Fallback 1: text content
-        "//td[contains(@id, '{student_id}')]",         # Fallback 2: XPath id contains
+        "xpath=.//td[contains(@id, '{student_id}')]",  # Fallback 2: XPath id contains (relative)
     ],
     'absent_checkbox': [
         "span[data-cd='A'] input",                     # Primary: data-cd attribute
@@ -39,7 +39,7 @@ SELECTOR_STRATEGIES = {
     'period_dropdown': [
         "select",                                      # Primary: any select
         "select[id*='Period']",                        # Fallback 1: id contains Period
-        "//select[contains(@name, 'Period')]",         # Fallback 2: XPath name contains
+        "xpath=.//select[contains(@name, 'Period')]",  # Fallback 2: XPath name contains (relative)
     ],
 }
 
@@ -456,7 +456,7 @@ def log_sync_failure(
 
         logger.error(
             f"Logged failure: student_id={student_id}, period={period}, "
-            f"error={error[:50]}..."
+            f"error={error[:50]}{'...' if len(error) > 50 else ''}"
         )
     except Exception as e:
         logger.error(f"Failed to write to error log: {e}")
@@ -633,6 +633,10 @@ def _read_csv_students(csv_filepath: str) -> List[Dict]:
                     })
     except Exception as e:
         logger.error(f"Failed to read CSV file {csv_filepath}: {e}")
+        raise
+
+    if not students:
+        logger.warning(f"No student records found in CSV file {csv_filepath}")
 
     return students
 

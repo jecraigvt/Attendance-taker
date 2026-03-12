@@ -29,8 +29,12 @@ def get_db():
     if _db is None:
         if not os.path.exists(FIREBASE_KEY_PATH):
             raise FileNotFoundError(f"Firebase key not found at: {FIREBASE_KEY_PATH}")
-        cred = credentials.Certificate(FIREBASE_KEY_PATH)
-        _app = firebase_admin.initialize_app(cred)
+        try:
+            cred = credentials.Certificate(FIREBASE_KEY_PATH)
+            _app = firebase_admin.initialize_app(cred)
+        except ValueError:
+            # App already initialized (e.g. partial failure on previous call)
+            _app = firebase_admin.get_app()
         _db = firestore.client()
     return _db
 
@@ -83,11 +87,14 @@ def export_attendance_to_csv(date_str):
             
             period_count = 0
             present_count = len(signed_in)
-            
+
             # 3. Generate rows for present and absent students
             for student in roster:
                 student_id = student.get('StudentID', '')
-                
+                if not student_id:
+                    logger.warning(f"   Period {period}: Skipping student with empty StudentID")
+                    continue
+
                 if student_id in signed_in:
                     # Student signed in
                     log = signed_in[student_id]
@@ -115,6 +122,12 @@ def export_attendance_to_csv(date_str):
                     ])
                 period_count += 1
             
+            # Warn about students who signed in but aren't in the roster
+            roster_ids = {student.get('StudentID', '') for student in roster}
+            unrostered = set(signed_in.keys()) - roster_ids
+            if unrostered:
+                logger.warning(f"   Period {period}: {len(unrostered)} signed-in student(s) not in roster: {unrostered}")
+
             total_records += period_count
             absent_count = period_count - present_count
             logger.info(f"   Period {period}: {period_count} records ({present_count} present, {absent_count} absent)")
@@ -126,12 +139,13 @@ def export_attendance_to_csv(date_str):
     if total_records == 0:
         raise Exception("No attendance data found for this date. Make sure students have signed in.")
     
-    # Write to CSV
-    filename = f'attendance_{date_str}.csv'
+    # Write to CSV (use absolute path so it works regardless of CWD)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    filename = os.path.join(script_dir, f'attendance_{date_str}.csv')
     with open(filename, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerows(rows)
-    
+
     logger.info(f"Exported {total_records} total records to {filename}")
     return filename
 

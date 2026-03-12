@@ -35,6 +35,37 @@
     .file-input-button {
       cursor: pointer
     }
+
+    /* Fullscreen Timer */
+    .timer-fs-bg {
+      background: linear-gradient(135deg, #0a0a0b 0%, #1a0a0f 40%, #1c1020 70%, #0a0a0b 100%);
+    }
+
+    .timer-fs-glow {
+      text-shadow: 0 0 40px rgba(185, 28, 28, 0.6), 0 0 80px rgba(185, 28, 28, 0.3);
+    }
+
+    .timer-fs-glow-finished {
+      text-shadow: 0 0 60px rgba(239, 68, 68, 0.8), 0 0 120px rgba(239, 68, 68, 0.4);
+    }
+
+    .timer-fs-ring {
+      box-shadow: 0 0 80px rgba(185, 28, 28, 0.3), inset 0 0 80px rgba(185, 28, 28, 0.05);
+      border: 1px solid rgba(185, 28, 28, 0.2);
+    }
+
+    .timer-fs-orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.15;
+      pointer-events: none;
+    }
+
+    @keyframes timerPulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.85; transform: scale(1.02); }
+    }
   </style>
   <script>
     // Use the SAME app_id on every kiosk so they share data
@@ -77,7 +108,6 @@
                 class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500">
                 <option value="">-- Auto-Detecting --</option>
               </select>
-              <input type="hidden" id="class-start-time" />
             </div>
 
             <!-- Attendance Summary -->
@@ -87,6 +117,7 @@
                 <p>On Time: <span id="summary-ontime" class="font-bold">0</span></p>
                 <p>Late: <span id="summary-late" class="font-bold">0</span></p>
                 <p>Truant: <span id="summary-truant" class="font-bold">0</span></p>
+                <p>Excused: <span id="summary-excused" class="font-bold">0</span></p>
                 <p>Absent: <span id="summary-absent" class="font-bold">0</span></p>
                 <p>Total: <span id="summary-total" class="font-bold">0</span></p>
               </div>
@@ -110,6 +141,28 @@
                 <button id="save-exceptions" class="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700">Save
                   Exceptions</button>
                 <span id="exceptions-status" class="text-xs text-gray-600"></span>
+              </div>
+            </div>
+
+            <!-- Target Timer -->
+            <div class="pt-6 border-t">
+              <div class="flex justify-between items-center mb-2">
+                <h3 class="text-lg font-semibold text-gray-800">Target Timer</h3>
+                <button id="timer-fullscreen-btn"
+                  class="bg-red-600 text-white px-3 py-1 text-xs rounded-md hover:bg-red-700 transition-all">Fullscreen</button>
+              </div>
+              <div class="space-y-3">
+                <div>
+                  <label for="timer-target-input" class="block text-xs font-medium text-gray-700 mb-1">Set Target Time</label>
+                  <input type="time" id="timer-target-input"
+                    class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-lg font-mono" />
+                </div>
+                <div class="bg-gray-100 rounded-lg p-4 text-center border">
+                  <div id="timer-display" class="text-4xl font-bold font-mono text-gray-300 tabular-nums">00:00:00</div>
+                  <p id="timer-status" class="text-xs uppercase tracking-wider mt-2 text-gray-400 font-semibold h-4"></p>
+                </div>
+                <button type="button" id="timer-test-audio"
+                  class="w-full text-xs text-gray-500 border border-gray-300 rounded-md py-1 hover:bg-gray-100 transition-all">Test Alarm Tone</button>
               </div>
             </div>
 
@@ -188,22 +241,6 @@
                 rosters</button>
             </div>
 
-            <!-- Schedule Management (LOWEST PRIORITY) -->
-            <div class="pt-6 border-t">
-              <h3 class="text-lg font-semibold text-gray-800 mb-2">Schedule Management (One-Time Upload)</h3>
-              <p class="text-xs text-gray-500 mb-2">Upload the school schedule CSV to populate Firestore. This only
-                needs to be done once per school year, or if schedules change.</p>
-
-              <input type="file" id="schedule-csv-upload" accept=".csv" class="hidden" />
-              <label for="schedule-csv-upload"
-                class="file-input-button w-full text-center bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition-all">Select
-                Schedule CSV File</label>
-
-              <button id="upload-schedules-btn"
-                class="w-full mt-4 bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50"
-                disabled>Parse & Upload to Firebase</button>
-              <div id="upload-status" class="text-sm mt-2 font-medium text-center"></div>
-            </div>
 
             <!-- Kiosk Mode Button -->
             <div class="pt-6 border-t">
@@ -232,10 +269,6 @@
             class="w-full mt-6 bg-red-700 text-white font-bold text-xl py-4 rounded-lg shadow-md hover:bg-red-800 transform hover:-translate-y-1 transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-white disabled:opacity-50 disabled:transform-none"
             disabled>Sign In</button>
 
-          <div id="student-schedule-display" class="mt-8 text-center">
-            <h3 id="student-schedule-name" class="text-xl font-semibold text-gray-300"></h3>
-            <div id="student-bell-schedule" class="mt-2 text-sm text-gray-400 grid grid-cols-2 gap-x-4"></div>
-          </div>
         </div>
 
         <div id="message-view" class="w-full max-w-md text-center hidden"></div>
@@ -243,6 +276,26 @@
 
     </div><!-- flex -->
   </div><!-- container -->
+
+  <!-- Fullscreen Timer Overlay -->
+  <div id="timer-fullscreen" class="hidden fixed inset-0 timer-fs-bg text-white z-50 overflow-hidden">
+    <div class="timer-fs-orb" style="width:500px;height:500px;background:#b91c1c;top:-150px;left:-100px;"></div>
+    <div class="timer-fs-orb" style="width:600px;height:600px;background:#7f1d1d;bottom:-200px;right:-150px;"></div>
+
+    <button id="timer-fs-close"
+      class="absolute top-4 right-6 text-5xl font-bold text-gray-500 hover:text-white transition-colors z-10">&times;</button>
+
+    <div class="relative z-10 flex flex-col items-center justify-center h-full">
+      <div class="timer-fs-ring rounded-3xl px-16 py-12 text-center" style="backdrop-filter:blur(20px);background:rgba(0,0,0,0.4);">
+        <p class="text-sm uppercase tracking-[0.25em] text-gray-400 font-semibold mb-6">Target Timer</p>
+        <div id="timer-fs-display" class="text-8xl md:text-9xl font-bold font-mono tabular-nums text-gray-500 timer-fs-glow select-none">
+          00:00:00
+        </div>
+        <p id="timer-fs-status" class="text-sm uppercase tracking-[0.2em] mt-6 font-semibold h-5 text-gray-500"></p>
+      </div>
+      <p class="mt-8 text-xs text-gray-600 tracking-wider">Press Escape to close</p>
+    </div>
+  </div>
 
   <div id="group-display-fullscreen" class="hidden fixed inset-0 bg-gray-900 text-white z-50 p-8 md:p-12">
     <button id="close-group-display-btn"
@@ -288,162 +341,33 @@
         if (l.Group && map.has(l.Group)) map.get(l.Group).push(l.Name);
       });
 
-      fullscreenListEl.innerHTML = '';
+      fullscreenListEl.replaceChildren();
       if (periodAttendanceLog.length === 0) {
-        fullscreenListEl.innerHTML = '<p class="col-span-full text-center text-gray-400 text-xl">Students will appear here as they sign in.</p>';
+        const p = document.createElement('p');
+        p.className = 'col-span-full text-center text-gray-400 text-xl';
+        p.textContent = 'Students will appear here as they sign in.';
+        fullscreenListEl.appendChild(p);
       } else {
         map.forEach((arr, grp) => {
           if (arr.length > 0) {
             const div = document.createElement('div');
-            div.innerHTML = `<h4 class="font-bold text-2xl text-red-500 mb-2">Group ${grp} (${arr.length})</h4><ul class="text-xl space-y-1">${arr.map(n => `<li>${n}</li>`).join('')}</ul>`;
+            const h4 = document.createElement('h4');
+            h4.className = 'font-bold text-2xl text-red-500 mb-2';
+            h4.textContent = `Group ${grp} (${arr.length})`;
+            const ul = document.createElement('ul');
+            ul.className = 'text-xl space-y-1';
+            arr.forEach(n => {
+              const li = document.createElement('li');
+              li.textContent = n;
+              ul.appendChild(li);
+            });
+            div.append(h4, ul);
             fullscreenListEl.appendChild(div);
           }
         });
       }
     }
 
-    // ===== SCHEDULE PARSER & UPLOADER =====
-
-    // Helper function to convert time like "1:30 PM" to "13:30"
-    function convertTo24Hour(timeStr) {
-      if (!timeStr || typeof timeStr !== 'string') return '';
-      const lowerTime = timeStr.toLowerCase();
-      let [time, modifier] = lowerTime.split(' ');
-      let [hours, minutes] = time.split(':');
-
-      if (hours === '12') {
-        hours = '00';
-      }
-      if (modifier === 'pm' || modifier === 'p.m.') {
-        hours = parseInt(hours, 10) + 12;
-      }
-      return `${String(hours).padStart(2, '0')}:${minutes}`;
-    }
-
-    // Helper function to format dates from M/D/YY to YYYY-MM-DD
-    function formatCSVDate(dateStr) {
-      const d = new Date(dateStr);
-      // Add a day to correct for potential timezone offset issues during parsing
-      d.setDate(d.getDate() + 1);
-      return d.toISOString().slice(0, 10);
-    }
-
-    async function handleScheduleUpload() {
-      const fileInput = document.getElementById('schedule-csv-upload');
-      const statusEl = document.getElementById('upload-status');
-      const uploadBtn = document.getElementById('upload-schedules-btn');
-
-      if (!fileInput.files || fileInput.files.length === 0) {
-        statusEl.textContent = 'Please select a file first.';
-        return;
-      }
-
-      uploadBtn.disabled = true;
-      statusEl.textContent = 'Parsing CSV file...';
-      statusEl.classList.remove('text-red-600', 'text-green-600');
-
-      function formatCSVDate(dateStr) {
-        const parts = dateStr.split('/');
-        if (parts.length !== 3) return null;
-        const m = parts[0].padStart(2, '0');
-        const d = parts[1].padStart(2, '0');
-        const y = parseInt(parts[2], 10) < 50 ? `20${parts[2]}` : `19${parts[2]}`;
-        return `${y}-${m}-${d}`;
-      }
-
-      const file = fileInput.files[0];
-      const text = await file.text();
-      const lines = text.split(/\r?\n/);
-
-      const bellSchedules = {};
-      const calendarData = {};
-      let currentScheduleName = null;
-
-      for (const line of lines) {
-        const cells = line.split(',');
-
-        let isHeader = false;
-        for (const cell of cells) {
-          if (cell.trim().endsWith("Schedule")) {
-            currentScheduleName = cell.trim();
-            if (!bellSchedules[currentScheduleName]) {
-              bellSchedules[currentScheduleName] = {};
-            }
-            isHeader = true;
-            break;
-          }
-        }
-        if (isHeader) continue;
-
-
-        const periodText = cells[6] || '';
-        const timeText = cells[2] || '';
-        if (periodText.toLowerCase().includes('period') && timeText) {
-          const periodMatch = periodText.match(/Period\s*([0-9A-Z]+)/i);
-          if (periodMatch && periodMatch[1] && currentScheduleName) {
-            const periodNumber = periodMatch[1].toUpperCase();
-            const startTime24 = convertTo24Hour(timeText);
-            bellSchedules[currentScheduleName][periodNumber] = startTime24;
-          }
-        }
-
-        if (cells.join(',').toLowerCase().includes('date(s):') || cells.join(',').toLowerCase().includes('date:')) {
-          if (currentScheduleName) {
-            const datesCombined = cells.slice(3).join(',').replace(/"/g, '');
-            const dateEntries = datesCombined.split(',').map(d => d.trim()).filter(Boolean);
-
-            for (const dateEntry of dateEntries) {
-              const dateMatch = dateEntry.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/);
-              if (!dateMatch) continue;
-
-              const formattedDate = formatCSVDate(dateMatch[1]);
-              if (formattedDate) {
-                const cleanName = currentScheduleName.replace(' Schedule', '').replace('/PLC', '').replace('/', '-');
-                calendarData[formattedDate] = cleanName;
-              }
-            }
-          }
-        }
-      }
-
-      statusEl.textContent = 'Parsing complete. Uploading to Firebase...';
-
-      if (!db) {
-        statusEl.textContent = 'Error: Firebase is not connected.';
-        statusEl.classList.add('text-red-600');
-        uploadBtn.disabled = false;
-        return;
-      }
-
-      try {
-        const uploadPromises = [];
-
-        for (const scheduleName in bellSchedules) {
-          const cleanName = scheduleName.replace(' Schedule', '').replace('/PLC', '').replace('/', '-');
-          if (Object.keys(bellSchedules[scheduleName]).length > 0) {
-            const docRef = doc(db, `artifacts/${APP_ID}/public/schedules/bell_schedules/${cleanName}`);
-            uploadPromises.push(setDoc(docRef, bellSchedules[scheduleName]));
-          }
-        }
-
-        const calendarRef = doc(db, `artifacts/${APP_ID}/public/schedules/calendar/main`);
-        uploadPromises.push(setDoc(calendarRef, { dates: calendarData }));
-
-        await Promise.all(uploadPromises);
-
-        // Refresh in-memory schedules so current session reflects the upload
-        await loadSchedulesFromFirebase();
-
-        statusEl.textContent = 'Success! All schedules and calendar dates have been uploaded.';
-        statusEl.classList.add('text-green-600');
-
-      } catch (err) {
-        console.error("Schedule upload failed:", err);
-        statusEl.textContent = 'Error during upload. Check the console for details.';
-        statusEl.classList.add('text-red-600');
-        uploadBtn.disabled = false;
-      }
-    }
 
     async function exportDateRangeCSV() {
       const startDateInput = document.getElementById('start-date');
@@ -483,50 +407,35 @@
       }
 
       try {
+        const fetchTasks = [];
         for (const date of datesToCheck) {
           for (const period of masterPeriodList) {
-            const basePath = `artifacts/${APP_ID}/public/data/attendance/${date}/periods/${period}`;
+            fetchTasks.push((async () => {
+              const basePath = `artifacts/${APP_ID}/public/data/attendance/${date}/periods/${period}`;
+              const rosterDocRef = doc(db, basePath);
+              const rosterDoc = await getDoc(rosterDocRef);
+              const roster = rosterDoc.exists() && rosterDoc.data().roster_snapshot ? rosterDoc.data().roster_snapshot : [];
+              if (roster.length === 0) return [];
 
-            const rosterDocRef = doc(db, basePath);
-            const rosterDoc = await getDoc(rosterDocRef);
-            const roster = rosterDoc.exists() && rosterDoc.data().roster_snapshot ? rosterDoc.data().roster_snapshot : [];
+              const studentsSnapshot = await getDocs(collection(db, `${basePath}/students`));
+              const presentStudents = new Map();
+              studentsSnapshot.forEach(d => presentStudents.set(d.data().StudentID, d.data()));
 
-            if (roster.length === 0) continue;
-
-            const studentsCollectionRef = collection(db, `${basePath}/students`);
-            const studentsSnapshot = await getDocs(studentsCollectionRef);
-
-            const presentStudents = new Map();
-            studentsSnapshot.forEach(doc => presentStudents.set(doc.data().StudentID, doc.data()));
-
-            for (const student of roster) {
-              if (presentStudents.has(student.StudentID)) {
-                const log = presentStudents.get(student.StudentID);
-                rows.push([
-                  date,
-                  period,
-                  student.StudentID,
-                  `"${student.LastName || ''}"`,
-                  `"${student.FirstName || ''}"`,
-                  log.Status,
-                  log.SignInTime,
-                  log.Group
-                ]);
-              } else {
-                rows.push([
-                  date,
-                  period,
-                  student.StudentID,
-                  `"${student.LastName || ''}"`,
-                  `"${student.FirstName || ''}"`,
-                  'Absent',
-                  'N/A',
-                  'N/A'
-                ]);
+              const periodRows = [];
+              for (const student of roster) {
+                if (presentStudents.has(student.StudentID)) {
+                  const log = presentStudents.get(student.StudentID);
+                  periodRows.push([date, period, student.StudentID, csvQuote(student.LastName || ''), csvQuote(student.FirstName || ''), log.Status, log.SignInTime, log.Group]);
+                } else {
+                  periodRows.push([date, period, student.StudentID, csvQuote(student.LastName || ''), csvQuote(student.FirstName || ''), 'Absent', 'N/A', 'N/A']);
+                }
               }
-            }
+              return periodRows;
+            })());
           }
         }
+        const results = await Promise.all(fetchTasks);
+        for (const periodRows of results) rows.push(...periodRows);
 
         if (rows.length <= 1) {
           statusEl.textContent = 'No attendance entries (with saved rosters) were found in the selected date range.';
@@ -556,16 +465,34 @@
     // ===== Import modern Firebase SDK =====
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-    import { getFirestore, collection, doc, onSnapshot, setDoc, serverTimestamp, getDoc, addDoc, where, query, getDocs, deleteDoc, documentId } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getFirestore, initializeFirestore, persistentLocalCache, collection, doc, onSnapshot, setDoc, serverTimestamp, getDoc, addDoc, where, query, getDocs, deleteDoc, documentId } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     // ===== Config & Constants =====
     const TEACHER_CODE = "****";            // change in one place
-    const PASSING_MIN = 7;                   // minutes before next bell to switch
     const MAX_GROUP = 13;                    // groups 1..13
     const GROUP_CAP = g => g === 6 ? 2 : 3;    // cap 2 for group 6, else 3
     const FRONT_SET = new Set([1, 2, 12, 13]);  // "front of room" groups
     const LATE_TO_THIRD = new Set([9, 10]);   // groups that should be last to receive a 3rd person
-    const TARDY_GRACE_MINUTES = 5;           // Minutes after bell before marking late
+    const TARDY_AFTER_NTH = 5;              // Start marking tardy after Nth sign-in for the period
+    const TARDY_GRACE_MINUTES = 8;           // Minutes after Nth sign-in before marking late
+    const PERIOD_SWITCH_NTH = 2;             // Switch global period after Nth student from new period
+
+    // CSV RFC 4180 quoting — doubles internal quotes
+    const csvQuote = s => '"' + String(s).replace(/"/g, '""') + '"';
+
+    // Build a log entry object (shared by handleSignIn and manualCheckIn)
+    function buildLogEntry(student, period, status, group, useServerTimestamp) {
+      return {
+        Date: new Date().toLocaleDateString(),
+        StudentID: student.StudentID,
+        Name: `${student.FirstName} ${student.LastName}`,
+        SignInTime: new Date().toLocaleTimeString(),
+        Status: status,
+        Group: group,
+        Period: period,
+        Timestamp: useServerTimestamp ? serverTimestamp() : Date.now()
+      };
+    }
 
     // Cloud config passed in by host page (optional)
     const APP_ID = typeof window.__app_id === 'string' ? window.__app_id : 'demo-app';
@@ -574,79 +501,14 @@
     let db = null, auth = null;
     let unsubRosters = null, unsubExceptions = null, unsubAttendance = null;
 
-    // ===== Calendars & Schedules =====
-    let calendarData = {
-      "2025-08-14": "Late Start",
-      "2025-08-15": "Assembly Schedule",
-      "2025-08-21": "Back to School Night",
-      "2025-09-01": "Holiday",
-      "2025-10-16": "Shake Out",
-      "2025-10-23": "Late Start",
-      "2025-11-03": "No Students",
-      "2025-11-06": "Late Start",
-      "2025-11-11": "Holiday",
-      "2025-11-20": "Late Start",
-      "2025-11-24": "Thanksgiving Week",
-      "2025-11-25": "Thanksgiving Week",
-      "2025-11-26": "Thanksgiving Week",
-      "2025-11-27": "Holiday",
-      "2025-11-28": "Holiday",
-      "2025-12-04": "Late Start",
-      "2025-12-11": "Late Start",
-      "2025-12-19": "Finals",
-      "2025-12-22": "Winter Break",
-      "2026-01-08": "Late Start",
-      "2026-01-19": "Holiday",
-      "2026-01-20": "Holiday",
-      "2026-01-22": "Late Start",
-      "2026-02-05": "Late Start",
-      "2026-02-13": "Holiday",
-      "2026-02-16": "Holiday",
-      "2026-02-19": "Late Start",
-      "2026-03-05": "Late Start",
-      "2026-03-12": "Min Day",
-      "2026-03-13": "No Students",
-      "2026-03-26": "Late Start",
-      "2026-04-06": "Spring Break",
-      "2026-04-09": "Late Start",
-      "2026-04-23": "Late Start",
-      "2026-05-07": "Late Start",
-      "2026-05-14": "Late Start",
-      "2026-05-25": "Holiday",
-      "2026-06-02": "Finals",
-      "2026-06-03": "Finals",
-      "2026-06-04": "Finals"
-    };
-    let bellSchedules = {
-      Regular: { 0: "07:28", 1: "08:30", 2: "09:32", 3: "10:52", 4: "11:54", 5: "13:31", 6: "14:33" },
-      "Late Start": { 0: "08:37", 1: "09:30", 2: "10:23", 3: "11:28", 4: "12:21", 5: "13:49", 6: "14:42", 7: "15:45" },
-      "Assembly Schedule": { 0: "07:37", 1: "08:30", "2A": "09:23", "2B": "10:20", 3: "11:27", 4: "12:20", 5: "13:52", 6: "14:45" },
-      "Back to School Night": { 0: "07:28", 1: "08:30", 2: "09:12", 3: "09:54", 4: "10:36", 5: "11:18", 6: "12:00" },
-      Finals: { 0: "07:28", 2: "08:30", 4: "10:50", 6: "13:30" },
-      "Min Day": { 0: "07:28", 1: "08:30", 2: "09:15", 3: "10:05", 4: "10:50", 5: "11:35", 6: "12:20" },
-      Default: { 0: "07:28", 1: "08:30", 2: "09:32", 3: "10:52", 4: "11:54", 5: "13:31", 6: "14:33" }
-    };
-
-    // Get period start time as Date object for today
-    function getPeriodStartTime(period, schedule) {
-      const sched = bellSchedules[schedule] || bellSchedules.Default;
-      const timeStr = sched[period];
-      if (!timeStr) return null;
-
-      const [h, m] = timeStr.split(':').map(x => parseInt(x, 10));
-      const d = new Date();
-      d.setHours(h, m, 0, 0);
-      return d;
-    }
 
     // ===== State =====
     let allRosters = {};      // { period -> [{StudentID,LastName,FirstName}, ...] }
     let currentRoster = [];   // active period roster array
     let periodAttendanceLog = []; // sign-ins for current period
-    let scheduleName = 'Default';
+    let globalPeriod = null;          // current period from Firebase (shared across kiosks)
+    let unsubCurrentPeriod = null;    // listener for currentPeriod doc
     let isOverride = false;
-    let autoTimer = null;
-    let lastDetect = null;
 
     let exceptions = { avoidPairs: [], frontRow: new Set() };
 
@@ -657,7 +519,6 @@
     const kioskPanel = $('#kiosk-panel');
     const currentDateDisplay = $('#current-date');
     const periodSelect = $('#period-select');
-    const classStartTimeInput = $('#class-start-time');
     const rosterUpload = $('#roster-upload');
     const rosterStatus = $('#roster-status');
     const rosterWarning = $('#roster-warning');
@@ -676,8 +537,6 @@
     const summaryTotal = $('#summary-total');
     const absentListEl = $('#absent-list');
     const groupReportEl = $('#group-report');
-    const studentScheduleNameEl = $('#student-schedule-name');
-    const studentBellScheduleEl = $('#student-bell-schedule');
     const frontRowInput = $('#front-row-input');
     const avoidPairsInput = $('#avoid-pairs-input');
     const saveExceptionsBtn = $('#save-exceptions');
@@ -687,7 +546,6 @@
     // ===== Helpers =====
     const nowISODate = () => new Date().toISOString().slice(0, 10);
     const fmtTime = d => { try { return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch { return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); } };
-    const startAt = hhmm => { const [h, m] = hhmm.split(':').map(x => parseInt(x, 10)); const d = new Date(); d.setHours(h || 0, m || 0, 0, 0); return d; };
 
     // BOM-safe normalization
     const linesFromText = t =>
@@ -700,7 +558,7 @@
     const localLogCache = new Map();
     const keyFor = (date, period) => `${date}|${period}`;
     const getLocalLogs = (date, period) => { const k = keyFor(date, period); if (!localLogCache.has(k)) { const s = localStorage.getItem('logs:' + k); localLogCache.set(k, s ? JSON.parse(s) : []); } return localLogCache.get(k); };
-    const setLocalLogs = (date, period, list) => { const k = keyFor(date, period); localLogCache.set(k, list); localStorage.setItem('logs:' + k, JSON.stringify(list)); };
+    const setLocalLogs = (date, period, list) => { const k = keyFor(date, period); localLogCache.set(k, list); try { localStorage.setItem('logs:' + k, JSON.stringify(list)); } catch (e) { console.warn('localStorage full, attendance saved in memory only:', e); } };
 
     // Resolve roster key, e.g., "2A"/"2B" -> "2" if that roster exists
     function resolveRosterKey(p) {
@@ -711,24 +569,50 @@
       return null;
     }
 
-    // ===== Auto-detect period =====
-    function detectPeriod(at = new Date()) {
-      const sched = bellSchedules[scheduleName] || bellSchedules.Default;
-      const periods = Object.keys(sched);
-      const info = { detected: null, mode: 'unknown', reason: '', nextPeriod: null, nextTime: null, currentTime: fmtTime(at) };
-      if (periods.length === 0) { info.reason = 'no periods defined for schedule'; return info; }
-      for (let i = 0; i < periods.length; i++) {
-        const cur = periods[i]; const start = startAt(sched[cur]);
-        const hasNext = i + 1 < periods.length; const nxt = hasNext ? periods[i + 1] : null;
-        const nextStart = hasNext ? startAt(sched[nxt]) : null;
-        const switchAt = nextStart ? new Date(nextStart.getTime() - PASSING_MIN * 60 * 1000) : null;
-        if (i === 0 && at < start) { info.detected = cur; info.mode = 'preFirst'; info.reason = 'before first bell'; info.nextPeriod = cur; info.nextTime = sched[cur]; return info; }
-        if (nextStart) {
-          if (at >= switchAt && at < nextStart) { info.detected = nxt; info.mode = 'passing'; info.reason = 'passing time'; info.nextPeriod = nxt; info.nextTime = sched[nxt]; return info; }
-          if (at >= start && at < switchAt) { info.detected = cur; info.mode = 'during'; info.reason = 'class in session'; info.nextPeriod = nxt; info.nextTime = sched[nxt]; return info; }
-        } else if (at >= start) { info.detected = cur; info.mode = 'afterLast'; info.reason = 'after last switch'; return info; }
+    // ===== Period switching via Firebase =====
+    // Convert Firestore Timestamp or number to milliseconds
+    function toMs(ts) {
+      if (!ts) return 0;
+      if (typeof ts === 'number') return ts;
+      if (ts.toMillis) return ts.toMillis();
+      if (ts.seconds) return ts.seconds * 1000;
+      return new Date(ts).getTime();
+    }
+
+    // Update the global period in Firebase (triggers all kiosks to switch)
+    async function setGlobalPeriod(period) {
+      if (!db) return;
+      const today = nowISODate();
+      const periodDocRef = doc(db, `artifacts/${APP_ID}/public/data/attendance/${today}/currentPeriod`);
+      await setDoc(periodDocRef, { period, updatedAt: serverTimestamp() }, { merge: true });
+    }
+
+    // Start listening for currentPeriod changes from Firebase
+    function watchCurrentPeriod() {
+      if (!db) return;
+      const today = nowISODate();
+      const periodDocRef = doc(db, `artifacts/${APP_ID}/public/data/attendance/${today}/currentPeriod`);
+      unsubCurrentPeriod = onSnapshot(periodDocRef, snap => {
+        if (!snap.exists()) return;
+        const data = snap.data();
+        if (data.period && data.period !== globalPeriod && !isOverride) {
+          globalPeriod = data.period;
+          console.log(`[watchCurrentPeriod] Period switched to ${globalPeriod}`);
+          periodSelect.value = globalPeriod;
+          onPeriodChange();
+        }
+      });
+    }
+
+    // Check if enough students have signed in to trigger a global period switch
+    async function maybeUpdateGlobalPeriod(period) {
+      if (!db || period === globalPeriod) return;
+      const count = periodAttendanceLog.length;
+      if (count >= PERIOD_SWITCH_NTH) {
+        console.log(`[maybeUpdateGlobalPeriod] ${count} students in P.${period}, switching globally`);
+        globalPeriod = period;
+        setGlobalPeriod(period).catch(e => console.error("Period switch error:", e));
       }
-      info.detected = periods[periods.length - 1]; info.mode = 'fallback'; info.reason = 'time outside expected windows'; return info;
     }
 
     // ===== Init =====
@@ -737,27 +621,36 @@
       try {
         console.log('[init] starting');
         await initFirebase(); // Use new Firebase init function
-        if (db) await loadSchedulesFromFirebase();
         if (db) watchRostersFromCloud();
         loadRostersLocal();
         loadExceptions();
         renderRosterSummary();
         renderRosterDebug();
 
-        // date + schedule setup
+        // date setup
         const today = new Date();
-        const dateString = nowISODate();
         currentDateDisplay.textContent = today.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-        const note = calendarData[dateString] || 'Regular';
-        const noSchool = /holiday|no student|break/i.test(note);
-        scheduleName = noSchool ? 'No School' : note;
-        const todays = bellSchedules[scheduleName] || bellSchedules.Default;
-        periodSelect.innerHTML = '<option value="">-- Auto-Detecting --</option>' + Object.keys(todays).map(p => `<option value="${p}">Period ${p} (${todays[p]})</option>`).join('');
-        studentScheduleNameEl.textContent = scheduleName;
-        studentBellScheduleEl.innerHTML = Object.keys(todays).map(p => `<div><strong>P ${p}:</strong> ${todays[p]}</div>`).join('');
 
+        // Populate period dropdown from rosters (values are safe roster keys like "0","1","2A")
+        const rosterPeriods = Object.keys(allRosters).sort((a, b) => {
+          const na = parseFloat(a) || 0, nb = parseFloat(b) || 0;
+          return na - nb || a.localeCompare(b);
+        });
+        periodSelect.textContent = '';
+        const defaultOpt = document.createElement('option');
+        defaultOpt.value = '';
+        defaultOpt.textContent = '-- Waiting for students --';
+        periodSelect.appendChild(defaultOpt);
+        rosterPeriods.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p;
+          opt.textContent = `Period ${p}`;
+          periodSelect.appendChild(opt);
+        });
+
+        // Start listening for period changes from Firebase
+        if (db) watchCurrentPeriod();
         if (sessionStorage.getItem('periodOverride') === 'true') { isOverride = true; }
-        else { doDetectAndMaybeSwitch(); autoTimer = setInterval(doDetectAndMaybeSwitch, 30000); }
 
         // listeners
         const displayGroupsBtn = document.getElementById('display-groups-btn');
@@ -775,16 +668,6 @@
             hideGroupDisplay();
           }
         });
-
-        const scheduleFileInput = document.getElementById('schedule-csv-upload');
-        const uploadSchedulesBtn = document.getElementById('upload-schedules-btn');
-
-        if (scheduleFileInput && uploadSchedulesBtn) {
-          scheduleFileInput.addEventListener('change', () => {
-            uploadSchedulesBtn.disabled = scheduleFileInput.files.length === 0;
-          });
-          uploadSchedulesBtn.addEventListener('click', handleScheduleUpload);
-        }
 
         periodSelect.addEventListener('change', () => { isOverride = true; sessionStorage.setItem('periodOverride', 'true'); onPeriodChange(); });
         rosterUpload.addEventListener('change', onRosterUpload);
@@ -804,7 +687,7 @@
 
         updateUI();
         studentIdInput.focus();
-        try { runParseTests(); runDetectTests(); runGroupTests(); runCSVEdgeTests(); } catch { }
+        try { runParseTests(); runGroupTests(); runCSVEdgeTests(); } catch { }
       } catch (err) {
         console.error('[init] fatal', err);
         alert('Init error: ' + (err && err.message ? err.message : err));
@@ -816,44 +699,22 @@
       if (!FB_CONFIG) { rosterStatus.textContent = 'Local Mode: data saved in this browser.'; rosterStatus.classList.add('text-green-600'); return; }
       try {
         const app = initializeApp(FB_CONFIG);
-        db = getFirestore(app);
+        // Use modern persistent cache API (replaces deprecated enableIndexedDbPersistence)
+        try {
+          db = initializeFirestore(app, {
+            localCache: persistentLocalCache()
+          });
+          console.log('[initFirebase] Offline persistence enabled');
+        } catch (persistErr) {
+          console.warn('[initFirebase] Persistent cache unavailable, using default:', persistErr.message);
+          db = getFirestore(app);
+        }
         auth = getAuth(app);
         await signInAnonymously(auth);
-        rosterStatus.textContent = 'Cloud Sync Ready: rosters and exceptions will sync.';
+        rosterStatus.textContent = 'Cloud Sync Ready (offline-capable): rosters and exceptions will sync.';
       } catch (err) { console.error(err); rosterStatus.textContent = 'Cloud error — Local Mode enabled.'; rosterStatus.classList.add('text-red-600'); db = null; auth = null; }
     }
 
-    async function loadSchedulesFromFirebase() {
-      try {
-        // Load bell schedules
-        const bellSnap = await getDocs(collection(db, `artifacts/${APP_ID}/public/schedules/bell_schedules`));
-        if (!bellSnap.empty) {
-          const loaded = {};
-          bellSnap.forEach(d => { loaded[d.id] = d.data(); });
-          bellSchedules = loaded;
-          if (!bellSchedules.Default) {
-            bellSchedules.Default = bellSchedules.Regular || Object.values(bellSchedules)[0];
-          }
-          console.log('[loadSchedules] bell schedules loaded from Firebase:', Object.keys(bellSchedules));
-        } else {
-          console.log('[loadSchedules] no bell schedules in Firebase, using hardcoded');
-        }
-
-        // Load calendar data
-        const calSnap = await getDoc(doc(db, `artifacts/${APP_ID}/public/schedules/calendar/main`));
-        if (calSnap.exists()) {
-          const data = calSnap.data();
-          if (data.dates && typeof data.dates === 'object') {
-            calendarData = data.dates;
-            console.log('[loadSchedules] calendar loaded from Firebase:', Object.keys(calendarData).length, 'dates');
-          }
-        } else {
-          console.log('[loadSchedules] no calendar in Firebase, using hardcoded');
-        }
-      } catch (err) {
-        console.warn('[loadSchedules] failed to load from Firebase, using hardcoded fallback:', err);
-      }
-    }
 
     // ===== Rosters: load/save/watch =====
     function loadRostersLocal() {
@@ -868,16 +729,16 @@
       const colRef = collection(db, `artifacts/${APP_ID}/public/rosters/periods`);
       unsubRosters = onSnapshot(colRef, snap => {
         const incoming = {};
-        snap.forEach(doc => {
-          const d = doc.data();
-          const p = String(doc.id);
-          if (Array.isArray(d.roster)) {
-            incoming[p] = d.roster;
+        snap.forEach(d => {
+          const data = d.data();
+          const p = String(d.id);
+          if (Array.isArray(data.roster)) {
+            incoming[p] = data.roster;
           }
         });
 
         allRosters = { ...allRosters, ...incoming };
-        localStorage.setItem('allRosters', JSON.stringify(allRosters));
+        try { localStorage.setItem('allRosters', JSON.stringify(allRosters)); } catch (e) { console.warn('localStorage full:', e); }
         renderRosterSummary();
 
         const cur = periodSelect.value;
@@ -887,6 +748,10 @@
           updateUI();
           renderRosterDebug();
         }
+      }, err => {
+        console.error('[onSnapshot] roster listener error:', err);
+        rosterStatus.textContent = 'Cloud sync interrupted — using cached data.';
+        rosterStatus.classList.add('text-red-600');
       });
     }
 
@@ -920,7 +785,7 @@
 
         console.log(`[onRosterUpload] Periods to update:`, Array.from(changed));
         allRosters = merged;
-        localStorage.setItem('allRosters', JSON.stringify(allRosters));
+        try { localStorage.setItem('allRosters', JSON.stringify(allRosters)); } catch (e) { console.warn('localStorage full:', e); }
         rosterStatus.textContent = `Successfully processed and saved ${processed} file(s).`;
         rosterStatus.classList.remove('text-red-600'); rosterStatus.classList.add('text-green-600');
 
@@ -1016,9 +881,11 @@
             const ap = Array.isArray(d.avoidPairs) ? d.avoidPairs : [];
             const fr = Array.isArray(d.frontRow) ? d.frontRow : [];
             exceptions.avoidPairs = ap; exceptions.frontRow = new Set(fr);
-            localStorage.setItem('exceptions', JSON.stringify({ avoidPairs: ap, frontRow: fr }));
+            try { localStorage.setItem('exceptions', JSON.stringify({ avoidPairs: ap, frontRow: fr })); } catch (e) { console.warn('localStorage full:', e); }
             renderExceptionsInputs();
           }
+        }, err => {
+          console.error('[onSnapshot] exceptions listener error:', err);
         });
       }
     }
@@ -1036,7 +903,7 @@
         return null;
       }).filter(Boolean);
       exceptions.frontRow = new Set(fr); exceptions.avoidPairs = ap;
-      localStorage.setItem('exceptions', JSON.stringify({ avoidPairs: ap, frontRow: fr }));
+      try { localStorage.setItem('exceptions', JSON.stringify({ avoidPairs: ap, frontRow: fr })); } catch (e) { console.warn('localStorage full:', e); }
       exceptionsStatus.textContent = 'Saved locally'; setTimeout(() => exceptionsStatus.textContent = '', 1500);
       if (db) {
         try {
@@ -1052,26 +919,13 @@
     }
 
     // ===== Period change & attendance stream =====
-    function doDetectAndMaybeSwitch() {
-      if (isOverride) { if (autoTimer) clearInterval(autoTimer); return; }
-      const info = detectPeriod(new Date());
-      lastDetect = info;
-      if (info.detected && periodSelect.value !== info.detected) {
-        periodSelect.value = info.detected;
-        onPeriodChange();
-      } else {
-        updateUI();
-      }
-    }
     function onPeriodChange() {
       const p = periodSelect.value;
       if (unsubAttendance) { unsubAttendance(); unsubAttendance = null; }
 
       const resolved = resolveRosterKey(p);
       currentRoster = resolved ? (allRosters[resolved] || []) : [];
-
-      const sched = bellSchedules[scheduleName] || bellSchedules.Default;
-      classStartTimeInput.value = p ? (sched[p] || '') : '';
+      periodAttendanceLog = [];
       const today = nowISODate();
 
       if (db && p) {
@@ -1079,6 +933,8 @@
         unsubAttendance = onSnapshot(colRef, snap => {
           periodAttendanceLog = snap.docs.map(d => d.data());
           updateUI(); renderRosterDebug();
+        }, err => {
+          console.error('[onSnapshot] attendance listener error:', err);
         });
       } else {
         periodAttendanceLog = getLocalLogs(today, p);
@@ -1280,33 +1136,24 @@
     }
 
     // ===== Attendance helpers =====
-    // Note: getTimestampMs() removed - was only used for 5th-student tardy calculation
-    //       which has been replaced with bell-schedule-based logic
 
-    function statusForNow(pendingEntry = null) {
-      // Get the current period from the UI
-      const p = periodSelect.value;
-      if (!p) return 'On Time';  // No period selected, default to on time
+    function statusForNow() {
+      if (!periodSelect.value) return 'On Time';
 
-      // Get the period start time from bell schedule
-      const periodStart = getPeriodStartTime(p, scheduleName);
-      if (!periodStart) {
-        // Period not in schedule (edge case), fall back to on-time
-        console.warn(`[statusForNow] Period ${p} not found in ${scheduleName} schedule`);
-        return 'On Time';
-      }
+      // Need at least TARDY_AFTER_NTH students signed in before anyone can be late
+      if (periodAttendanceLog.length < TARDY_AFTER_NTH) return 'On Time';
 
-      // Calculate the tardy threshold
-      const tardyThreshold = new Date(periodStart.getTime() + TARDY_GRACE_MINUTES * 60 * 1000);
+      // Get the Nth student's sign-in timestamp
+      const sorted = periodAttendanceLog
+        .map(e => toMs(e.Timestamp))
+        .filter(t => t > 0)
+        .sort((a, b) => a - b);
 
-      // Compare current time to threshold
-      const now = new Date();
+      if (sorted.length < TARDY_AFTER_NTH) return 'On Time';
 
-      if (now <= tardyThreshold) {
-        return 'On Time';
-      }
-
-      return 'Late';
+      const nthTimestamp = sorted[TARDY_AFTER_NTH - 1];
+      const tardyThreshold = nthTimestamp + TARDY_GRACE_MINUTES * 60 * 1000;
+      return Date.now() <= tardyThreshold ? 'On Time' : 'Late';
     }
 
     // ===== Context Switching Helpers =====
@@ -1321,38 +1168,42 @@
       return matches;
     }
 
-    // If a student is in multiple periods, pick the one closest to "Now"
-    function pickBestPeriod(periods) {
+    // If a student is in multiple periods, pick the best one
+    async function pickBestPeriod(periods, code) {
       if (periods.length === 1) return periods[0];
 
-      const now = new Date();
-      const sched = bellSchedules[scheduleName] || bellSchedules.Default;
+      // Prefer the current global period if the student is in it
+      if (globalPeriod && periods.includes(globalPeriod)) return globalPeriod;
 
-      let bestP = periods[0];
-      let minDiff = Infinity;
-
-      periods.forEach(p => {
-        const startTime = sched[p];
-        if (!startTime) return;
-
-        // parsing time string to date object for today
-        const [h, m] = startTime.split(':').map(x => parseInt(x, 10));
-        const startDt = new Date();
-        startDt.setHours(h, m, 0, 0);
-
-        // Calculate difference in minutes (absolute)
-        const diff = Math.abs((now - startDt) / 60000);
-
-        if (diff < minDiff) {
-          minDiff = diff;
-          bestP = p;
+      // Pick the first period they haven't signed into today
+      if (db) {
+        const today = nowISODate();
+        for (const p of periods) {
+          const roster = allRosters[p] || [];
+          const student = roster.find(s => String(s.StudentID || '').slice(-4) === code);
+          if (!student) continue;
+          const ref = doc(db, `artifacts/${APP_ID}/public/data/attendance/${today}/periods/${p}/students/${student.StudentID}`);
+          const snap = await getDoc(ref);
+          if (!snap.exists()) return p;
         }
-      });
+      }
 
-      return bestP;
+      return periods[0];
     }
 
     // ===== MAIN SIGN IN LOGIC =====
+
+    // After a smart-switch sign-in for a different period, restore to the
+    // global period so subsequent students from the main period aren't affected
+    function restoreToGlobalPeriod() {
+      if (!globalPeriod) return;
+      setTimeout(() => {
+        if (periodSelect.value !== globalPeriod && !isOverride) {
+          periodSelect.value = globalPeriod;
+          onPeriodChange();
+        }
+      }, 3000);
+    }
 
     async function handleSignIn() {
       try {
@@ -1368,33 +1219,24 @@
 
         let p = periodSelect.value;
         let student = (currentRoster || []).find(s => String(s.StudentID || '').slice(-4) === code);
+        let wasSmartSwitched = false;
 
         // --- START: SMART SWITCH LOGIC ---
-        // If student is NOT in current period, look elsewhere
         if (!student) {
           const possiblePeriods = findPeriodsForStudent(code);
 
           if (possiblePeriods.length > 0) {
-            // Pick best period (handles cases where student is in multiple classes)
-            const targetPeriod = pickBestPeriod(possiblePeriods);
-
-            // Perform the Switch
+            const targetPeriod = await pickBestPeriod(possiblePeriods, code);
             console.log(`[SmartSwitch] Switching to P.${targetPeriod}`);
 
             periodSelect.value = targetPeriod;
-            isOverride = true;
-            sessionStorage.setItem('periodOverride', 'true'); // Stop auto-detect from reverting it
-            onPeriodChange(); // Load new roster data immediately
+            onPeriodChange();
 
-            // Update local variables for the rest of this function
             p = targetPeriod;
             student = (currentRoster || []).find(s => String(s.StudentID || '').slice(-4) === code);
+            wasSmartSwitched = true;
 
-            // Visual feedback
-            const sched = bellSchedules[scheduleName] || bellSchedules.Default;
             showMessage('admin', `Switched to Period ${p}`, `Found you in Period ${p}. Signing in...`);
-
-            // Slight pause to ensure state updates
             await new Promise(r => setTimeout(r, 500));
           }
         }
@@ -1412,61 +1254,55 @@
         signInButton.disabled = true;
 
         const today = nowISODate();
-        const signInTimestamp = Date.now(); // Capture the exact sign-in moment
-
-        // Create a pending entry to include in status calculation
-        // This fixes race condition where onSnapshot hasn't updated periodAttendanceLog yet
-        const pendingEntry = {
-          StudentID: student.StudentID,
-          Timestamp: signInTimestamp
-        };
-        const status = statusForNow(pendingEntry);
+        const status = statusForNow();
 
         // --- DATABASE LOGIC (Cloud) ---
         if (db) {
-          // Snapshot Roster Logic
+          const studentDocRef = doc(db, `artifacts/${APP_ID}/public/data/attendance/${today}/periods/${p}/students/${student.StudentID}`);
+
+          // Non-blocking roster snapshot (don't delay sign-in)
           const rosterSnapshotRef = doc(db, `artifacts/${APP_ID}/public/data/attendance/${today}/periods/${p}`);
-          try {
-            const rosterDoc = await getDoc(rosterSnapshotRef);
-            if (!rosterDoc.exists() || !rosterDoc.data().roster_snapshot) {
-              await setDoc(rosterSnapshotRef, { roster_snapshot: currentRoster }, { merge: true });
-            }
-          } catch (err) { console.error("Snapshot error:", err); }
+          setDoc(rosterSnapshotRef, { roster_snapshot: currentRoster, updatedAt: serverTimestamp() }, { merge: true })
+            .catch(e => console.error("Roster snapshot error:", e));
 
-          // Check existing sign-in
-          const colRef = collection(db, `artifacts/${APP_ID}/public/data/attendance/${today}/periods/${p}/students`);
-          const q = query(colRef, where('StudentID', '==', student.StudentID));
-          const snap = await getDocs(q);
+          // Check existing sign-in (direct doc read — faster & cheaper than query)
+          const existingSnap = await getDoc(studentDocRef);
 
-          if (!snap.empty) {
-            const existing = snap.docs[0].data();
+          if (existingSnap.exists()) {
+            const existing = existingSnap.data();
             const g = typeof existing.Group === 'number' ? existing.Group : pickGroup(student);
             showGroup(g, existing.Status || status, student.FirstName);
             updateUI();
+            if (wasSmartSwitched) restoreToGlobalPeriod();
             return;
           }
 
-          // Create new sign-in
+          // Assign group and build log entry
           const g = pickGroup(student);
-          showGroup(g, status, student.FirstName);
+          const log = buildLogEntry(student, p, status, g, true);
 
           try {
-            const log = {
-              Date: new Date().toLocaleDateString(),
-              StudentID: student.StudentID,
-              Name: `${student.FirstName} ${student.LastName}`,
-              SignInTime: new Date().toLocaleTimeString(),
-              Status: status,
-              Group: g,
-              Period: p,
-              Timestamp: serverTimestamp()
-            };
-            const studentDocRef = doc(db, `artifacts/${APP_ID}/public/data/attendance/${today}/periods/${p}/students/${student.StudentID}`);
+            // Write to Firebase FIRST — don't show success until confirmed
             await setDoc(studentDocRef, log);
+
+            // Optimistically update local state so the NEXT sign-in sees this student
+            // (covers the gap before onSnapshot fires with the server-confirmed data)
+            periodAttendanceLog.push({
+              ...log,
+              Timestamp: Date.now()  // Replace sentinel with local timestamp for local use
+            });
+
+            // THEN show success
+            showGroup(g, status, student.FirstName);
+
+            // Check if this sign-in should trigger a global period switch
+            maybeUpdateGlobalPeriod(p);
           } catch (err) {
             console.error('Write failed', err);
             showMessage('error', 'Database Error', 'Could not save attendance. Please try again.');
             signInButton.disabled = false;
+            if (wasSmartSwitched) restoreToGlobalPeriod();
+            return;
           }
         }
         // --- LOCAL STORAGE LOGIC (No Cloud) ---
@@ -1476,25 +1312,18 @@
           if (existing) {
             showGroup(existing.Group, existing.Status, student.FirstName);
             updateUI();
+            if (wasSmartSwitched) restoreToGlobalPeriod();
             return;
           }
           const g = pickGroup(student);
-          const log = {
-            Date: new Date().toLocaleDateString(),
-            StudentID: student.StudentID,
-            Name: `${student.FirstName} ${student.LastName}`,
-            SignInTime: new Date().toLocaleTimeString(),
-            Status: status,
-            Group: g,
-            Period: p,
-            Timestamp: Date.now()
-          };
+          const log = buildLogEntry(student, p, status, g, false);
           list.push(log);
           setLocalLogs(today, p, list);
           periodAttendanceLog = list;
           showGroup(g, status, student.FirstName);
         }
         updateUI();
+        if (wasSmartSwitched) restoreToGlobalPeriod();
       } catch (err) {
         console.error('[handleSignIn] error', err);
         alert('Sign-in error: ' + (err && err.message ? err.message : err));
@@ -1518,11 +1347,10 @@
         roster.forEach(stu => {
           if (present.has(stu.StudentID)) {
             const log = present.get(stu.StudentID);
-            const parts = (log.Name || '').split(' ');
-            const first = parts[0] || ''; const last = parts.slice(1).join(' ');
-            rows.push([log.Date, p, log.StudentID, '"' + last + '"', '"' + first + '"', log.Status, log.SignInTime, log.Group]);
+            // Use roster names (reliable) instead of parsing log.Name (fragile for multi-word names)
+            rows.push([log.Date, p, log.StudentID, csvQuote(stu.LastName || ''), csvQuote(stu.FirstName || ''), log.Status, log.SignInTime, log.Group]);
           } else {
-            rows.push([today, p, stu.StudentID, '"' + (stu.LastName || '') + '"', '"' + (stu.FirstName || '') + '"', 'Absent', 'N/A', 'N/A']);
+            rows.push([today, p, stu.StudentID, csvQuote(stu.LastName || ''), csvQuote(stu.FirstName || ''), 'Absent', 'N/A', 'N/A']);
           }
         });
       }
@@ -1532,30 +1360,81 @@
     }
 
     // ===== UI: messages & summaries =====
+    // Escape HTML to prevent XSS from roster data (student names)
+    const escHtml = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    // Shared AudioContext (browsers limit to ~6 — reuse one for all sounds)
+    let sharedAudioCtx = null;
+    function getSharedAudioCtx() {
+      if (!sharedAudioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) sharedAudioCtx = new AC();
+      }
+      if (sharedAudioCtx && sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume();
+      return sharedAudioCtx;
+    }
+
     let dismissTimer = null;
-    function showMessage(type, title, html) {
+    function showMessage(type, title, body) {
       let bg = 'bg-gray-700';
 
       if (type === 'success') { bg = 'bg-green-600'; beep(); }
-      else if (type === 'error') { bg = 'bg-red-700'; errorBuzz(); } // Added Audio Feedback
+      else if (type === 'error') { bg = 'bg-red-700'; errorBuzz(); }
       else if (type === 'admin') { bg = 'bg-blue-600'; }
 
-      messageView.innerHTML = `<div class="fade-in p-8 rounded-lg ${bg}"><h2 class="text-3xl font-bold text-white mb-2">${title}</h2><p class="text-lg text-white/90">${html}</p></div>`;
+      // Build message DOM safely — escaping title; body is developer-controlled
+      const wrapper = document.createElement('div');
+      wrapper.className = `fade-in p-8 rounded-lg ${bg}`;
+      const h2 = document.createElement('h2');
+      h2.className = 'text-3xl font-bold text-white mb-2';
+      h2.textContent = title;
+      const p = document.createElement('p');
+      p.className = 'text-lg text-white/90';
+      p.textContent = body;
+      wrapper.appendChild(h2);
+      wrapper.appendChild(p);
+      messageView.replaceChildren(wrapper);
       kioskView.classList.add('hidden'); messageView.classList.remove('hidden');
       if (dismissTimer) clearTimeout(dismissTimer);
-      dismissTimer = setTimeout(() => { dismissMessage(); }, 2500);
+      const delay = type === 'error' ? 5000 : 2500;
+      dismissTimer = setTimeout(() => { dismissMessage(); }, delay);
     }
     function showGroup(group, status, first) {
       const red700 = '#b91c1c';
       const red500 = '#ef4444';
       const glow = '0 0 48px rgba(185,28,28,.55), 0 0 120px rgba(185,28,28,.35), inset 0 0 60px rgba(185,28,28,.25)';
-      messageView.innerHTML = `
-    <div class="fade-in p-8 rounded-2xl ring-4" style="background:#000; border-color:${red700}; box-shadow:${glow}">
-      <div class="text-2xl font-semibold" style="color:#ffffff">${first}, you are</div>
-      <div class="mt-2 text-6xl md:text-7xl font-extrabold tracking-tight" style="color:${red500}">GROUP ${group}</div>
-      <div class="mt-2 text-lg" style="color:#ffffff">Status: <span class="font-bold" style="color:${red500}">${status}</span></div>
-      <div class="mt-4 text-sm" style="color:#ffffff">Press <span class=\"font-semibold\">Enter</span> to continue</div>
-    </div>`;
+
+      // Build group display DOM safely — all dynamic values use textContent
+      const outer = document.createElement('div');
+      outer.className = 'fade-in p-8 rounded-2xl ring-4';
+      outer.style.cssText = `background:#000; border-color:${red700}; box-shadow:${glow}`;
+
+      const nameDiv = document.createElement('div');
+      nameDiv.className = 'text-2xl font-semibold';
+      nameDiv.style.color = '#ffffff';
+      nameDiv.textContent = `${first}, you are`;
+
+      const groupDiv = document.createElement('div');
+      groupDiv.className = 'mt-2 text-6xl md:text-7xl font-extrabold tracking-tight';
+      groupDiv.style.color = red500;
+      groupDiv.textContent = `GROUP ${group}`;
+
+      const statusDiv = document.createElement('div');
+      statusDiv.className = 'mt-2 text-lg';
+      statusDiv.style.color = '#ffffff';
+      const statusSpan = document.createElement('span');
+      statusSpan.className = 'font-bold';
+      statusSpan.style.color = red500;
+      statusSpan.textContent = status;
+      statusDiv.append('Status: ', statusSpan);
+
+      const helpDiv = document.createElement('div');
+      helpDiv.className = 'mt-4 text-sm';
+      helpDiv.style.color = '#ffffff';
+      helpDiv.textContent = 'Press Enter to continue';
+
+      outer.append(nameDiv, groupDiv, statusDiv, helpDiv);
+      messageView.replaceChildren(outer);
       kioskView.classList.add('hidden'); messageView.classList.remove('hidden');
       if (dismissTimer) clearTimeout(dismissTimer);
       beep();
@@ -1569,7 +1448,8 @@
     }
     function beep() {
       try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const ctx = getSharedAudioCtx();
+        if (!ctx) return;
         const osc = ctx.createOscillator(); const gain = ctx.createGain();
         osc.type = 'sine'; osc.frequency.value = 880; osc.connect(gain); gain.connect(ctx.destination);
         gain.gain.setValueAtTime(.0001, ctx.currentTime);
@@ -1582,11 +1462,12 @@
     // Audio feedback for errors
     function errorBuzz() {
       try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const ctx = getSharedAudioCtx();
+        if (!ctx) return;
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.type = 'sawtooth'; // Harsher sound
-        osc.frequency.value = 150; // Low pitch
+        osc.type = 'sawtooth';
+        osc.frequency.value = 150;
         osc.connect(gain);
         gain.connect(ctx.destination);
 
@@ -1628,8 +1509,13 @@
       const p = periodSelect.value;
 
       if (db) {
-        const ref = doc(db, `artifacts/${APP_ID}/public/data/attendance/${today}/periods/${p}/students/${sid}`);
-        await setDoc(ref, { Status: next }, { merge: true });
+        try {
+          const ref = doc(db, `artifacts/${APP_ID}/public/data/attendance/${today}/periods/${p}/students/${sid}`);
+          await setDoc(ref, { Status: next }, { merge: true });
+        } catch (err) {
+          console.error('Status toggle failed:', err);
+          alert('Failed to update status. Check your connection.');
+        }
       } else {
         let list = getLocalLogs(today, p);
         const entry = list.find(l => l.StudentID === sid);
@@ -1662,32 +1548,14 @@
         // Firestore logic
         const ref = doc(db, `artifacts/${APP_ID}/public/data/attendance/${today}/periods/${p}/students/${studentId}`);
         try {
-          await setDoc(ref, {
-            Date: new Date().toLocaleDateString(),
-            StudentID: student.StudentID,
-            Name: `${student.FirstName} ${student.LastName}`,
-            SignInTime: new Date().toLocaleTimeString(),
-            Status: status,
-            Group: g,
-            Period: p,
-            Timestamp: serverTimestamp()
-          });
+          await setDoc(ref, buildLogEntry(student, p, status, g, true));
         } catch (err) {
           console.error("Manual check-in failed:", err);
         }
       } else {
         // Local logic
         let list = getLocalLogs(today, p);
-        list.push({
-          Date: new Date().toLocaleDateString(),
-          StudentID: student.StudentID,
-          Name: `${student.FirstName} ${student.LastName}`,
-          SignInTime: new Date().toLocaleTimeString(),
-          Status: status,
-          Group: g,
-          Period: p,
-          Timestamp: Date.now()
-        });
+        list.push(buildLogEntry(student, p, status, g, false));
         setLocalLogs(today, p, list);
         periodAttendanceLog = list;
         updateUI();
@@ -1695,14 +1563,17 @@
     }
     window.manualCheckIn = manualCheckIn;
 
+    const summaryExcused = $('#summary-excused');
+
     function updateUI() {
-      const counts = { 'On Time': 0, 'Late': 0, 'Truant': 0 };
+      const counts = { 'On Time': 0, 'Late': 0, 'Truant': 0, 'Excused': 0 };
       periodAttendanceLog.forEach(l => { if (counts[l.Status] !== undefined) counts[l.Status]++; });
       const present = periodAttendanceLog.length;
       const absent = (currentRoster || []).length - present;
       summaryOnTime.textContent = counts['On Time'];
       summaryLate.textContent = counts['Late'];
       summaryTruant.textContent = counts['Truant'];
+      summaryExcused.textContent = counts['Excused'];
       summaryAbsent.textContent = Math.max(0, absent);
       summaryTotal.textContent = (currentRoster || []).length;
 
@@ -1723,8 +1594,8 @@
             // Flex layout to hold name and arrow
             li.className = "flex justify-between items-center hover:bg-gray-200 rounded px-2 py-1 group cursor-default";
             li.innerHTML = `
-            <span>${s.LastName || ''}, ${s.FirstName || ''}</span>
-            <button onclick="manualCheckIn('${s.StudentID}')" 
+            <span>${escHtml(s.LastName || '')}, ${escHtml(s.FirstName || '')}</span>
+            <button onclick="manualCheckIn('${escHtml(s.StudentID)}')"
                     class="text-green-600 hover:text-green-800 opacity-0 group-hover:opacity-100 transition-opacity font-bold px-2"
                     title="Mark Present">
                 ➜
@@ -1758,14 +1629,14 @@
 
                 return `
               <li class="flex justify-between items-center group pl-1 py-1 hover:bg-gray-200 rounded">
-                <span>${s.Name}</span>
+                <span>${escHtml(s.Name)}</span>
                 <div class="flex items-center gap-2">
-                  <button onclick="toggleStatus('${s.StudentID}', '${s.Status}')" 
-                          class="text-xs font-mono cursor-pointer ${color} hover:underline font-bold" 
+                  <button onclick="toggleStatus('${escHtml(s.StudentID)}', '${escHtml(s.Status)}')"
+                          class="text-xs font-mono cursor-pointer ${color} hover:underline font-bold"
                           title="Click to toggle status">
-                    ${s.Status.toUpperCase().substring(0, 3)}
+                    ${escHtml(s.Status.toUpperCase().substring(0, 3))}
                   </button>
-                  <button onclick="removeStudent('${s.StudentID}')" 
+                  <button onclick="removeStudent('${escHtml(s.StudentID)}')"
                           class="text-red-400 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold px-1" title="Delete">
                     &times;
                   </button>
@@ -1787,23 +1658,17 @@
 
     function renderPeriodIndicator() {
       const p = periodSelect.value;
-      const sched = bellSchedules[scheduleName] || bellSchedules.Default;
-      const det = isOverride ? null : (lastDetect || detectPeriod(new Date()));
       const nowStr = fmtTime(new Date());
+      const count = periodAttendanceLog.length;
+      const how = isOverride ? 'Override' : 'Auto';
+
       if (!p) {
-        if (det && det.detected) {
-          const t = sched[det.detected] || '';
-          periodIndicator.innerHTML = `Period <b>${det.detected}</b> (${t}) • ${scheduleName} • Auto — ${det.reason} <span class="opacity-80">(now ${nowStr}${det.nextPeriod ? `, next P ${det.nextPeriod} @ ${det.nextTime}` : ''})</span>`;
-        } else {
-          periodIndicator.textContent = `Period: Auto-detecting… • ${scheduleName} • now ${nowStr}`;
-        }
+        periodIndicator.textContent = `Waiting for students... (${nowStr})`;
         return;
       }
-      const t = sched[p] || '';
-      const how = isOverride ? 'Override' : 'Auto';
-      const reason = (!isOverride && det && det.detected === p) ? ` — ${det.reason}` : '';
-      const next = (!isOverride && det && det.detected === p && det.nextPeriod) ? ` <span class="opacity-80">(next P ${det.nextPeriod} @ ${det.nextTime})</span>` : '';
-      periodIndicator.innerHTML = `Period <b>${p}</b> (${t}) • ${scheduleName} • ${how}${reason} <span class="opacity-80">(now ${nowStr})</span>${next}`;
+
+      const tardyInfo = count >= TARDY_AFTER_NTH ? 'tardy active' : `${TARDY_AFTER_NTH - count} more before tardy`;
+      periodIndicator.textContent = `Period ${p} \u2022 ${how} \u2022 ${count} signed in (${tardyInfo}) \u2022 ${nowStr}`;
     }
 
     // ===== Tests =====
@@ -1830,22 +1695,164 @@
       console.assert(P['3'].length === 1, 'quoted multi-comma name');
       console.assert(P['3'][0].FirstName === 'Jr., Bob', 'first name with comma kept');
     }
-    function runDetectTests() {
-      const prev = scheduleName; scheduleName = 'Regular';
-      const mk = (h, m) => { const d = new Date(); d.setHours(h, m, 0, 0); return d; };
-      let a = detectPeriod(mk(7, 10)); console.assert(a.detected === '0' && a.mode === 'preFirst', 'preFirst detect');
-      a = detectPeriod(mk(8, 40)); console.assert(a.detected === '1' && a.mode === 'during', 'during detect');
-      a = detectPeriod(mk(9, 27)); console.assert(a.detected === '2' && a.mode === 'passing', 'passing detect');
-      a = detectPeriod(mk(15, 10)); console.assert(a.detected === '6', 'afterLast detect'); scheduleName = prev;
-    }
     function runGroupTests() {
-      const prevAP = [["A1", "B1"]], prevFR = ['S1'];
-      const prevLogs = [{ StudentID: 'B1', Group: 5 }, { StudentID: 'X', Group: 1 }];
-      exceptions.avoidPairs = prevAP; exceptions.frontRow = new Set(prevFR);
-      periodAttendanceLog = [...prevLogs];
+      // Save originals so tests don't corrupt global state
+      const origAP = exceptions.avoidPairs;
+      const origFR = exceptions.frontRow;
+      const origLogs = periodAttendanceLog;
+
+      // Use correct {s1, s2} object format (not arrays)
+      exceptions.avoidPairs = [{ s1: "A1", s2: "B1" }];
+      exceptions.frontRow = new Set(['S1']);
+      periodAttendanceLog = [{ StudentID: 'B1', Group: 5 }, { StudentID: 'X', Group: 1 }];
+
       const g1 = pickGroup({ StudentID: 'S1' }); console.assert([1, 2, 12, 13].includes(g1), 'front-row preference');
       const g2 = pickGroup({ StudentID: 'A1' }); console.assert(g2 !== 5, 'avoid-pair enforce');
+
+      // Restore originals
+      exceptions.avoidPairs = origAP;
+      exceptions.frontRow = origFR;
+      periodAttendanceLog = origLogs;
     }
+
+    // ==================== TARGET TIMER ====================
+    (() => {
+      // Inline (admin panel) elements
+      const tInput = document.getElementById('timer-target-input');
+      const tDisplay = document.getElementById('timer-display');
+      const tStatus = document.getElementById('timer-status');
+      const tTestBtn = document.getElementById('timer-test-audio');
+
+      // Fullscreen elements
+      const tFsOverlay = document.getElementById('timer-fullscreen');
+      const tFsDisplay = document.getElementById('timer-fs-display');
+      const tFsStatus = document.getElementById('timer-fs-status');
+      const tFsOpenBtn = document.getElementById('timer-fullscreen-btn');
+      const tFsCloseBtn = document.getElementById('timer-fs-close');
+      const mainApp = document.querySelector('.w-full.max-w-6xl');
+
+      let tInterval = null;
+      let tFinished = false;
+      function tPlayAlarm() {
+        const ctx = getSharedAudioCtx();
+        if (!ctx) return;
+        const play = (freq, start, dur, type = 'sine') => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+          gain.gain.setValueAtTime(0, ctx.currentTime + start);
+          gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + start + 0.05);
+          gain.gain.setValueAtTime(0.5, ctx.currentTime + start + dur - 0.1);
+          gain.gain.linearRampToValueAtTime(0, ctx.currentTime + start + dur);
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.start(ctx.currentTime + start);
+          osc.stop(ctx.currentTime + start + dur + 0.1);
+        };
+        play(523.25, 0.1, 0.3); play(659.25, 0.25, 0.3);
+        play(783.99, 0.4, 0.3); play(1046.50, 0.55, 0.8);
+        play(1567.98, 0.55, 0.8, 'triangle');
+      }
+
+      function tFormat(ms) {
+        if (ms <= 0) return '00:00:00';
+        const tot = Math.floor(ms / 1000);
+        return [Math.floor(tot / 3600), Math.floor((tot % 3600) / 60), tot % 60]
+          .map(v => String(v).padStart(2, '0')).join(':');
+      }
+
+      function tCalcDist(val) {
+        const [h, m] = val.split(':').map(Number);
+        const target = new Date(); target.setHours(h, m, 0, 0);
+        let diff = target - new Date();
+        if (diff < -60000) { target.setDate(target.getDate() + 1); diff = target - new Date(); }
+        return diff;
+      }
+
+      // Sync both inline and fullscreen displays
+      function tSetDisplay(text, inlineClass, fsClass) {
+        tDisplay.textContent = text;
+        tDisplay.className = inlineClass;
+        tFsDisplay.textContent = text;
+        tFsDisplay.className = fsClass;
+      }
+
+      function tSetStatus(text, inlineClass, fsClass) {
+        tStatus.textContent = text;
+        tStatus.className = inlineClass;
+        tFsStatus.textContent = text;
+        tFsStatus.className = fsClass;
+      }
+
+      function tReset() {
+        if (tInterval) clearInterval(tInterval);
+        tSetDisplay('00:00:00',
+          'text-4xl font-bold font-mono text-gray-300 tabular-nums',
+          'text-8xl md:text-9xl font-bold font-mono tabular-nums text-gray-500 timer-fs-glow select-none');
+        tSetStatus('',
+          'text-xs uppercase tracking-wider mt-2 font-semibold h-4 text-gray-400',
+          'text-sm uppercase tracking-[0.2em] mt-6 font-semibold h-5 text-gray-500');
+        tFinished = false;
+      }
+
+      function tComplete() {
+        if (tFinished) return;
+        if (tInterval) clearInterval(tInterval);
+        tFinished = true;
+        tSetDisplay('00:00:00',
+          'text-4xl font-bold font-mono text-red-500 tabular-nums animate-pulse',
+          'text-8xl md:text-9xl font-bold font-mono tabular-nums text-red-500 timer-fs-glow-finished select-none');
+        tFsDisplay.style.animation = 'timerPulse 1.5s ease-in-out infinite';
+        tSetStatus("Time's up!",
+          'text-xs uppercase tracking-wider mt-2 font-semibold h-4 text-red-500',
+          'text-sm uppercase tracking-[0.2em] mt-6 font-semibold h-5 text-red-400');
+        tPlayAlarm();
+      }
+
+      function tStart() {
+        tReset(); getSharedAudioCtx();
+        tFsDisplay.style.animation = '';
+        const val = tInput.value;
+        if (!val) return;
+        const init = tCalcDist(val);
+        if (init <= 0) { tComplete(); return; }
+        tSetDisplay(tFormat(init),
+          'text-4xl font-bold font-mono text-gray-800 tabular-nums',
+          'text-8xl md:text-9xl font-bold font-mono tabular-nums text-white timer-fs-glow select-none');
+        tSetStatus('Counting down...',
+          'text-xs uppercase tracking-wider mt-2 font-semibold h-4 text-blue-500',
+          'text-sm uppercase tracking-[0.2em] mt-6 font-semibold h-5 text-red-400');
+        tInterval = setInterval(() => {
+          const d = tCalcDist(val);
+          if (d <= 100) tComplete();
+          else {
+            const text = tFormat(d);
+            tDisplay.textContent = text;
+            tFsDisplay.textContent = text;
+          }
+        }, 500);
+      }
+
+      // Fullscreen show/hide
+      function tShowFs() {
+        mainApp.classList.add('hidden');
+        tFsOverlay.classList.remove('hidden');
+      }
+      function tHideFs() {
+        tFsOverlay.classList.add('hidden');
+        mainApp.classList.remove('hidden');
+      }
+
+      tInput.addEventListener('change', tStart);
+      tInput.addEventListener('input', tStart);
+      tTestBtn.addEventListener('click', tPlayAlarm);
+      tFsOpenBtn.addEventListener('click', tShowFs);
+      tFsCloseBtn.addEventListener('click', tHideFs);
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && !tFsOverlay.classList.contains('hidden')) tHideFs();
+      });
+    })();
+    // ======================================================
   </script>
 </body>
 

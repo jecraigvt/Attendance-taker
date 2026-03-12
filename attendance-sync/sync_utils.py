@@ -507,6 +507,16 @@ def generate_verification_report(
         elif entry.get('type') == 'action':
             action_lookup[key] = entry
 
+    # Normalization map: app statuses -> Aeries statuses (must match upload_to_aeries.py)
+    def _normalize_status(raw):
+        if raw in ['Late', 'Truant', 'Cut', 'Late > 20']:
+            return 'Tardy'
+        elif raw in ['On Time', 'Present']:
+            return 'Present'
+        elif raw == 'Absent':
+            return 'Absent'
+        return raw
+
     # Compare CSV against audit log
     discrepancies = []
     by_period = {}
@@ -547,10 +557,11 @@ def generate_verification_report(
                 'actual': 'No action logged'
             })
         else:
-            # Check if intent status matches expected
+            # Check if intent status matches expected (normalize CSV status first)
             intent_status = intent.get('intended_status', '')
-            if intent_status.lower() != expected_status.lower():
-                # Status mismatch between CSV and intent (normalization issue)
+            normalized_expected = _normalize_status(expected_status)
+            if intent_status.lower() != normalized_expected.lower():
+                # Real status mismatch between CSV and intent
                 discrepancies.append({
                     'type': 'status_mismatch',
                     'student_id': student_id,

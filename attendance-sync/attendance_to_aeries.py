@@ -4,7 +4,7 @@ Export attendance from Firebase to CSV for Aeries import
 
 import firebase_admin
 from firebase_admin import credentials, firestore
-from datetime import datetime
+from datetime import datetime, timezone
 import csv
 import os
 import logging
@@ -12,8 +12,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Firebase configuration
-FIREBASE_KEY_PATH = os.getenv('FIREBASE_KEY_PATH', 'C:/Users/Jeremy/attendance-sync/attendance-sync/attendance-key.json')
+FIREBASE_KEY_PATH = os.getenv('FIREBASE_KEY_PATH', 'C:/Users/Jeremy/attendance-sync/attendance-key.json')
 APP_ID = 'attendance-taker-56916'
+
+# Period settle threshold: don't sync a period until this many minutes after
+# the Nth student signs in, to avoid marking a full class as absent while
+# students are still arriving.
+MIN_STUDENTS_BEFORE_SYNC = 5   # Must match TARDY_AFTER_NTH in HTML app
+PERIOD_SETTLE_MINUTES = 15
 
 # Lazy initialization for Firebase
 _db = None
@@ -84,11 +90,40 @@ def export_attendance_to_csv(date_str):
             students_ref = db.collection(f'{base_path}/students')
             students_docs = students_ref.stream()
             signed_in = {doc.id: doc.to_dict() for doc in students_docs}
-            
+
+            # 3. Check if period has settled (enough students + enough time elapsed)
+            #    Prevents marking an entire class absent while students are still arriving
+            timestamps = []
+            for data in signed_in.values():
+                ts = data.get('Timestamp')
+                if ts is not None and hasattr(ts, 'timestamp'):
+                    # Firestore Timestamp → timezone-aware datetime (UTC)
+                    timestamps.append(ts)
+
+            if len(timestamps) < MIN_STUDENTS_BEFORE_SYNC:
+                logger.info(f"   Period {period}: Only {len(timestamps)} sign-ins so far, skipping sync (need {MIN_STUDENTS_BEFORE_SYNC})")
+                continue
+
+            timestamps.sort()
+            nth_timestamp = timestamps[MIN_STUDENTS_BEFORE_SYNC - 1]
+            now_utc = datetime.now(timezone.utc)
+            # Handle both timezone-aware and naive datetimes
+            if nth_timestamp.tzinfo is None:
+                minutes_elapsed = (datetime.now() - nth_timestamp).total_seconds() / 60
+            else:
+                minutes_elapsed = (now_utc - nth_timestamp).total_seconds() / 60
+
+            if minutes_elapsed < PERIOD_SETTLE_MINUTES:
+                logger.info(
+                    f"   Period {period}: {len(signed_in)} students signed in, but only "
+                    f"{minutes_elapsed:.0f}min since {MIN_STUDENTS_BEFORE_SYNC}th sign-in "
+                    f"(need {PERIOD_SETTLE_MINUTES}min). Skipping to avoid false absences."
+                )
+                continue
+
+            # 4. Period has settled — generate rows
             period_count = 0
             present_count = len(signed_in)
-
-            # 3. Generate rows for present and absent students
             for student in roster:
                 student_id = student.get('StudentID', '')
                 if not student_id:

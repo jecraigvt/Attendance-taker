@@ -182,7 +182,7 @@ def upload_to_aeries(csv_filepath, username, password):
                     status = raw_status
                     if raw_status in ['Late', 'Truant', 'Cut', 'Late > 20']:
                         status = 'Tardy'
-                    elif raw_status in ['On Time', 'Present', 'Excused']:
+                    elif raw_status in ['On Time', 'Present']:
                         status = 'Present'
 
                     # Log intent BEFORE checkbox interaction
@@ -336,19 +336,21 @@ def upload_to_aeries(csv_filepath, username, password):
                 else:
                     logger.info(f"Period {period} verified. Updates made: {updates_count}")
 
-            # Save — scroll to ensure visibility, then click
-            try:
-                save_btn = page.locator("input[value='Save'], button:has-text('Save')").first
-                save_btn.scroll_into_view_if_needed(timeout=5000)
-                save_btn.click()
-                logger.info("Clicked Save")
-            except Exception as e:
-                page.screenshot(path='save_error_state.png')
-                raise SyncError(
-                    message=f"Failed to click Save button - changes may be lost: {e}",
-                    error_type='save_failed',
-                    original_exception=e
-                )
+                # Save after each period to avoid losing changes on period switch
+                if updates_count > 0:
+                    try:
+                        save_btn = page.locator("input[value='Save'], button:has-text('Save')").first
+                        save_btn.scroll_into_view_if_needed(timeout=5000)
+                        save_btn.click()
+                        logger.info(f"Saved Period {period}")
+                        page.wait_for_timeout(2000)
+                    except Exception as e:
+                        page.screenshot(path=f'save_error_period_{period}.png')
+                        raise SyncError(
+                            message=f"Failed to save Period {period} - changes may be lost: {e}",
+                            error_type='save_failed',
+                            original_exception=e
+                        )
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             page.screenshot(path=f'aeries_grid_{timestamp}.png', full_page=True)

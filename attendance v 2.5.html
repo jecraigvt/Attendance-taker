@@ -117,7 +117,6 @@
                 <p>On Time: <span id="summary-ontime" class="font-bold">0</span></p>
                 <p>Late: <span id="summary-late" class="font-bold">0</span></p>
                 <p>Truant: <span id="summary-truant" class="font-bold">0</span></p>
-                <p>Excused: <span id="summary-excused" class="font-bold">0</span></p>
                 <p>Absent: <span id="summary-absent" class="font-bold">0</span></p>
                 <p>Total: <span id="summary-total" class="font-bold">0</span></p>
               </div>
@@ -474,7 +473,7 @@
     const FRONT_SET = new Set([1, 2, 12, 13]);  // "front of room" groups
     const LATE_TO_THIRD = new Set([9, 10]);   // groups that should be last to receive a 3rd person
     const TARDY_AFTER_NTH = 5;              // Start marking tardy after Nth sign-in for the period
-    const TARDY_GRACE_MINUTES = 5;           // Minutes after Nth sign-in before marking late
+    const TARDY_GRACE_MINUTES = 8;           // Minutes after Nth sign-in before marking late
     const PERIOD_SWITCH_NTH = 2;             // Switch global period after Nth student from new period
 
     // CSV RFC 4180 quoting — doubles internal quotes
@@ -583,7 +582,7 @@
     async function setGlobalPeriod(period) {
       if (!db) return;
       const today = nowISODate();
-      const periodDocRef = doc(db, `artifacts/${APP_ID}/public/data/attendance/${today}/currentPeriod`);
+      const periodDocRef = doc(db, `artifacts/${APP_ID}/public/data/attendance/${today}/meta/currentPeriod`);
       await setDoc(periodDocRef, { period, updatedAt: serverTimestamp() }, { merge: true });
     }
 
@@ -591,7 +590,7 @@
     function watchCurrentPeriod() {
       if (!db) return;
       const today = nowISODate();
-      const periodDocRef = doc(db, `artifacts/${APP_ID}/public/data/attendance/${today}/currentPeriod`);
+      const periodDocRef = doc(db, `artifacts/${APP_ID}/public/data/attendance/${today}/meta/currentPeriod`);
       unsubCurrentPeriod = onSnapshot(periodDocRef, snap => {
         if (!snap.exists()) return;
         const data = snap.data();
@@ -1370,7 +1369,7 @@
 
     // ===== UI: messages & summaries =====
     // Escape HTML to prevent XSS from roster data (student names)
-    const escHtml = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const escHtml = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
     // Shared AudioContext (browsers limit to ~6 — reuse one for all sounds)
     let sharedAudioCtx = null;
@@ -1512,7 +1511,7 @@
     window.removeStudent = removeStudent;
 
     async function toggleStatus(sid, currentStatus) {
-      const cycle = { 'On Time': 'Late', 'Late': 'Excused', 'Excused': 'On Time', 'Truant': 'On Time' };
+      const cycle = { 'On Time': 'Late', 'Late': 'On Time', 'Truant': 'On Time' };
       const next = cycle[currentStatus] || 'On Time';
       const today = nowISODate();
       const p = periodSelect.value;
@@ -1575,17 +1574,14 @@
     }
     window.manualCheckIn = manualCheckIn;
 
-    const summaryExcused = $('#summary-excused');
-
     function updateUI() {
-      const counts = { 'On Time': 0, 'Late': 0, 'Truant': 0, 'Excused': 0 };
+      const counts = { 'On Time': 0, 'Late': 0, 'Truant': 0 };
       periodAttendanceLog.forEach(l => { if (counts[l.Status] !== undefined) counts[l.Status]++; });
       const present = periodAttendanceLog.length;
       const absent = (currentRoster || []).length - present;
       summaryOnTime.textContent = counts['On Time'];
       summaryLate.textContent = counts['Late'];
       summaryTruant.textContent = counts['Truant'];
-      summaryExcused.textContent = counts['Excused'];
       summaryAbsent.textContent = Math.max(0, absent);
       summaryTotal.textContent = (currentRoster || []).length;
 
@@ -1637,7 +1633,6 @@
                 let color = 'text-green-600';
                 if (s.Status === 'Late') color = 'text-yellow-600';
                 if (s.Status === 'Truant' || s.Status === 'Absent') color = 'text-red-600';
-                if (s.Status === 'Excused') color = 'text-blue-600';
 
                 return `
               <li class="flex justify-between items-center group pl-1 py-1 hover:bg-gray-200 rounded">

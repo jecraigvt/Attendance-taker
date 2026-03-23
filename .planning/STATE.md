@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 ## Current Position
 
 Phase: 5 of 8 (Auth Foundation and Data Migration)
-Plan: 2 of 3 in current phase (05-02 complete)
-Status: In progress — 05-02 complete; 05-03 (kiosk linkage) ready to execute
-Last activity: 2026-03-23 — Completed 05-02 (auth infrastructure: Cloud Function + Firestore rules)
+Plan: 3 of 3 in current phase (05-03 tasks 1-3 complete; awaiting checkpoint verification)
+Status: In progress — 05-03 paused at Task 4 checkpoint (human-verify)
+Last activity: 2026-03-23 — Completed 05-03 Tasks 1-3 (login UI, Firestore path migration, public/index.html)
 
-Progress: [████░░░░░░░░░░░░░░░░] 50% (v1.0 complete; v2.0 phase 5 in progress)
+Progress: [████░░░░░░░░░░░░░░░░] 50% (v1.0 complete; v2.0 phase 5 nearing completion)
 
 ## Performance Metrics
 
@@ -36,6 +36,13 @@ Progress: [████░░░░░░░░░░░░░░░░] 50% (v1
 ## Accumulated Context
 
 ### Decisions
+
+New in 05-03:
+
+- kiosk-binding-storage: sessionStorage always; localStorage only if "remember me" checked
+- local-mode-fallback: If no FB_CONFIG, app runs in local mode with uid='local', PIN='0000'
+- pin-storage: kioskPin stored in teachers/{uid}/config/main (same Firestore doc as exceptions config)
+- firebase-auth-session-restore: On page reload with stored binding, app skips re-auth and uses cached Firestore data (custom token short-lived; full re-auth only on explicit re-login)
 
 Carried forward from v1.0:
 
@@ -66,9 +73,13 @@ New for v2.0 (pending confirmation):
 
 ## Session Continuity
 
-Last session: 2026-03-23T21:29:21Z
-Stopped at: Completed 05-02-PLAN.md (auth infrastructure — all tasks complete)
-Resume file: .planning/phases/05-auth-foundation-and-data-migration/05-03-PLAN.md
+Last session: 2026-03-23T22:02:10Z
+Stopped at: 05-03-PLAN.md Task 4 checkpoint (human-verify) — Tasks 1-3 complete
+Resume file: .planning/phases/05-auth-foundation-and-data-migration/05-03-PLAN.md (Task 4 continuation)
 
 Note: FERNET_KEY must be set and Firebase Auth + Blaze plan enabled before deploying functions.
 See .planning/phases/05-auth-foundation-and-data-migration/05-02-SUMMARY.md "User Setup Required".
+
+Checkpoint: Verify login screen, PIN setup, kiosk mode navigation work end-to-end in browser.
+The app REQUIRES a deployed authenticateTeacher Cloud Function and live Firebase project to log in.
+For offline local mode testing, the app auto-enters local mode when FB_CONFIG is absent.

@@ -1,159 +1,102 @@
-# Requirements
+# Requirements: Attendance Taker v2.0
 
-## Sync Reliability
+**Defined:** 2026-03-23
+**Core Value:** Every student who signs in must have their correct attendance status reflected in Aeries. The system must work reliably for multiple teachers without requiring technical support.
 
-### REQ-SYNC-01: Retry Logic
-**Priority:** High
-**Status:** Active
+## v2.0 Requirements
 
-Sync retries up to 3 times with exponential backoff (e.g., 5s, 15s, 45s) when Aeries sync fails.
+### Authentication & Data Isolation
 
-**Acceptance Criteria:**
-- [ ] Failed sync triggers automatic retry
-- [ ] Backoff increases exponentially between attempts
-- [ ] After 3 failures, error is logged with full context
-- [ ] Retry count and outcomes are tracked
+- [ ] **AUTH-01**: Teacher can sign in with their Aeries username/password
+- [ ] **AUTH-02**: Teacher can easily update their Aeries password when it changes
+- [ ] **AUTH-03**: Aeries credentials are encrypted at rest (Fernet encryption, key in Railway env)
+- [ ] **AUTH-04**: Each teacher's rosters and attendance data are isolated under their UID in Firestore
+- [ ] **AUTH-05**: Firestore security rules prevent teachers from accessing each other's data
+- [ ] **AUTH-06**: Jeremy's existing data is migrated to the new per-teacher structure without data loss
 
----
+### Teacher Dashboard
 
-### REQ-SYNC-02: Frequent Sync Schedule
-**Priority:** High
-**Status:** Active
+- [ ] **DASH-01**: Teacher sees sync status (last sync time, success/failure, error details)
+- [ ] **DASH-02**: Teacher onboarding flow guides first-time setup (enter Aeries creds, configure seating)
+- [ ] **DASH-03**: Teacher can update Aeries credentials through the web UI at any time
 
-Sync runs every 15-20 minutes during school hours instead of once per period.
+### Roster Management
 
-**Acceptance Criteria:**
-- [ ] Sync schedule updated to 15-20 minute intervals
-- [ ] Schedule covers 8:00 AM - 3:45 PM school hours
-- [ ] Final "catch-all" sync at end of day retained
+- [ ] **ROST-01**: Playwright auto-fetches class rosters from Aeries using teacher's credentials
+- [ ] **ROST-02**: Rosters refresh automatically on a schedule (e.g., weekly or on-demand)
 
----
+### Seating Configuration
 
-### REQ-SYNC-03: Sync Failure Logging
-**Priority:** High
-**Status:** Active
+- [ ] **SEAT-01**: Teacher can configure group-based seating (group names, sizes, front-row groups)
+- [ ] **SEAT-02**: Teacher can configure individual desk-based seating (desk names/numbers)
+- [ ] **SEAT-03**: Teacher can choose between group or individual desk mode during setup
+- [ ] **SEAT-04**: Teacher can turn off seat assignment entirely
 
-Failed syncs are logged with full context for debugging (student ID, period, timestamp, error details, retry count).
+### Kiosk Integration
 
-**Acceptance Criteria:**
-- [ ] Each sync attempt is logged with timestamp
-- [ ] Failed syncs include error message and stack trace
-- [ ] Log includes which students were affected
-- [ ] Logs are persisted to file for later review
+- [ ] **KIOSK-01**: Kiosk tablet links to a specific teacher after teacher logs in once
+- [ ] **KIOSK-02**: Student sign-ins write to the correct teacher's data path
 
----
+### Cloud Sync
 
-## Audit & Logging
+- [ ] **SYNC-01**: Aeries attendance sync runs on Railway (Docker + Playwright), not local PC
+- [ ] **SYNC-02**: Each teacher's attendance syncs every 20 minutes during school hours
+- [ ] **SYNC-03**: Teacher is notified on dashboard when sync fails
 
-### REQ-AUDIT-01: Sync Action Logging
-**Priority:** Medium
-**Status:** Active
+### Self-Healing Automation
 
-Each sync logs exactly what was sent to Aeries (student ID, status, period).
+- [ ] **HEAL-01**: When Aeries UI changes break selectors, Gemini Flash identifies replacement selectors
+- [ ] **HEAL-02**: If Flash fails to repair, escalate to Gemini Pro
+- [ ] **HEAL-03**: Selectors stored in a config file (not hardcoded), so LLM patches are trackable and git-versioned
 
-**Acceptance Criteria:**
-- [ ] Pre-sync: log intended actions
-- [ ] Post-sync: log actual actions taken
-- [ ] Format allows easy comparison with Firebase data
+## Future Requirements
 
----
+- Multi-school support (different Aeries instances)
+- Student-facing features (sign-in kiosk UI redesign)
+- Email/SMS notifications for sync failures
+- Analytics dashboard (attendance trends across teachers)
 
-### REQ-AUDIT-02: Post-Sync Verification Report
-**Priority:** Medium
-**Status:** Active
+## Out of Scope
 
-After each sync, generate a report comparing Firebase data to sync attempt.
-
-**Acceptance Criteria:**
-- [ ] Report shows: students synced, status sent, any discrepancies
-- [ ] Discrepancies flagged for review
-- [ ] Report saved to file or displayed in console
-
----
-
-### REQ-AUDIT-03: Daily Summary Report
-**Priority:** Low
-**Status:** Active
-
-Generate a daily summary of all sync activity.
-
-**Acceptance Criteria:**
-- [ ] Total students synced per period
-- [ ] Total failures and retries
-- [ ] List of any unresolved issues
-
----
-
-## Tardy Logic
-
-### REQ-TARDY-01: Review Threshold Logic
-**Priority:** Medium
-**Status:** Active
-
-Review the 8-minute threshold logic (after 5th student) for correctness.
-
-**Acceptance Criteria:**
-- [ ] Current logic documented and analyzed
-- [ ] Edge cases identified (e.g., what if <5 students in period?)
-- [ ] Recommendation made: keep, modify, or replace
-
----
-
-### REQ-TARDY-02: Bell Schedule Integration
-**Priority:** Medium
-**Status:** Active
-
-Tardy calculation should use actual bell schedule times, not just relative timing.
-
-**Acceptance Criteria:**
-- [ ] Bell schedule times configurable
-- [ ] Tardy determined by: sign-in time vs. period start time
-- [ ] Current "5th student + 8 min" logic evaluated against this
-
----
-
-## Robustness
-
-### REQ-ROBUST-01: Selector Fallbacks
-**Priority:** High
-**Status:** Active
-
-Aeries UI selectors have fallbacks for when UI changes.
-
-**Acceptance Criteria:**
-- [ ] Multiple selector strategies per element (ID, class, text, XPath)
-- [ ] Graceful degradation when primary selector fails
-- [ ] Alert when fallback is used (indicates UI changed)
-
----
-
-### REQ-ROBUST-02: Partial Failure Handling
-**Priority:** Medium
-**Status:** Active
-
-Sync gracefully handles partial failures (some students sync, others fail).
-
-**Acceptance Criteria:**
-- [ ] Failed students tracked separately
-- [ ] Successful syncs not rolled back on partial failure
-- [ ] Failed students queued for retry in next sync cycle
-
----
+| Feature | Reason |
+|---------|--------|
+| Aeries API integration | Requires district IT approval; stick with browser automation |
+| Mobile app | Tablet kiosks and web app are sufficient |
+| Real-time sync | 20-min batch sync is sufficient given school schedule |
+| Student account management | Students just enter IDs, no accounts needed |
 
 ## Traceability
 
-| REQ-ID | Phase | Status |
-|--------|-------|--------|
-| REQ-SYNC-01 | Phase 1 | Complete |
-| REQ-SYNC-02 | Phase 3 | Complete |
-| REQ-SYNC-03 | Phase 1 | Complete |
-| REQ-AUDIT-01 | Phase 2 | Complete |
-| REQ-AUDIT-02 | Phase 2 | Complete |
-| REQ-AUDIT-03 | Phase 3 | Complete |
-| REQ-TARDY-01 | Phase 4 | Pending |
-| REQ-TARDY-02 | Phase 4 | Pending |
-| REQ-ROBUST-01 | Phase 1 | Complete |
-| REQ-ROBUST-02 | Phase 1 | Complete |
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| AUTH-01 | TBD | Pending |
+| AUTH-02 | TBD | Pending |
+| AUTH-03 | TBD | Pending |
+| AUTH-04 | TBD | Pending |
+| AUTH-05 | TBD | Pending |
+| AUTH-06 | TBD | Pending |
+| DASH-01 | TBD | Pending |
+| DASH-02 | TBD | Pending |
+| DASH-03 | TBD | Pending |
+| ROST-01 | TBD | Pending |
+| ROST-02 | TBD | Pending |
+| SEAT-01 | TBD | Pending |
+| SEAT-02 | TBD | Pending |
+| SEAT-03 | TBD | Pending |
+| SEAT-04 | TBD | Pending |
+| KIOSK-01 | TBD | Pending |
+| KIOSK-02 | TBD | Pending |
+| SYNC-01 | TBD | Pending |
+| SYNC-02 | TBD | Pending |
+| SYNC-03 | TBD | Pending |
+| HEAL-01 | TBD | Pending |
+| HEAL-02 | TBD | Pending |
+| HEAL-03 | TBD | Pending |
+
+**Coverage:**
+- v2.0 requirements: 23 total
+- Mapped to phases: 0
+- Unmapped: 23
 
 ---
-*Generated: 2026-02-05*
+*Requirements defined: 2026-03-23*

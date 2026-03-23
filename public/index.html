@@ -1,0 +1,2285 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Attendance & Group Assigner — Ultimate Edition</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif
+    }
+
+    .transition-all {
+      transition: all .3s ease-in-out
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0)
+      }
+    }
+
+    .fade-in {
+      animation: fadeIn .5s ease-out forwards
+    }
+
+    .file-input-button {
+      cursor: pointer
+    }
+
+    /* Fullscreen Timer */
+    .timer-fs-bg {
+      background: linear-gradient(135deg, #0a0a0b 0%, #1a0a0f 40%, #1c1020 70%, #0a0a0b 100%);
+    }
+
+    .timer-fs-glow {
+      text-shadow: 0 0 40px rgba(185, 28, 28, 0.6), 0 0 80px rgba(185, 28, 28, 0.3);
+    }
+
+    .timer-fs-glow-finished {
+      text-shadow: 0 0 60px rgba(239, 68, 68, 0.8), 0 0 120px rgba(239, 68, 68, 0.4);
+    }
+
+    .timer-fs-ring {
+      box-shadow: 0 0 80px rgba(185, 28, 28, 0.3), inset 0 0 80px rgba(185, 28, 28, 0.05);
+      border: 1px solid rgba(185, 28, 28, 0.2);
+    }
+
+    .timer-fs-orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.15;
+      pointer-events: none;
+    }
+
+    @keyframes timerPulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.85; transform: scale(1.02); }
+    }
+  </style>
+  <script>
+    // Firebase web config (from your Console)
+    window.__firebase_config = {
+      apiKey: "AIzaSyDelYxA0NGfGakd3T8wd8PxfZu2sFJZrDA",
+      authDomain: "attendance-taker-56916.firebaseapp.com",
+      projectId: "attendance-taker-56916",
+      storageBucket: "attendance-taker-56916.firebasestorage.app",
+      messagingSenderId: "709493952046",
+      appId: "1:709493952046:web:3266a6e1d706bdfe9059bf",
+      measurementId: "G-LBLM1420GZ"
+    };
+  </script>
+</head>
+
+<body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen p-4">
+
+  <!-- ================== LOGIN SCREEN ================== -->
+  <div id="login-screen" class="hidden fixed inset-0 bg-gray-900 flex items-center justify-center z-50">
+    <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm">
+      <h1 class="text-2xl font-bold text-gray-900 mb-1">Attendance Taker</h1>
+      <p class="text-sm text-gray-500 mb-6">Sign in with your Aeries credentials</p>
+
+      <div id="login-error" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700"></div>
+
+      <div class="space-y-4">
+        <div>
+          <label for="login-username" class="block text-sm font-medium text-gray-700 mb-1">Aeries Username</label>
+          <input type="text" id="login-username" autocomplete="username"
+            class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+            placeholder="username" />
+        </div>
+        <div>
+          <label for="login-password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+          <input type="password" id="login-password" autocomplete="current-password"
+            class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+            placeholder="password" />
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="checkbox" id="login-remember" class="rounded" />
+          <label for="login-remember" class="text-sm text-gray-600">Remember me on this device</label>
+        </div>
+        <button id="login-submit"
+          class="w-full bg-red-700 text-white font-bold py-3 rounded-lg hover:bg-red-800 transition-all disabled:opacity-50">
+          Sign In
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================== PIN SETUP SCREEN ================== -->
+  <div id="pin-setup-screen" class="hidden fixed inset-0 bg-gray-900 flex items-center justify-center z-50">
+    <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center">
+      <h2 class="text-2xl font-bold text-gray-900 mb-1">Set Your Kiosk PIN</h2>
+      <p class="text-sm text-gray-500 mb-2">This 4-digit PIN lets you exit kiosk mode.</p>
+      <p id="pin-teacher-name" class="text-sm font-semibold text-red-700 mb-6"></p>
+
+      <div id="pin-setup-error" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700"></div>
+
+      <input type="password" id="pin-setup-input" maxlength="4" inputmode="numeric" pattern="[0-9]*"
+        class="w-full text-center text-4xl font-mono p-4 border-4 border-gray-300 rounded-lg focus:ring-4 focus:ring-red-500 focus:border-red-500 mb-4"
+        placeholder="_ _ _ _" />
+      <button id="pin-setup-submit"
+        class="w-full bg-red-700 text-white font-bold py-3 rounded-lg hover:bg-red-800 transition-all disabled:opacity-50">
+        Set PIN &amp; Start Kiosk
+      </button>
+    </div>
+  </div>
+
+  <!-- ================== PIN ENTRY SCREEN (to exit kiosk) ================== -->
+  <div id="pin-entry-screen" class="hidden fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
+    <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center">
+      <h2 class="text-2xl font-bold text-gray-900 mb-2">Enter PIN</h2>
+      <p class="text-sm text-gray-500 mb-4">Enter your 4-digit PIN to access the admin panel.</p>
+
+      <div id="pin-entry-error" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700"></div>
+
+      <input type="password" id="pin-entry-input" maxlength="4" inputmode="numeric" pattern="[0-9]*"
+        class="w-full text-center text-4xl font-mono p-4 border-4 border-gray-300 rounded-lg focus:ring-4 focus:ring-red-500 focus:border-red-500 mb-4"
+        placeholder="_ _ _ _" />
+      <button id="pin-entry-submit"
+        class="w-full bg-red-700 text-white font-bold py-3 rounded-lg hover:bg-red-800 transition-all mb-3">
+        Unlock
+      </button>
+      <button id="pin-forgot-link" class="text-sm text-red-600 hover:underline">Forgot PIN? Re-authenticate with Aeries</button>
+    </div>
+  </div>
+
+  <div class="w-full max-w-6xl mx-auto bg-white rounded-2xl shadow-lg overflow-hidden">
+    <div class="flex">
+
+      <!-- ================== ADMIN ================== -->
+      <div id="admin-panel" class="w-full bg-gray-50 p-6 border-r border-gray-200 hidden">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+          <!-- ===== LEFT COLUMN (PRIMARY CONTROLS) ===== -->
+          <div class="md:col-span-1 flex flex-col space-y-6">
+
+            <div>
+              <div class="flex justify-between items-start">
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">Teacher Admin</h2>
+                <button id="teacher-logout-btn" class="text-xs text-red-600 hover:underline hidden">Sign Out</button>
+              </div>
+              <p id="teacher-name-display" class="text-sm font-semibold text-red-700 mb-1 hidden"></p>
+              <p id="current-date" class="text-sm text-gray-500"></p>
+            </div>
+
+            <!-- Period override (TOP PRIORITY) -->
+            <div>
+              <label for="period-select" class="block text-sm font-medium text-gray-700 mb-2">Current Period
+                (Override)</label>
+              <select id="period-select"
+                class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500">
+                <option value="">-- Auto-Detecting --</option>
+              </select>
+            </div>
+
+            <!-- Attendance Summary -->
+            <div class="pt-6 border-t">
+              <h3 class="text-lg font-semibold text-gray-800 mb-2">Attendance Summary</h3>
+              <div class="space-y-1 text-sm">
+                <p>On Time: <span id="summary-ontime" class="font-bold">0</span></p>
+                <p>Late: <span id="summary-late" class="font-bold">0</span></p>
+                <p>Truant: <span id="summary-truant" class="font-bold">0</span></p>
+                <p>Absent: <span id="summary-absent" class="font-bold">0</span></p>
+                <p>Total: <span id="summary-total" class="font-bold">0</span></p>
+              </div>
+            </div>
+
+            <!-- Seating Exceptions -->
+            <div class="pt-6 border-t">
+              <h3 class="text-lg font-semibold text-gray-800 mb-2">Seating Exceptions</h3>
+              <p class="text-xs text-gray-500 mb-2">Front row tables are 1, 2, 12, 13. Enter full Student IDs.</p>
+
+              <label class="block text-xs font-medium text-gray-700">Front Row IDs (one per line)</label>
+              <textarea id="front-row-input" class="w-full mt-1 p-2 border rounded-md h-20"
+                placeholder="800024418&#10;800024885"></textarea>
+
+              <label class="block text-xs font-medium text-gray-700 mt-3">Do-Not-Sit-Together Pairs (ID1,ID2 per
+                line)</label>
+              <textarea id="avoid-pairs-input" class="w-full mt-1 p-2 border rounded-md h-20"
+                placeholder="800024418,800026182"></textarea>
+
+              <div class="flex items-center gap-2 mt-3">
+                <button id="save-exceptions" class="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700">Save
+                  Exceptions</button>
+                <span id="exceptions-status" class="text-xs text-gray-600"></span>
+              </div>
+            </div>
+
+            <!-- Target Timer -->
+            <div class="pt-6 border-t">
+              <div class="flex justify-between items-center mb-2">
+                <h3 class="text-lg font-semibold text-gray-800">Target Timer</h3>
+                <button id="timer-fullscreen-btn"
+                  class="bg-red-600 text-white px-3 py-1 text-xs rounded-md hover:bg-red-700 transition-all">Fullscreen</button>
+              </div>
+              <div class="space-y-3">
+                <div>
+                  <label for="timer-target-input" class="block text-xs font-medium text-gray-700 mb-1">Set Target Time</label>
+                  <input type="time" id="timer-target-input"
+                    class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-lg font-mono" />
+                </div>
+                <div class="bg-gray-100 rounded-lg p-4 text-center border">
+                  <div id="timer-display" class="text-4xl font-bold font-mono text-gray-300 tabular-nums">00:00:00</div>
+                  <p id="timer-status" class="text-xs uppercase tracking-wider mt-2 text-gray-400 font-semibold h-4"></p>
+                </div>
+                <button type="button" id="timer-test-audio"
+                  class="w-full text-xs text-gray-500 border border-gray-300 rounded-md py-1 hover:bg-gray-100 transition-all">Test Alarm Tone</button>
+              </div>
+            </div>
+
+          </div><!-- End Left Column -->
+
+          <!-- ===== RIGHT COLUMN (LIVE DATA & SETUP) ===== -->
+          <div class="md:col-span-2 flex flex-col space-y-6">
+
+            <!-- Live Data Panels -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h3 class="text-xl font-semibold text-gray-800 mb-2">Currently Absent</h3>
+                <ul id="absent-list" class="text-sm space-y-1 h-96 overflow-y-auto bg-gray-100 p-3 rounded-md border">
+                  <li class="text-gray-500">Select a period to see list.</li>
+                </ul>
+              </div>
+
+              <div>
+                <div class="flex justify-between items-center mb-2">
+                  <h3 class="text-xl font-semibold text-gray-800">Group Assignments</h3>
+                  <button id="display-groups-btn"
+                    class="bg-blue-500 text-white px-3 py-1 text-xs rounded-md hover:bg-blue-600">Display
+                    Fullscreen</button>
+                </div>
+                <div id="group-report" class="space-y-3 h-96 overflow-y-auto bg-gray-100 p-3 rounded-md border">
+                  <p class="text-gray-500">Students will appear here as they sign in.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="pt-6 border-t space-y-3">
+              <h3 class="text-lg font-semibold text-gray-800">Export Attendance</h3>
+              <button id="export-csv"
+                class="w-full bg-red-700 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-800 transition-all">Download
+                Today's Full Log</button>
+
+              <div class="pt-2 border-t">
+                <p class="text-xs text-gray-500 my-2 text-center">Or, select a date range to export:</p>
+                <div class="grid grid-cols-2 gap-4">
+                  <div>
+                    <label for="start-date" class="block text-sm font-medium text-gray-700">Start Date</label>
+                    <input type="date" id="start-date"
+                      class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                  </div>
+                  <div>
+                    <label for="end-date" class="block text-sm font-medium text-gray-700">End Date</label>
+                    <input type="date" id="end-date"
+                      class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                  </div>
+                </div>
+                <button id="export-range-csv"
+                  class="w-full mt-4 bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-all">Export
+                  Selected Range</button>
+                <p id="export-status" class="text-xs mt-2 text-center font-medium"></p>
+              </div>
+            </div>
+
+            <!-- Roster Management (LOWER PRIORITY) -->
+            <div class="pt-6 border-t">
+              <h3 class="text-lg font-semibold text-gray-800 mb-2">Roster Management</h3>
+              <p class="text-xs text-gray-500 mb-2">Upload one or more roster CSVs. Saved locally and synced to cloud
+                (if configured).</p>
+
+              <input type="file" id="roster-upload" accept=".csv" class="hidden" multiple />
+              <label for="roster-upload"
+                class="file-input-button w-full text-center bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition-all">Add/Update
+                Roster File(s)</label>
+
+              <p id="roster-status" class="text-xs mt-2 font-medium"></p>
+              <div id="roster-warning" class="mt-2 text-sm text-red-600 font-semibold"></div>
+              <div id="roster-summary" class="mt-2 text-xs text-gray-600"></div>
+              <div id="roster-debug" class="mt-1 text-xs text-gray-500"></div>
+
+              <button id="clear-rosters" class="text-xs text-red-500 hover:underline mt-2">Clear all saved
+                rosters</button>
+            </div>
+
+
+            <!-- Kiosk Mode Button -->
+            <div class="pt-6 border-t">
+              <button id="hide-admin-button"
+                class="w-full bg-gray-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-700 transition-all">Return to Kiosk Mode</button>
+            </div>
+
+          </div><!-- End Right Column -->
+
+        </div><!-- grid -->
+      </div><!-- admin-panel -->
+
+      <!-- ================== KIOSK ================== -->
+      <div id="kiosk-panel"
+        class="w-full p-8 md:p-12 flex flex-col items-center justify-center bg-gray-900 text-white min-h-[80vh] md:min-h-0">
+        <div id="kiosk-view" class="w-full max-w-sm text-center">
+          <h1 class="text-4xl font-bold mb-2">Welcome Warriors!</h1>
+          <p id="kiosk-teacher-name" class="text-sm text-red-400 font-semibold mb-1 hidden"></p>
+          <p class="text-lg text-gray-400">Enter your 4-digit ID or teacher PIN.</p>
+          <p id="period-indicator" class="mt-2 text-sm text-white/90"></p>
+
+          <input type="text" id="student-id-input" maxlength="4"
+            class="w-full mt-6 text-center text-5xl font-mono p-4 rounded-lg border-4 border-gray-600 bg-white text-gray-900 focus:outline-none focus:ring-4 focus:ring-red-500"
+            placeholder="_ _ _ _" />
+          <button id="sign-in-button"
+            class="w-full mt-6 bg-red-700 text-white font-bold text-xl py-4 rounded-lg shadow-md hover:bg-red-800 transform hover:-translate-y-1 transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-white disabled:opacity-50 disabled:transform-none"
+            disabled>Sign In</button>
+
+        </div>
+
+        <div id="message-view" class="w-full max-w-md text-center hidden"></div>
+      </div><!-- kiosk-panel -->
+
+    </div><!-- flex -->
+  </div><!-- container -->
+
+  <!-- Fullscreen Timer Overlay -->
+  <div id="timer-fullscreen" class="hidden fixed inset-0 timer-fs-bg text-white z-50 overflow-hidden">
+    <div class="timer-fs-orb" style="width:500px;height:500px;background:#b91c1c;top:-150px;left:-100px;"></div>
+    <div class="timer-fs-orb" style="width:600px;height:600px;background:#7f1d1d;bottom:-200px;right:-150px;"></div>
+
+    <button id="timer-fs-close"
+      class="absolute top-4 right-6 text-5xl font-bold text-gray-500 hover:text-white transition-colors z-10">&times;</button>
+
+    <div class="relative z-10 flex flex-col items-center justify-center h-full">
+      <div class="timer-fs-ring rounded-3xl px-16 py-12 text-center" style="backdrop-filter:blur(20px);background:rgba(0,0,0,0.4);">
+        <p class="text-sm uppercase tracking-[0.25em] text-gray-400 font-semibold mb-6">Target Timer</p>
+        <div id="timer-fs-display" class="text-8xl md:text-9xl font-bold font-mono tabular-nums text-gray-500 timer-fs-glow select-none">
+          00:00:00
+        </div>
+        <p id="timer-fs-status" class="text-sm uppercase tracking-[0.2em] mt-6 font-semibold h-5 text-gray-500"></p>
+      </div>
+      <p class="mt-8 text-xs text-gray-600 tracking-wider">Press Escape to close</p>
+    </div>
+  </div>
+
+  <div id="group-display-fullscreen" class="hidden fixed inset-0 bg-gray-900 text-white z-50 p-8 md:p-12">
+    <button id="close-group-display-btn"
+      class="absolute top-4 right-6 text-5xl font-bold text-gray-400 hover:text-white">&times;</button>
+
+    <div class="w-full max-w-7xl mx-auto">
+      <h2 class="text-4xl md:text-5xl font-bold text-center mb-8">Group Assignments</h2>
+      <div id="fullscreen-group-list" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8"></div>
+    </div>
+  </div>
+
+  <script type="module">
+
+    // ===== FULLSCREEN DISPLAY FUNCTIONS =====
+
+    function showGroupDisplay() {
+      const mainAppContainer = document.querySelector('.w-full.max-w-6xl');
+      const fullscreenContainer = document.getElementById('group-display-fullscreen');
+
+      // This ensures the fullscreen view has the latest data when opened
+      updateFullscreenGroupView();
+
+      mainAppContainer.classList.add('hidden');
+      fullscreenContainer.classList.remove('hidden');
+    }
+
+    function hideGroupDisplay() {
+      const mainAppContainer = document.querySelector('.w-full.max-w-6xl');
+      const fullscreenContainer = document.getElementById('group-display-fullscreen');
+
+      mainAppContainer.classList.remove('hidden');
+      fullscreenContainer.classList.add('hidden');
+    }
+
+    // This helper function will be called by updateUI to keep both views in sync
+    function updateFullscreenGroupView() {
+      const fullscreenListEl = document.getElementById('fullscreen-group-list');
+      if (!fullscreenListEl) return;
+
+      const map = new Map();
+      for (let g = 1; g <= MAX_GROUP; g++) map.set(g, []);
+      periodAttendanceLog.forEach(l => {
+        if (l.Group && map.has(l.Group)) map.get(l.Group).push(l.Name);
+      });
+
+      fullscreenListEl.replaceChildren();
+      if (periodAttendanceLog.length === 0) {
+        const p = document.createElement('p');
+        p.className = 'col-span-full text-center text-gray-400 text-xl';
+        p.textContent = 'Students will appear here as they sign in.';
+        fullscreenListEl.appendChild(p);
+      } else {
+        map.forEach((arr, grp) => {
+          if (arr.length > 0) {
+            const div = document.createElement('div');
+            const h4 = document.createElement('h4');
+            h4.className = 'font-bold text-2xl text-red-500 mb-2';
+            h4.textContent = `Group ${grp} (${arr.length})`;
+            const ul = document.createElement('ul');
+            ul.className = 'text-xl space-y-1';
+            arr.forEach(n => {
+              const li = document.createElement('li');
+              li.textContent = n;
+              ul.appendChild(li);
+            });
+            div.append(h4, ul);
+            fullscreenListEl.appendChild(div);
+          }
+        });
+      }
+    }
+
+
+    async function exportDateRangeCSV() {
+      const startDateInput = document.getElementById('start-date');
+      const endDateInput = document.getElementById('end-date');
+      const statusEl = document.getElementById('export-status');
+
+      const startDateStr = startDateInput.value;
+      const endDateStr = endDateInput.value;
+
+      if (!startDateStr || !endDateStr) {
+        statusEl.textContent = 'Please select both a start and end date.';
+        statusEl.classList.add('text-red-600');
+        return;
+      }
+
+      const startDate = new Date(startDateStr + 'T00:00:00');
+      const endDate = new Date(endDateStr + 'T00:00:00');
+
+      if (startDate > endDate) {
+        statusEl.textContent = 'Start date cannot be after the end date.';
+        statusEl.classList.add('text-red-600');
+        return;
+      }
+
+      statusEl.textContent = 'Fetching data and rosters... This may take a moment.';
+      statusEl.classList.remove('text-red-600', 'text-green-600');
+      statusEl.classList.add('text-blue-600');
+
+      const rows = [["Date", "Period", "StudentID", "LastName", "FirstName", "Status", "SignInTime", "Group"]];
+      const masterPeriodList = ["0", "1", "2", "2A", "2B", "3", "4", "5", "6", "7"];
+
+      const datesToCheck = [];
+      let currentDate = new Date(startDate);
+      while (currentDate <= endDate) {
+        datesToCheck.push(currentDate.toISOString().slice(0, 10));
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      try {
+        const fetchTasks = [];
+        for (const date of datesToCheck) {
+          for (const period of masterPeriodList) {
+            fetchTasks.push((async () => {
+              if (!teacherUid) return [];
+              const basePath = teacherPath(`attendance/${date}/periods/${period}`);
+              const rosterDocRef = doc(db, basePath);
+              const rosterDoc = await getDoc(rosterDocRef);
+              const roster = rosterDoc.exists() && rosterDoc.data().roster_snapshot ? rosterDoc.data().roster_snapshot : [];
+              if (roster.length === 0) return [];
+
+              const studentsSnapshot = await getDocs(collection(db, `${basePath}/students`));
+              const presentStudents = new Map();
+              studentsSnapshot.forEach(d => presentStudents.set(d.data().StudentID, d.data()));
+
+              const periodRows = [];
+              for (const student of roster) {
+                if (presentStudents.has(student.StudentID)) {
+                  const log = presentStudents.get(student.StudentID);
+                  periodRows.push([date, period, student.StudentID, csvQuote(student.LastName || ''), csvQuote(student.FirstName || ''), log.Status, log.SignInTime, log.Group]);
+                } else {
+                  periodRows.push([date, period, student.StudentID, csvQuote(student.LastName || ''), csvQuote(student.FirstName || ''), 'Absent', 'N/A', 'N/A']);
+                }
+              }
+              return periodRows;
+            })());
+          }
+        }
+        const results = await Promise.all(fetchTasks);
+        for (const periodRows of results) rows.push(...periodRows);
+
+        if (rows.length <= 1) {
+          statusEl.textContent = 'No attendance entries (with saved rosters) were found in the selected date range.';
+          statusEl.classList.add('text-red-600');
+          return;
+        }
+
+        const csvContent = rows.map(r => r.join(',')).join('\r\n');
+        const encodedUri = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csvContent);
+        const link = document.createElement('a');
+        link.setAttribute('href', encodedUri);
+        link.setAttribute('download', `full_attendance_log_${startDateStr}_to_${endDateStr}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        statusEl.textContent = `Successfully exported ${rows.length - 1} records (including absences).`;
+        statusEl.classList.remove('text-red-600', 'text-blue-600');
+        statusEl.classList.add('text-green-600');
+
+      } catch (err) {
+        console.error("Error exporting full attendance log:", err);
+        statusEl.textContent = 'An error occurred. Check the console for details.';
+        statusEl.classList.add('text-red-600');
+      }
+    }
+    // ===== Import modern Firebase SDK =====
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, signInWithCustomToken, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getFirestore, initializeFirestore, persistentLocalCache, collection, doc, onSnapshot, setDoc, serverTimestamp, getDoc, addDoc, where, query, getDocs, deleteDoc, documentId } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
+
+    // ===== Config & Constants =====
+    const MAX_GROUP = 13;                    // groups 1..13
+    const GROUP_CAP = g => g === 6 ? 2 : 3;    // cap 2 for group 6, else 3
+    const FRONT_SET = new Set([1, 2, 12, 13]);  // "front of room" groups
+    const LATE_TO_THIRD = new Set([9, 10]);   // groups that should be last to receive a 3rd person
+    const TARDY_AFTER_NTH = 5;              // Start marking tardy after Nth sign-in for the period
+    const TARDY_GRACE_MINUTES = 8;           // Minutes after Nth sign-in before marking late
+    const PERIOD_SWITCH_NTH = 2;             // Switch global period after Nth student from new period
+
+    // CSV RFC 4180 quoting — doubles internal quotes
+    const csvQuote = s => '"' + String(s).replace(/"/g, '""') + '"';
+
+    // Build a log entry object (shared by handleSignIn and manualCheckIn)
+    function buildLogEntry(student, period, status, group, useServerTimestamp) {
+      return {
+        Date: new Date().toLocaleDateString(),
+        StudentID: student.StudentID,
+        Name: `${student.FirstName} ${student.LastName}`,
+        SignInTime: new Date().toLocaleTimeString(),
+        Status: status,
+        Group: group,
+        Period: period,
+        Timestamp: useServerTimestamp ? serverTimestamp() : Date.now()
+      };
+    }
+
+    // Cloud config passed in by host page (optional)
+    const FB_CONFIG = (typeof window.__firebase_config === 'object' && window.__firebase_config) ? window.__firebase_config : null;
+
+    let db = null, auth = null, functions = null;
+    let unsubRosters = null, unsubExceptions = null, unsubAttendance = null;
+
+    // ===== Teacher auth state =====
+    let teacherUid = null;
+    let teacherName = null;
+    let teacherPin = null;
+
+    // Build a Firestore path under the authenticated teacher's root
+    // e.g. teacherPath('rosters') => 'teachers/UID123/rosters'
+    // e.g. teacherPath('config/main') => 'teachers/UID123/config/main'
+    function teacherPath(subPath) {
+      if (!teacherUid) throw new Error('teacherPath called before teacherUid is set');
+      return `teachers/${teacherUid}/${subPath}`;
+    }
+
+
+    // ===== State =====
+    let allRosters = {};      // { period -> [{StudentID,LastName,FirstName}, ...] }
+    let currentRoster = [];   // active period roster array
+    let periodAttendanceLog = []; // sign-ins for current period
+    let globalPeriod = null;          // current period from Firebase (shared across kiosks)
+    let unsubCurrentPeriod = null;    // listener for currentPeriod doc
+    let isOverride = false;
+
+    let exceptions = { avoidPairs: [], frontRow: new Set() };
+
+    // ===== DOM =====
+    const $ = sel => document.querySelector(sel);
+    const adminPanel = $('#admin-panel');
+    const hideAdminButton = $('#hide-admin-button');
+    const kioskPanel = $('#kiosk-panel');
+    const loginScreen = $('#login-screen');
+    const pinSetupScreen = $('#pin-setup-screen');
+    const pinEntryScreen = $('#pin-entry-screen');
+    const teacherNameDisplay = $('#teacher-name-display');
+    const teacherLogoutBtn = $('#teacher-logout-btn');
+    const kioskTeacherName = $('#kiosk-teacher-name');
+    const currentDateDisplay = $('#current-date');
+    const periodSelect = $('#period-select');
+    const rosterUpload = $('#roster-upload');
+    const rosterStatus = $('#roster-status');
+    const rosterWarning = $('#roster-warning');
+    const rosterSummary = $('#roster-summary');
+    const rosterDebug = $('#roster-debug');
+    const clearRostersBtn = $('#clear-rosters');
+    const exportCsvButton = $('#export-csv');
+    const studentIdInput = $('#student-id-input');
+    const signInButton = $('#sign-in-button');
+    const kioskView = $('#kiosk-view');
+    const messageView = $('#message-view');
+    const summaryOnTime = $('#summary-ontime');
+    const summaryLate = $('#summary-late');
+    const summaryTruant = $('#summary-truant');
+    const summaryAbsent = $('#summary-absent');
+    const summaryTotal = $('#summary-total');
+    const absentListEl = $('#absent-list');
+    const groupReportEl = $('#group-report');
+    const frontRowInput = $('#front-row-input');
+    const avoidPairsInput = $('#avoid-pairs-input');
+    const saveExceptionsBtn = $('#save-exceptions');
+    const exceptionsStatus = $('#exceptions-status');
+    const periodIndicator = $('#period-indicator');
+
+    // ===== Helpers =====
+    const nowISODate = () => new Date().toISOString().slice(0, 10);
+    const fmtTime = d => { try { return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch { return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); } };
+
+    // BOM-safe normalization
+    const linesFromText = t =>
+      t.replace(/^\uFEFF/, '')            // strip UTF-8 BOM if present
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .split('\n');
+
+    // Local-only storage for attendance when no cloud
+    const localLogCache = new Map();
+    const keyFor = (date, period) => `${date}|${period}`;
+    const getLocalLogs = (date, period) => { const k = keyFor(date, period); if (!localLogCache.has(k)) { const s = localStorage.getItem('logs:' + k); localLogCache.set(k, s ? JSON.parse(s) : []); } return localLogCache.get(k); };
+    const setLocalLogs = (date, period, list) => { const k = keyFor(date, period); localLogCache.set(k, list); try { localStorage.setItem('logs:' + k, JSON.stringify(list)); } catch (e) { console.warn('localStorage full, attendance saved in memory only:', e); } };
+
+    // Resolve roster key, e.g., "2A"/"2B" -> "2" if that roster exists
+    function resolveRosterKey(p) {
+      if (!p) return null;
+      if (allRosters[p]) return p;              // exact
+      const m = String(p).match(/^(\d+)/);     // digits at start
+      if (m && allRosters[m[1]]) return m[1];
+      return null;
+    }
+
+    // ===== Period switching via Firebase =====
+    // Convert Firestore Timestamp or number to milliseconds
+    function toMs(ts) {
+      if (!ts) return 0;
+      if (typeof ts === 'number') return ts;
+      if (ts.toMillis) return ts.toMillis();
+      if (ts.seconds) return ts.seconds * 1000;
+      return new Date(ts).getTime();
+    }
+
+    // Update the global period in Firebase (triggers all kiosks to switch)
+    async function setGlobalPeriod(period) {
+      if (!db || !teacherUid) return;
+      const today = nowISODate();
+      const periodDocRef = doc(db, teacherPath(`attendance/${today}/meta/currentPeriod`));
+      await setDoc(periodDocRef, { period, updatedAt: serverTimestamp() }, { merge: true });
+    }
+
+    // Start listening for currentPeriod changes from Firebase
+    function watchCurrentPeriod() {
+      if (!db || !teacherUid) return;
+      const today = nowISODate();
+      const periodDocRef = doc(db, teacherPath(`attendance/${today}/meta/currentPeriod`));
+      unsubCurrentPeriod = onSnapshot(periodDocRef, snap => {
+        if (!snap.exists()) return;
+        const data = snap.data();
+        if (data.period && data.period !== globalPeriod && !isOverride) {
+          globalPeriod = data.period;
+          console.log(`[watchCurrentPeriod] Period switched to ${globalPeriod}`);
+          periodSelect.value = globalPeriod;
+          onPeriodChange();
+        }
+      });
+    }
+
+    // Check if enough students have signed in to trigger a global period switch
+    async function maybeUpdateGlobalPeriod(period) {
+      if (!db || period === globalPeriod) return;
+      const count = periodAttendanceLog.length;
+      if (count >= PERIOD_SWITCH_NTH) {
+        console.log(`[maybeUpdateGlobalPeriod] ${count} students in P.${period}, switching globally`);
+        globalPeriod = period;
+        setGlobalPeriod(period).catch(e => console.error("Period switch error:", e));
+      }
+    }
+
+    // ===== Init =====
+    document.addEventListener('DOMContentLoaded', init);
+    async function init() {
+      try {
+        console.log('[init] starting');
+        await initFirebase();
+
+        // Wire up all static event listeners immediately
+        const displayGroupsBtn = document.getElementById('display-groups-btn');
+        const closeGroupsBtn = document.getElementById('close-group-display-btn');
+        if (displayGroupsBtn && closeGroupsBtn) {
+          displayGroupsBtn.addEventListener('click', showGroupDisplay);
+          closeGroupsBtn.addEventListener('click', hideGroupDisplay);
+        }
+
+        document.addEventListener('keydown', (e) => {
+          const fullscreenContainer = document.getElementById('group-display-fullscreen');
+          if (e.key === 'Escape' && fullscreenContainer && !fullscreenContainer.classList.contains('hidden')) {
+            hideGroupDisplay();
+          }
+        });
+
+        periodSelect.addEventListener('change', () => { isOverride = true; sessionStorage.setItem('periodOverride', 'true'); onPeriodChange(); });
+        rosterUpload.addEventListener('change', onRosterUpload);
+        clearRostersBtn.addEventListener('click', clearSavedRosters);
+        exportCsvButton.addEventListener('click', exportCSV);
+        hideAdminButton.addEventListener('click', showKioskMode);
+        saveExceptionsBtn.addEventListener('click', saveExceptions);
+        studentIdInput.addEventListener('input', () => { signInButton.disabled = studentIdInput.value.length < 4; });
+        studentIdInput.addEventListener('keyup', e => { if (e.key === 'Enter' && !signInButton.disabled) signInButton.click(); });
+        signInButton.addEventListener('click', handleSignIn);
+        document.addEventListener('keydown', e => { if (!messageView.classList.contains('hidden') && (e.key === 'Enter' || e.key === 'Escape')) dismissMessage(); });
+        messageView.addEventListener('click', () => { if (!messageView.classList.contains('hidden')) dismissMessage(); });
+        const exportRangeBtn = document.getElementById('export-range-csv');
+        if (exportRangeBtn) exportRangeBtn.addEventListener('click', exportDateRangeCSV);
+
+        // Login screen listeners
+        const loginSubmitBtn = document.getElementById('login-submit');
+        if (loginSubmitBtn) loginSubmitBtn.addEventListener('click', handleLogin);
+        const loginUsernameInput = document.getElementById('login-username');
+        const loginPasswordInput = document.getElementById('login-password');
+        if (loginPasswordInput) loginPasswordInput.addEventListener('keyup', e => { if (e.key === 'Enter') handleLogin(); });
+        if (loginUsernameInput) loginUsernameInput.addEventListener('keyup', e => { if (e.key === 'Enter') loginPasswordInput && loginPasswordInput.focus(); });
+
+        // PIN setup listeners
+        const pinSetupSubmitBtn = document.getElementById('pin-setup-submit');
+        if (pinSetupSubmitBtn) pinSetupSubmitBtn.addEventListener('click', handlePinSetup);
+        const pinSetupInputEl = document.getElementById('pin-setup-input');
+        if (pinSetupInputEl) pinSetupInputEl.addEventListener('keyup', e => { if (e.key === 'Enter') handlePinSetup(); });
+
+        // PIN entry listeners
+        const pinEntrySubmitBtn = document.getElementById('pin-entry-submit');
+        if (pinEntrySubmitBtn) pinEntrySubmitBtn.addEventListener('click', handlePinEntry);
+        const pinEntryInputEl = document.getElementById('pin-entry-input');
+        if (pinEntryInputEl) pinEntryInputEl.addEventListener('keyup', e => { if (e.key === 'Enter') handlePinEntry(); });
+        const pinForgotLink = document.getElementById('pin-forgot-link');
+        if (pinForgotLink) pinForgotLink.addEventListener('click', () => {
+          pinEntryScreen.classList.add('hidden');
+          clearKioskBinding();
+          teacherUid = null; teacherName = null; teacherPin = null;
+          if (auth) signOut(auth).catch(() => {});
+          showLoginScreen();
+        });
+
+        // Logout listener
+        if (teacherLogoutBtn) teacherLogoutBtn.addEventListener('click', handleTeacherLogout);
+
+        // ===== Check for stored kiosk binding =====
+        const binding = loadKioskBinding();
+        if (binding && binding.uid && binding.name && binding.pin) {
+          teacherUid = binding.uid;
+          teacherName = binding.name;
+          teacherPin = binding.pin;
+
+          // Re-authenticate with Firebase using stored UID
+          // (The custom token is short-lived; re-auth happens on next login; for kiosk
+          //  continuity we rely on the stored binding and the persistent Firestore cache)
+          // If auth is available, try to restore session; otherwise load local data
+          await onTeacherAuthenticated(false);
+          showKioskMode();
+        } else if (!FB_CONFIG) {
+          // No cloud config — go straight to local kiosk mode
+          teacherUid = 'local';
+          teacherName = 'Local Mode';
+          teacherPin = '0000';
+          await onTeacherAuthenticated(false);
+          showKioskMode();
+        } else {
+          showLoginScreen();
+        }
+
+        try { runParseTests(); runGroupTests(); runCSVEdgeTests(); } catch { }
+      } catch (err) {
+        console.error('[init] fatal', err);
+        alert('Init error: ' + (err && err.message ? err.message : err));
+      }
+    }
+
+    // ===== Firebase (MODULAR) setup =====
+    async function initFirebase() {
+      if (!FB_CONFIG) {
+        rosterStatus.textContent = 'Local Mode: data saved in this browser.';
+        rosterStatus.classList.add('text-green-600');
+        return;
+      }
+      try {
+        const app = initializeApp(FB_CONFIG);
+        // Use modern persistent cache API (replaces deprecated enableIndexedDbPersistence)
+        try {
+          db = initializeFirestore(app, {
+            localCache: persistentLocalCache()
+          });
+          console.log('[initFirebase] Offline persistence enabled');
+        } catch (persistErr) {
+          console.warn('[initFirebase] Persistent cache unavailable, using default:', persistErr.message);
+          db = getFirestore(app);
+        }
+        auth = getAuth(app);
+        functions = getFunctions(app);
+      } catch (err) {
+        console.error(err);
+        rosterStatus.textContent = 'Cloud error — Local Mode enabled.';
+        rosterStatus.classList.add('text-red-600');
+        db = null; auth = null; functions = null;
+      }
+    }
+
+    // ===== Screen navigation =====
+    function showLoginScreen() {
+      loginScreen.classList.remove('hidden');
+      pinSetupScreen.classList.add('hidden');
+      pinEntryScreen.classList.add('hidden');
+      adminPanel.classList.add('hidden');
+      kioskPanel.classList.add('hidden');
+      const usernameInput = document.getElementById('login-username');
+      if (usernameInput) setTimeout(() => usernameInput.focus(), 100);
+    }
+
+    function showPinSetup() {
+      loginScreen.classList.add('hidden');
+      pinSetupScreen.classList.remove('hidden');
+      pinEntryScreen.classList.add('hidden');
+      adminPanel.classList.add('hidden');
+      kioskPanel.classList.add('hidden');
+      // Show teacher name on PIN setup screen
+      const ptn = document.getElementById('pin-teacher-name');
+      if (ptn && teacherName) { ptn.textContent = `Welcome, ${teacherName}!`; ptn.classList.remove('hidden'); }
+      const pinInput = document.getElementById('pin-setup-input');
+      if (pinInput) { pinInput.value = ''; setTimeout(() => pinInput.focus(), 100); }
+    }
+
+    function showKioskMode() {
+      loginScreen.classList.add('hidden');
+      pinSetupScreen.classList.add('hidden');
+      pinEntryScreen.classList.add('hidden');
+      adminPanel.classList.add('hidden');
+      kioskPanel.classList.remove('hidden');
+      // Show teacher name on kiosk
+      if (kioskTeacherName && teacherName) {
+        kioskTeacherName.textContent = teacherName + "'s Class";
+        kioskTeacherName.classList.remove('hidden');
+      }
+      studentIdInput.value = '';
+      signInButton.disabled = true;
+      studentIdInput.focus();
+    }
+
+    function showAdminPanel() {
+      loginScreen.classList.add('hidden');
+      pinSetupScreen.classList.add('hidden');
+      pinEntryScreen.classList.add('hidden');
+      adminPanel.classList.remove('hidden');
+      kioskPanel.classList.add('hidden');
+      // Show teacher name and logout in admin panel
+      if (teacherNameDisplay && teacherName) {
+        teacherNameDisplay.textContent = teacherName;
+        teacherNameDisplay.classList.remove('hidden');
+      }
+      if (teacherLogoutBtn) teacherLogoutBtn.classList.remove('hidden');
+    }
+
+    function showPinEntry() {
+      pinEntryScreen.classList.remove('hidden');
+      const pinInput = document.getElementById('pin-entry-input');
+      if (pinInput) { pinInput.value = ''; setTimeout(() => pinInput.focus(), 100); }
+      const errEl = document.getElementById('pin-entry-error');
+      if (errEl) errEl.classList.add('hidden');
+    }
+
+    // ===== Kiosk session persistence =====
+    const KIOSK_STORAGE_KEY = 'kioskBinding';
+
+    function saveKioskBinding(uid, name, pin, remember) {
+      const binding = { uid, name, pin };
+      sessionStorage.setItem(KIOSK_STORAGE_KEY, JSON.stringify(binding));
+      if (remember) {
+        try { localStorage.setItem(KIOSK_STORAGE_KEY, JSON.stringify(binding)); } catch (e) { console.warn('localStorage full:', e); }
+      }
+    }
+
+    function loadKioskBinding() {
+      try {
+        const session = sessionStorage.getItem(KIOSK_STORAGE_KEY);
+        if (session) return JSON.parse(session);
+        const local = localStorage.getItem(KIOSK_STORAGE_KEY);
+        if (local) return JSON.parse(local);
+      } catch { }
+      return null;
+    }
+
+    function clearKioskBinding() {
+      sessionStorage.removeItem(KIOSK_STORAGE_KEY);
+      localStorage.removeItem(KIOSK_STORAGE_KEY);
+    }
+
+    // ===== Login handler =====
+    async function handleLogin() {
+      const usernameInput = document.getElementById('login-username');
+      const passwordInput = document.getElementById('login-password');
+      const rememberInput = document.getElementById('login-remember');
+      const submitBtn = document.getElementById('login-submit');
+      const errEl = document.getElementById('login-error');
+
+      const username = usernameInput.value.trim();
+      const password = passwordInput.value;
+      if (!username || !password) {
+        errEl.textContent = 'Please enter your username and password.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Signing in...';
+      errEl.classList.add('hidden');
+
+      try {
+        if (!functions) throw new Error('Firebase not initialized — no cloud connection.');
+        const authenticateTeacher = httpsCallable(functions, 'authenticateTeacher');
+        const result = await authenticateTeacher({ username, password });
+        const { token, uid, displayName } = result.data;
+
+        // Sign in to Firebase Auth with the custom token
+        await signInWithCustomToken(auth, token);
+
+        teacherUid = uid;
+        teacherName = displayName || username;
+
+        const remember = rememberInput ? rememberInput.checked : false;
+
+        // Check if teacher already has a PIN stored
+        const existingPin = await loadTeacherPin();
+        if (existingPin) {
+          teacherPin = existingPin;
+          saveKioskBinding(teacherUid, teacherName, teacherPin, remember);
+          // Full initialization before switching to kiosk
+          await onTeacherAuthenticated(remember);
+          showKioskMode();
+        } else {
+          // Need to set up PIN first
+          saveKioskBinding(teacherUid, teacherName, null, remember);
+          showPinSetup();
+        }
+      } catch (err) {
+        console.error('[handleLogin] error', err);
+        let msg = 'Login failed. Please check your credentials and try again.';
+        if (err.code === 'functions/unauthenticated' || err.code === 'functions/invalid-argument') {
+          msg = err.message || msg;
+        } else if (err.message) {
+          msg = err.message;
+        }
+        errEl.textContent = msg;
+        errEl.classList.remove('hidden');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Sign In';
+      }
+    }
+
+    // Load PIN stored in Firestore config
+    async function loadTeacherPin() {
+      if (!db || !teacherUid) return null;
+      try {
+        const configRef = doc(db, teacherPath('config/main'));
+        const snap = await getDoc(configRef);
+        if (snap.exists()) {
+          return snap.data().kioskPin || null;
+        }
+      } catch (e) { console.warn('[loadTeacherPin]', e); }
+      return null;
+    }
+
+    // ===== PIN setup handler =====
+    async function handlePinSetup() {
+      const pinInput = document.getElementById('pin-setup-input');
+      const submitBtn = document.getElementById('pin-setup-submit');
+      const errEl = document.getElementById('pin-setup-error');
+
+      const pin = pinInput.value.trim();
+      if (!/^\d{4}$/.test(pin)) {
+        errEl.textContent = 'PIN must be exactly 4 digits.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Saving...';
+      errEl.classList.add('hidden');
+
+      try {
+        // Save PIN to Firestore config
+        if (db && teacherUid) {
+          const configRef = doc(db, teacherPath('config/main'));
+          await setDoc(configRef, { kioskPin: pin, updatedAt: serverTimestamp() }, { merge: true });
+        }
+        teacherPin = pin;
+
+        // Update kiosk binding with PIN
+        const binding = loadKioskBinding();
+        const remember = binding ? !!localStorage.getItem(KIOSK_STORAGE_KEY) : false;
+        saveKioskBinding(teacherUid, teacherName, teacherPin, remember);
+
+        await onTeacherAuthenticated(remember);
+        showKioskMode();
+      } catch (err) {
+        console.error('[handlePinSetup] error', err);
+        errEl.textContent = 'Failed to save PIN. Please try again.';
+        errEl.classList.remove('hidden');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Set PIN & Start Kiosk';
+      }
+    }
+
+    // ===== PIN entry handler (exit kiosk) =====
+    function handlePinEntry() {
+      const pinInput = document.getElementById('pin-entry-input');
+      const errEl = document.getElementById('pin-entry-error');
+
+      const entered = pinInput.value.trim();
+      if (entered === teacherPin) {
+        pinEntryScreen.classList.add('hidden');
+        showAdminPanel();
+      } else {
+        errEl.textContent = 'Incorrect PIN. Try again.';
+        errEl.classList.remove('hidden');
+        pinInput.value = '';
+        setTimeout(() => pinInput.focus(), 100);
+      }
+    }
+
+    // ===== Teacher logout =====
+    async function handleTeacherLogout() {
+      if (!confirm('Sign out? This will clear your kiosk session on this device.')) return;
+      clearKioskBinding();
+      teacherUid = null;
+      teacherName = null;
+      teacherPin = null;
+      // Unsubscribe all listeners
+      if (unsubRosters) { unsubRosters(); unsubRosters = null; }
+      if (unsubExceptions) { unsubExceptions(); unsubExceptions = null; }
+      if (unsubAttendance) { unsubAttendance(); unsubAttendance = null; }
+      if (unsubCurrentPeriod) { unsubCurrentPeriod(); unsubCurrentPeriod = null; }
+      if (auth) { try { await signOut(auth); } catch { } }
+      // Reset UI
+      teacherNameDisplay.classList.add('hidden');
+      teacherLogoutBtn.classList.add('hidden');
+      kioskTeacherName.classList.add('hidden');
+      allRosters = {};
+      currentRoster = [];
+      periodAttendanceLog = [];
+      showLoginScreen();
+    }
+
+    // Called after successful authentication (login or PIN entry from stored session)
+    async function onTeacherAuthenticated(remember) {
+      if (db) {
+        watchRostersFromCloud();
+        loadExceptions();
+        watchCurrentPeriod();
+      }
+      loadRostersLocal();
+      renderRosterSummary();
+      renderRosterDebug();
+
+      const today = new Date();
+      currentDateDisplay.textContent = today.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+      // Populate period dropdown from rosters
+      const rosterPeriods = Object.keys(allRosters).sort((a, b) => {
+        const na = parseFloat(a) || 0, nb = parseFloat(b) || 0;
+        return na - nb || a.localeCompare(b);
+      });
+      periodSelect.textContent = '';
+      const defaultOpt = document.createElement('option');
+      defaultOpt.value = '';
+      defaultOpt.textContent = '-- Waiting for students --';
+      periodSelect.appendChild(defaultOpt);
+      rosterPeriods.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p;
+        opt.textContent = `Period ${p}`;
+        periodSelect.appendChild(opt);
+      });
+
+      if (sessionStorage.getItem('periodOverride') === 'true') { isOverride = true; }
+      updateUI();
+    }
+
+
+    // ===== Rosters: load/save/watch =====
+    function loadRostersLocal() {
+      const saved = localStorage.getItem('allRosters');
+      if (saved) { allRosters = JSON.parse(saved); rosterStatus.textContent = 'Loaded saved rosters from browser.'; }
+      else { allRosters = {}; rosterStatus.textContent = 'No local rosters yet — upload CSV(s) or use Cloud Rosters.'; }
+      renderRosterSummary();
+    }
+
+    function watchRostersFromCloud() {
+      if (!teacherUid) return;
+      if (unsubRosters) unsubRosters();
+      const colRef = collection(db, teacherPath('rosters'));
+      unsubRosters = onSnapshot(colRef, snap => {
+        const incoming = {};
+        snap.forEach(d => {
+          const data = d.data();
+          const p = String(d.id);
+          if (Array.isArray(data.roster)) {
+            incoming[p] = data.roster;
+          }
+        });
+
+        allRosters = { ...allRosters, ...incoming };
+        try { localStorage.setItem('allRosters', JSON.stringify(allRosters)); } catch (e) { console.warn('localStorage full:', e); }
+        renderRosterSummary();
+
+        // Re-populate period dropdown when cloud rosters arrive
+        const curVal = periodSelect.value;
+        const rosterPeriods = Object.keys(allRosters).sort((a, b) => {
+          const na = parseFloat(a) || 0, nb = parseFloat(b) || 0;
+          return na - nb || a.localeCompare(b);
+        });
+        periodSelect.textContent = '';
+        const defaultOpt = document.createElement('option');
+        defaultOpt.value = '';
+        defaultOpt.textContent = '-- Waiting for students --';
+        periodSelect.appendChild(defaultOpt);
+        rosterPeriods.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p;
+          opt.textContent = `Period ${p}`;
+          periodSelect.appendChild(opt);
+        });
+        if (curVal) periodSelect.value = curVal;
+
+        const cur = periodSelect.value;
+        if (cur) {
+          const r = resolveRosterKey(cur);
+          currentRoster = r ? (allRosters[r] || []) : [];
+          updateUI();
+          renderRosterDebug();
+        }
+      }, err => {
+        console.error('[onSnapshot] roster listener error:', err);
+        rosterStatus.textContent = 'Cloud sync interrupted — using cached data.';
+        rosterStatus.classList.add('text-red-600');
+      });
+    }
+
+    function onRosterUpload(evt) {
+      (async e => {
+        const files = e.target.files; if (!files || !files.length) return;
+        console.log(`[onRosterUpload] Starting upload of ${files.length} file(s).`);
+        rosterWarning.innerHTML = '';
+
+        let processed = 0;
+        const merged = { ...allRosters };
+        const changed = new Set();
+
+        for (const f of files) {
+          try {
+            const text = await f.text();
+            const parsed = parseRoster(text);
+            console.log(`[onRosterUpload] Parsed file ${f.name}:`, parsed);
+            for (const p in parsed) {
+              merged[p] = parsed[p];
+              changed.add(String(p));
+            }
+            processed++;
+          } catch (err) {
+            rosterStatus.textContent = `Error processing ${f.name}: ${err.message}`;
+            rosterStatus.classList.add('text-red-600');
+            loadRostersLocal();
+            return;
+          }
+        }
+
+        console.log(`[onRosterUpload] Periods to update:`, Array.from(changed));
+        allRosters = merged;
+        try { localStorage.setItem('allRosters', JSON.stringify(allRosters)); } catch (e) { console.warn('localStorage full:', e); }
+        rosterStatus.textContent = `Successfully processed and saved ${processed} file(s).`;
+        rosterStatus.classList.remove('text-red-600'); rosterStatus.classList.add('text-green-600');
+
+        const cur = periodSelect.value;
+        if (cur) {
+          const resolved = resolveRosterKey(cur);
+          currentRoster = resolved ? (allRosters[resolved] || []) : [];
+          updateUI(); renderRosterDebug();
+        }
+
+        if (db && teacherUid) {
+          try {
+            const uploadPromises = [];
+            for (const p of changed) {
+              console.log(`[onRosterUpload] Preparing to write roster for period ${p} to Firestore.`);
+              const docRef = doc(db, teacherPath(`rosters/${p}`));
+              uploadPromises.push(
+                setDoc(docRef, { roster: allRosters[p], updatedAt: serverTimestamp() }, { merge: true })
+              );
+            }
+            await Promise.all(uploadPromises);
+            console.log("[onRosterUpload] All Firestore writes completed successfully.");
+            rosterStatus.textContent += ' Cloud sync complete.';
+            rosterStatus.classList.add('text-green-600');
+          } catch (err) {
+            console.error("Firebase write error:", err);
+            rosterStatus.textContent = 'Cloud sync failed. Using local rosters (kiosks will not match).';
+            rosterStatus.classList.add('text-red-600');
+          }
+        }
+
+        renderRosterSummary();
+        checkDuplicateIDs(allRosters);
+        onPeriodChange();
+      })(evt);
+    }
+
+    async function clearSavedRosters() {
+      rosterStatus.textContent = "Clearing local and cloud rosters...";
+      rosterStatus.classList.remove('text-red-600', 'text-green-600');
+
+      // Clear local state first
+      localStorage.removeItem('allRosters');
+      sessionStorage.removeItem('periodOverride');
+      allRosters = {};
+      currentRoster = [];
+      periodAttendanceLog = [];
+
+      // Clear cloud state if connected
+      if (db && teacherUid) {
+        try {
+          const colRef = collection(db, teacherPath('rosters'));
+          const snapshot = await getDocs(colRef);
+          const deletePromises = [];
+          snapshot.forEach(doc => {
+            deletePromises.push(deleteDoc(doc.ref));
+          });
+          await Promise.all(deletePromises);
+          console.log("Cloud rosters cleared successfully.");
+        } catch (err) {
+          console.error("Error clearing cloud rosters:", err);
+          rosterStatus.textContent = "Error clearing cloud rosters. Check console.";
+          rosterStatus.classList.add('text-red-600');
+          return;
+        }
+      }
+
+      rosterStatus.textContent = "All rosters cleared. Reloading...";
+      rosterStatus.classList.add('text-green-600');
+
+      setTimeout(() => {
+        location.reload();
+      }, 1500);
+    }
+
+    // ===== Exceptions: load/save/watch =====
+    function loadExceptions() {
+      try {
+        const s = localStorage.getItem('exceptions');
+        if (s) {
+          const obj = JSON.parse(s);
+          exceptions.avoidPairs = Array.isArray(obj.avoidPairs) ? obj.avoidPairs : [];
+          exceptions.frontRow = new Set(Array.isArray(obj.frontRow) ? obj.frontRow : []);
+          renderExceptionsInputs();
+        }
+      } catch { }
+      if (unsubExceptions) unsubExceptions();
+      if (db && teacherUid) {
+        const docRef = doc(db, teacherPath('config/main'));
+        unsubExceptions = onSnapshot(docRef, docSnap => {
+          if (docSnap.exists()) {
+            const d = docSnap.data();
+            const ap = Array.isArray(d.avoidPairs) ? d.avoidPairs : [];
+            const fr = Array.isArray(d.frontRow) ? d.frontRow : [];
+            exceptions.avoidPairs = ap; exceptions.frontRow = new Set(fr);
+            try { localStorage.setItem('exceptions', JSON.stringify({ avoidPairs: ap, frontRow: fr })); } catch (e) { console.warn('localStorage full:', e); }
+            renderExceptionsInputs();
+          }
+        }, err => {
+          console.error('[onSnapshot] exceptions listener error:', err);
+        });
+      }
+    }
+    function renderExceptionsInputs() {
+      frontRowInput.value = Array.from(exceptions.frontRow).join('\n');
+      avoidPairsInput.value = exceptions.avoidPairs.map(p => `${p.s1},${p.s2}`).join('\n');
+    }
+    async function saveExceptions() {
+      const fr = frontRowInput.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      const ap = avoidPairsInput.value.split(/\r?\n/).map(line => {
+        const pair = line.split(',').map(s => s.trim()).filter(Boolean);
+        if (pair.length === 2) {
+          return { s1: pair[0], s2: pair[1] }; // Convert to an object
+        }
+        return null;
+      }).filter(Boolean);
+      exceptions.frontRow = new Set(fr); exceptions.avoidPairs = ap;
+      try { localStorage.setItem('exceptions', JSON.stringify({ avoidPairs: ap, frontRow: fr })); } catch (e) { console.warn('localStorage full:', e); }
+      exceptionsStatus.textContent = 'Saved locally'; setTimeout(() => exceptionsStatus.textContent = '', 1500);
+      if (db && teacherUid) {
+        try {
+          const docRef = doc(db, teacherPath('config/main'));
+          await setDoc(docRef, { avoidPairs: ap, frontRow: fr, updatedAt: serverTimestamp() }, { merge: true });
+          exceptionsStatus.textContent = 'Saved to cloud';
+          setTimeout(() => exceptionsStatus.textContent = '', 1500);
+        } catch {
+          exceptionsStatus.textContent = 'Cloud save failed';
+          setTimeout(() => exceptionsStatus.textContent = '', 2000);
+        }
+      }
+    }
+
+    // ===== Period change & attendance stream =====
+    function onPeriodChange() {
+      const p = periodSelect.value;
+      if (unsubAttendance) { unsubAttendance(); unsubAttendance = null; }
+
+      const resolved = resolveRosterKey(p);
+      currentRoster = resolved ? (allRosters[resolved] || []) : [];
+      periodAttendanceLog = [];
+      const today = nowISODate();
+
+      if (db && p && teacherUid) {
+        const colRef = collection(db, teacherPath(`attendance/${today}/periods/${p}/students`));
+        unsubAttendance = onSnapshot(colRef, snap => {
+          periodAttendanceLog = snap.docs.map(d => d.data());
+          updateUI(); renderRosterDebug();
+        }, err => {
+          console.error('[onSnapshot] attendance listener error:', err);
+        });
+      } else {
+        periodAttendanceLog = getLocalLogs(today, p);
+        updateUI(); renderRosterDebug();
+      }
+    }
+
+    // ===== CSV parsing & roster checks =====
+    function splitCSVRow(row) {
+      const out = []; let cur = "", inQ = false;
+      for (let i = 0; i < row.length; i++) {
+        const ch = row[i];
+        if (ch === '"') { inQ = !inQ; continue; }
+        if (ch === ',' && !inQ) { out.push(cur.trim()); cur = ""; continue; }
+        cur += ch;
+      }
+      out.push(cur.trim()); return out;
+    }
+
+    function parseRoster(csv) {
+      const lines = linesFromText(csv.trim());
+      const rosters = {};
+      let curPeriod = null, idIdx = -1, nameIdx = -1;
+
+      for (let raw of lines) {
+        let line = raw;
+        if (!line) continue;
+        if (line.charCodeAt(0) === 0xFEFF) line = line.slice(1);
+
+        const m = line.match(/^\s*"?\uFEFF?(\d+[A-Z]?)\s*-\s/);
+        if (m) {
+          curPeriod = m[1];
+          if (!rosters[curPeriod]) rosters[curPeriod] = [];
+          idIdx = -1; nameIdx = -1;
+          continue;
+        }
+
+        const lower = line.toLowerCase();
+        if (lower.includes('stu#') && lower.includes('student name')) {
+          const hdr = splitCSVRow(line).map(h => h.toLowerCase());
+          idIdx = hdr.indexOf('stu#');
+          nameIdx = hdr.indexOf('student name');
+          continue;
+        }
+
+        if (curPeriod && idIdx !== -1 && nameIdx !== -1) {
+          const cells = splitCSVRow(line);
+          if (cells.length <= Math.max(idIdx, nameIdx)) continue;
+
+          const studentId = (cells[idIdx] || '').replace(/"/g, '').trim();
+          const studentName = (cells[nameIdx] || '').replace(/"/g, '').trim();
+          if (!studentId || !studentName) continue;
+
+          const comma = studentName.indexOf(',');
+          const last = comma >= 0 ? studentName.slice(0, comma).trim() : '';
+          const first = comma >= 0 ? studentName.slice(comma + 1).trim() : studentName.trim();
+
+          rosters[curPeriod].push({ StudentID: studentId, LastName: last, FirstName: first });
+        }
+      }
+
+      if (Object.keys(rosters).length === 0)
+        throw new Error('No valid period rosters found in the file.');
+
+      return rosters;
+    }
+
+    function checkDuplicateIDs(map) {
+      let html = '';
+      for (const p in map) {
+        const roster = map[p] || [];
+        const tails = new Map();
+        roster.forEach(s => {
+          const id = String(s.StudentID || '');
+          const last4 = id.length >= 4 ? id.slice(-4) : id;
+          if (!tails.has(last4)) tails.set(last4, []);
+          tails.get(last4).push(`${escHtml((s.FirstName || '') + ' ' + (s.LastName || ''))}`);
+        });
+        tails.forEach((names, tail) => {
+          if (tail && names.length > 1) {
+            html += `<div><strong>P.${escHtml(p)} Warning:</strong> ID ending in <strong>${escHtml(tail)}</strong> is shared by: ${names.join(', ')}</div>`;
+          }
+        });
+      }
+      rosterWarning.innerHTML = html;
+    }
+
+    // ===== Roster summary & debug =====
+    function parsePeriodLabel(p) {
+      const m = String(p).match(/^(\d+)([A-Z])?$/);
+      return { num: m ? parseInt(m[1], 10) : 0, suf: m && m[2] ? m[2] : '' };
+    }
+    function periodSort(a, b) {
+      const A = parsePeriodLabel(a), B = parsePeriodLabel(b);
+      if (A.num !== B.num) return A.num - B.num;
+      return A.suf < B.suf ? -1 : A.suf > B.suf ? 1 : 0;
+    }
+    function renderRosterSummary() {
+      if (!rosterSummary) return;
+      const parts = Object.keys(allRosters).sort(periodSort)
+        .map(p => `${p}(${(allRosters[p] || []).length})`);
+      rosterSummary.textContent = parts.length ? `Loaded periods: ${parts.join(', ')}` : 'Loaded periods: none';
+    }
+    function renderRosterDebug() {
+      if (!rosterDebug) return;
+      const p = periodSelect.value;
+      const r = resolveRosterKey(p);
+      const lenCur = (currentRoster || []).length;
+      const lenAll = r ? (allRosters[r] || []).length : 0;
+      rosterDebug.textContent =
+        p ? `Selected period: ${p} • Using roster key: ${r || '—'} • currentRoster=${lenCur} • allRosters[${r || '—'}]=${lenAll}`
+          : 'No period selected';
+    }
+
+    // ===== Group selection =====
+    const isFront = id => exceptions.frontRow.has(id);
+
+    function forbiddenGroupsFor(studentId) {
+      const bad = new Set();
+      for (const pair of exceptions.avoidPairs) {
+        if (!pair || !pair.s1 || !pair.s2) continue;
+        const a = pair.s1;
+        const b = pair.s2;
+        const otherStudentId = studentId === a ? b : (studentId === b ? a : null);
+
+        if (otherStudentId) {
+          const otherLog = periodAttendanceLog.find(log => log.StudentID === otherStudentId);
+          if (otherLog && typeof otherLog.Group === 'number') {
+            bad.add(otherLog.Group);
+          }
+        }
+      }
+      return bad;
+    }
+    function randomChoice(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+    function pickGroup(student) {
+      const id = student ? String(student.StudentID) : null;
+
+      const counts = new Array(MAX_GROUP + 1).fill(0);
+      periodAttendanceLog.forEach(l => { if (typeof l.Group === 'number') counts[l.Group]++; });
+
+      const cap = g => GROUP_CAP(g);
+      const avoid = id ? forbiddenGroupsFor(id) : new Set();
+      const needsFront = id ? isFront(id) : false;
+      const rosterSize = Array.isArray(currentRoster) ? currentRoster.length : 0;
+      const disallowed = new Set();
+      if (rosterSize <= 33) {
+        disallowed.add(6);
+        disallowed.add(9);
+      } else if (rosterSize <= 36) {
+        disallowed.add(6);
+      }
+      const isAllowed = g => !disallowed.has(g);
+
+      let pool = [];
+      for (let g = 1; g <= MAX_GROUP; g++) {
+        if (!isAllowed(g)) continue;
+        if (counts[g] < cap(g) && !avoid.has(g)) pool.push(g);
+      }
+
+      if (needsFront) {
+        const frontPool = pool.filter(g => FRONT_SET.has(g));
+        if (frontPool.length) pool = frontPool;
+      }
+
+      if (pool.length === 0) {
+        let alt = [];
+        for (let g = 1; g <= MAX_GROUP; g++) if (isAllowed(g) && counts[g] < cap(g)) alt.push(g);
+        if (needsFront) {
+          const frontAlt = alt.filter(g => FRONT_SET.has(g));
+          pool = frontAlt.length ? frontAlt : alt;
+        } else {
+          pool = alt;
+        }
+      }
+
+      if (pool.length === 0) {
+        let best = Infinity, ties = [];
+        for (let g = 1; g <= MAX_GROUP; g++) {
+          if (!isAllowed(g)) continue;
+          if (counts[g] < best) { best = counts[g]; ties = [g]; }
+          else if (counts[g] === best) ties.push(g);
+        }
+        return randomChoice(ties) || 1;
+      }
+
+      const eligible2 = pool.filter(g => isAllowed(g) && counts[g] < Math.min(2, cap(g)));
+      if (eligible2.length) return randomChoice(eligible2);
+
+      const thirdEligible = pool.filter(g => isAllowed(g) && cap(g) >= 3 && counts[g] < 3);
+      if (thirdEligible.length) {
+        const primary = thirdEligible.filter(g => !LATE_TO_THIRD.has(g));
+        if (primary.length) return randomChoice(primary);
+        return randomChoice(thirdEligible);
+      }
+
+      return randomChoice(pool);
+    }
+
+    // ===== Attendance helpers =====
+
+    function statusForNow() {
+      if (!periodSelect.value) return 'On Time';
+
+      // Need at least TARDY_AFTER_NTH students signed in before anyone can be late
+      if (periodAttendanceLog.length < TARDY_AFTER_NTH) return 'On Time';
+
+      // Get the Nth student's sign-in timestamp
+      const sorted = periodAttendanceLog
+        .map(e => toMs(e.Timestamp))
+        .filter(t => t > 0)
+        .sort((a, b) => a - b);
+
+      if (sorted.length < TARDY_AFTER_NTH) return 'On Time';
+
+      const nthTimestamp = sorted[TARDY_AFTER_NTH - 1];
+      const tardyThreshold = nthTimestamp + TARDY_GRACE_MINUTES * 60 * 1000;
+      return Date.now() <= tardyThreshold ? 'On Time' : 'Late';
+    }
+
+    // ===== Context Switching Helpers =====
+
+    // Find which periods contain a student with this partial ID
+    function findPeriodsForStudent(code) {
+      const matches = [];
+      for (const [period, roster] of Object.entries(allRosters)) {
+        const student = roster.find(s => String(s.StudentID || '').slice(-4) === code);
+        if (student) matches.push(period);
+      }
+      return matches;
+    }
+
+    // If a student is in multiple periods, pick the best one
+    async function pickBestPeriod(periods, code) {
+      if (periods.length === 1) return periods[0];
+
+      // Prefer the current global period if the student is in it
+      if (globalPeriod && periods.includes(globalPeriod)) return globalPeriod;
+
+      // Pick the first period they haven't signed into today
+      if (db && teacherUid) {
+        const today = nowISODate();
+        for (const p of periods) {
+          const roster = allRosters[p] || [];
+          const student = roster.find(s => String(s.StudentID || '').slice(-4) === code);
+          if (!student) continue;
+          const ref = doc(db, teacherPath(`attendance/${today}/periods/${p}/students/${student.StudentID}`));
+          const snap = await getDoc(ref);
+          if (!snap.exists()) return p;
+        }
+      }
+
+      return periods[0];
+    }
+
+    // ===== MAIN SIGN IN LOGIC =====
+
+    // After a smart-switch sign-in for a different period, restore to the
+    // global period so subsequent students from the main period aren't affected
+    function restoreToGlobalPeriod() {
+      if (!globalPeriod) return;
+      setTimeout(() => {
+        if (periodSelect.value !== globalPeriod && !isOverride) {
+          periodSelect.value = globalPeriod;
+          onPeriodChange();
+        }
+      }, 3000);
+    }
+
+    async function handleSignIn() {
+      try {
+        const code = studentIdInput.value.trim();
+
+        // 1. Check for Teacher PIN to exit kiosk
+        if (teacherPin && code === teacherPin) {
+          studentIdInput.value = '';
+          showPinEntry();
+          return;
+        }
+
+        let p = periodSelect.value;
+        let student = (currentRoster || []).find(s => String(s.StudentID || '').slice(-4) === code);
+        let wasSmartSwitched = false;
+
+        // --- START: SMART SWITCH LOGIC ---
+        if (!student) {
+          const possiblePeriods = findPeriodsForStudent(code);
+
+          if (possiblePeriods.length > 0) {
+            const targetPeriod = await pickBestPeriod(possiblePeriods, code);
+            console.log(`[SmartSwitch] Switching to P.${targetPeriod}`);
+
+            periodSelect.value = targetPeriod;
+            onPeriodChange();
+
+            p = targetPeriod;
+            student = (currentRoster || []).find(s => String(s.StudentID || '').slice(-4) === code);
+            wasSmartSwitched = true;
+
+            // Directly fetch attendance for the new period so statusForNow() has accurate data
+            // (onSnapshot may not have fired yet after onPeriodChange)
+            if (db && teacherUid) {
+              const switchDate = nowISODate();
+              const switchColRef = collection(db, teacherPath(`attendance/${switchDate}/periods/${p}/students`));
+              const switchSnap = await getDocs(switchColRef);
+              periodAttendanceLog = switchSnap.docs.map(d => d.data());
+            }
+
+            showMessage('admin', `Switched to Period ${p}`, `Found you in Period ${p}. Signing in...`);
+          }
+        }
+        // --- END: SMART SWITCH LOGIC ---
+
+        if (!p) {
+          showMessage('error', 'Period Not Set', 'Open the admin panel and select a period.');
+          return;
+        }
+        if (!student) {
+          showMessage('error', 'ID Not Found', 'Please check your ID and try again.');
+          return;
+        }
+
+        signInButton.disabled = true;
+
+        const today = nowISODate();
+        const status = statusForNow();
+
+        // --- DATABASE LOGIC (Cloud) ---
+        if (db && teacherUid) {
+          const studentDocRef = doc(db, teacherPath(`attendance/${today}/periods/${p}/students/${student.StudentID}`));
+
+          // Non-blocking roster snapshot (don't delay sign-in)
+          const rosterSnapshotRef = doc(db, teacherPath(`attendance/${today}/periods/${p}`));
+          setDoc(rosterSnapshotRef, { roster_snapshot: currentRoster, updatedAt: serverTimestamp() }, { merge: true })
+            .catch(e => console.error("Roster snapshot error:", e));
+
+          // Check existing sign-in (direct doc read — faster & cheaper than query)
+          const existingSnap = await getDoc(studentDocRef);
+
+          if (existingSnap.exists()) {
+            const existing = existingSnap.data();
+            const g = typeof existing.Group === 'number' ? existing.Group : pickGroup(student);
+            showGroup(g, existing.Status || status, student.FirstName);
+            updateUI();
+            if (wasSmartSwitched) restoreToGlobalPeriod();
+            return;
+          }
+
+          // Assign group and build log entry
+          const g = pickGroup(student);
+          const log = buildLogEntry(student, p, status, g, true);
+
+          try {
+            // Write to Firebase FIRST — don't show success until confirmed
+            await setDoc(studentDocRef, log);
+
+            // Optimistically update local state so the NEXT sign-in sees this student
+            // (covers the gap before onSnapshot fires with the server-confirmed data)
+            periodAttendanceLog.push({
+              ...log,
+              Timestamp: Date.now()  // Replace sentinel with local timestamp for local use
+            });
+
+            // THEN show success
+            showGroup(g, status, student.FirstName);
+
+            // Check if this sign-in should trigger a global period switch
+            maybeUpdateGlobalPeriod(p);
+          } catch (err) {
+            console.error('Write failed', err);
+            showMessage('error', 'Database Error', 'Could not save attendance. Please try again.');
+            signInButton.disabled = false;
+            if (wasSmartSwitched) restoreToGlobalPeriod();
+            return;
+          }
+        }
+        // --- LOCAL STORAGE LOGIC (No Cloud) ---
+        else {
+          const list = getLocalLogs(today, p);
+          const existing = list.find(x => x.StudentID === student.StudentID);
+          if (existing) {
+            showGroup(existing.Group, existing.Status, student.FirstName);
+            updateUI();
+            if (wasSmartSwitched) restoreToGlobalPeriod();
+            return;
+          }
+          const g = pickGroup(student);
+          const log = buildLogEntry(student, p, status, g, false);
+          list.push(log);
+          setLocalLogs(today, p, list);
+          periodAttendanceLog = list;
+          showGroup(g, status, student.FirstName);
+        }
+        updateUI();
+        if (wasSmartSwitched) restoreToGlobalPeriod();
+      } catch (err) {
+        console.error('[handleSignIn] error', err);
+        alert('Sign-in error: ' + (err && err.message ? err.message : err));
+        signInButton.disabled = false;
+      }
+    }
+
+    async function exportCSV() {
+      const today = nowISODate();
+      const rows = [["Date", "Period", "StudentID", "LastName", "FirstName", "Status", "SignInTime", "Group"]];
+      const masterPeriodList = ["0", "1", "2", "2A", "2B", "3", "4", "5", "6", "7"];
+      for (const p of masterPeriodList) {
+        const present = new Map();
+        if (db && teacherUid) {
+          const colRef = collection(db, teacherPath(`attendance/${today}/periods/${p}/students`));
+          const snap = await getDocs(colRef);
+          snap.docs.forEach(d => { const data = d.data(); present.set(data.StudentID, data); });
+        } else {
+          (getLocalLogs(today, p) || []).forEach(d => present.set(d.StudentID, d));
+        }
+        const roster = allRosters[p] || [];
+        roster.forEach(stu => {
+          if (present.has(stu.StudentID)) {
+            const log = present.get(stu.StudentID);
+            // Use roster names (reliable) instead of parsing log.Name (fragile for multi-word names)
+            rows.push([log.Date, p, log.StudentID, csvQuote(stu.LastName || ''), csvQuote(stu.FirstName || ''), log.Status, log.SignInTime, log.Group]);
+          } else {
+            rows.push([today, p, stu.StudentID, csvQuote(stu.LastName || ''), csvQuote(stu.FirstName || ''), 'Absent', 'N/A', 'N/A']);
+          }
+        });
+      }
+      const csv = rows.map(r => r.join(',')).join('\r\n');
+      const uri = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+      const a = document.createElement('a'); a.href = uri; a.download = `full_attendance_log_${today}.csv`; document.body.appendChild(a); a.click(); a.remove();
+    }
+
+    // ===== UI: messages & summaries =====
+    // Escape HTML to prevent XSS from roster data (student names)
+    const escHtml = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+    // Shared AudioContext (browsers limit to ~6 — reuse one for all sounds)
+    let sharedAudioCtx = null;
+    function getSharedAudioCtx() {
+      if (!sharedAudioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) sharedAudioCtx = new AC();
+      }
+      if (sharedAudioCtx && sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume();
+      return sharedAudioCtx;
+    }
+
+    let dismissTimer = null;
+    function showMessage(type, title, body) {
+      let bg = 'bg-gray-700';
+
+      if (type === 'success') { bg = 'bg-green-600'; beep(); }
+      else if (type === 'error') { bg = 'bg-red-700'; errorBuzz(); }
+      else if (type === 'admin') { bg = 'bg-blue-600'; }
+
+      // Build message DOM safely — escaping title; body is developer-controlled
+      const wrapper = document.createElement('div');
+      wrapper.className = `fade-in p-8 rounded-lg ${bg}`;
+      const h2 = document.createElement('h2');
+      h2.className = 'text-3xl font-bold text-white mb-2';
+      h2.textContent = title;
+      const p = document.createElement('p');
+      p.className = 'text-lg text-white/90';
+      p.textContent = body;
+      wrapper.appendChild(h2);
+      wrapper.appendChild(p);
+      messageView.replaceChildren(wrapper);
+      kioskView.classList.add('hidden'); messageView.classList.remove('hidden');
+      if (dismissTimer) clearTimeout(dismissTimer);
+      const delay = type === 'error' ? 5000 : 2500;
+      dismissTimer = setTimeout(() => { dismissMessage(); }, delay);
+    }
+    function showGroup(group, status, first) {
+      const red700 = '#b91c1c';
+      const red500 = '#ef4444';
+      const glow = '0 0 48px rgba(185,28,28,.55), 0 0 120px rgba(185,28,28,.35), inset 0 0 60px rgba(185,28,28,.25)';
+
+      // Build group display DOM safely — all dynamic values use textContent
+      const outer = document.createElement('div');
+      outer.className = 'fade-in p-8 rounded-2xl ring-4';
+      outer.style.cssText = `background:#000; border-color:${red700}; box-shadow:${glow}`;
+
+      const nameDiv = document.createElement('div');
+      nameDiv.className = 'text-2xl font-semibold';
+      nameDiv.style.color = '#ffffff';
+      nameDiv.textContent = `${first}, you are`;
+
+      const groupDiv = document.createElement('div');
+      groupDiv.className = 'mt-2 text-6xl md:text-7xl font-extrabold tracking-tight';
+      groupDiv.style.color = red500;
+      groupDiv.textContent = `GROUP ${group}`;
+
+      const statusDiv = document.createElement('div');
+      statusDiv.className = 'mt-2 text-lg';
+      statusDiv.style.color = '#ffffff';
+      const statusSpan = document.createElement('span');
+      statusSpan.className = 'font-bold';
+      statusSpan.style.color = red500;
+      statusSpan.textContent = status;
+      statusDiv.append('Status: ', statusSpan);
+
+      const helpDiv = document.createElement('div');
+      helpDiv.className = 'mt-4 text-sm';
+      helpDiv.style.color = '#ffffff';
+      helpDiv.textContent = 'Press Enter to continue';
+
+      outer.append(nameDiv, groupDiv, statusDiv, helpDiv);
+      messageView.replaceChildren(outer);
+      kioskView.classList.add('hidden'); messageView.classList.remove('hidden');
+      if (dismissTimer) clearTimeout(dismissTimer);
+      beep();
+      dismissTimer = setTimeout(() => { dismissMessage(); }, 2500);
+    }
+    function dismissMessage() {
+      if (dismissTimer) { clearTimeout(dismissTimer); dismissTimer = null; }
+      studentIdInput.value = ''; signInButton.disabled = true;
+      kioskView.classList.remove('hidden'); messageView.classList.add('hidden');
+      studentIdInput.focus();
+    }
+    function beep() {
+      try {
+        const ctx = getSharedAudioCtx();
+        if (!ctx) return;
+        const osc = ctx.createOscillator(); const gain = ctx.createGain();
+        osc.type = 'sine'; osc.frequency.value = 880; osc.connect(gain); gain.connect(ctx.destination);
+        gain.gain.setValueAtTime(.0001, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(.2, ctx.currentTime + .02);
+        gain.gain.exponentialRampToValueAtTime(.0001, ctx.currentTime + .35);
+        osc.start(); osc.stop(ctx.currentTime + .4);
+      } catch { }
+    }
+
+    // Audio feedback for errors
+    function errorBuzz() {
+      try {
+        const ctx = getSharedAudioCtx();
+        if (!ctx) return;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.value = 150;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        gain.gain.setValueAtTime(0.1, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+
+        osc.start();
+        osc.stop(ctx.currentTime + 0.3);
+      } catch (e) { }
+    }
+
+    // Global Actions for HTML buttons
+    async function removeStudent(studentId) {
+      if (!confirm('Remove this sign-in? The student will need to sign in again.')) return;
+
+      const today = nowISODate();
+      const p = periodSelect.value;
+
+      if (db && teacherUid) {
+        try {
+          await deleteDoc(doc(db, teacherPath(`attendance/${today}/periods/${p}/students/${studentId}`)));
+          // UI updates automatically via onSnapshot
+        } catch (e) { alert("Error deleting: " + e.message); }
+      } else {
+        // Local mode removal
+        let list = getLocalLogs(today, p);
+        list = list.filter(l => l.StudentID !== studentId);
+        setLocalLogs(today, p, list);
+        periodAttendanceLog = list;
+        updateUI();
+      }
+    }
+    window.removeStudent = removeStudent;
+
+    async function toggleStatus(sid, currentStatus) {
+      const cycle = { 'On Time': 'Late', 'Late': 'On Time', 'Truant': 'On Time' };
+      const next = cycle[currentStatus] || 'On Time';
+      const today = nowISODate();
+      const p = periodSelect.value;
+
+      if (db && teacherUid) {
+        try {
+          const ref = doc(db, teacherPath(`attendance/${today}/periods/${p}/students/${sid}`));
+          await setDoc(ref, { Status: next }, { merge: true });
+        } catch (err) {
+          console.error('Status toggle failed:', err);
+          alert('Failed to update status. Check your connection.');
+        }
+      } else {
+        let list = getLocalLogs(today, p);
+        const entry = list.find(l => l.StudentID === sid);
+        if (entry) {
+          entry.Status = next;
+          setLocalLogs(today, p, list);
+          periodAttendanceLog = list;
+          updateUI();
+        }
+      }
+    }
+    window.toggleStatus = toggleStatus;
+
+    // Manual Check In function for absent list arrow
+    async function manualCheckIn(studentId) {
+      // 1. Find student object
+      const student = currentRoster.find(s => s.StudentID === studentId);
+      if (!student) return;
+
+      // 2. Prepare data
+      const today = nowISODate();
+      const p = periodSelect.value;
+      const status = statusForNow();
+
+      // 3. Assign Group
+      const g = pickGroup(student);
+
+      // 4. Save (skip if already signed in)
+      if (db && teacherUid) {
+        // Firestore logic
+        const ref = doc(db, teacherPath(`attendance/${today}/periods/${p}/students/${studentId}`));
+        try {
+          const existingSnap = await getDoc(ref);
+          if (existingSnap.exists()) return; // Already signed in — don't overwrite
+          await setDoc(ref, buildLogEntry(student, p, status, g, true));
+        } catch (err) {
+          console.error("Manual check-in failed:", err);
+        }
+      } else {
+        // Local logic
+        let list = getLocalLogs(today, p);
+        if (list.find(x => x.StudentID === studentId)) return; // Already signed in
+        list.push(buildLogEntry(student, p, status, g, false));
+        setLocalLogs(today, p, list);
+        periodAttendanceLog = list;
+        updateUI();
+      }
+    }
+    window.manualCheckIn = manualCheckIn;
+
+    function updateUI() {
+      const counts = { 'On Time': 0, 'Late': 0, 'Truant': 0 };
+      periodAttendanceLog.forEach(l => { if (counts[l.Status] !== undefined) counts[l.Status]++; });
+      const present = periodAttendanceLog.length;
+      const absent = (currentRoster || []).length - present;
+      summaryOnTime.textContent = counts['On Time'];
+      summaryLate.textContent = counts['Late'];
+      summaryTruant.textContent = counts['Truant'];
+      summaryAbsent.textContent = Math.max(0, absent);
+      summaryTotal.textContent = (currentRoster || []).length;
+
+      if (!periodSelect.value) {
+        absentListEl.innerHTML = '<li class="text-gray-500">Select a period to see list.</li>';
+      } else {
+        const set = new Set(periodAttendanceLog.map(l => l.StudentID));
+        const absentList = (currentRoster || []).filter(s => !set.has(s.StudentID));
+        if (absentList.length === 0 && (currentRoster || []).length > 0) {
+          absentListEl.innerHTML = '<li class="text-green-600 font-semibold">All students are present!</li>';
+        } else {
+          absentListEl.innerHTML = '';
+          absentList.sort((a, b) => String(a.LastName || '').localeCompare(String(b.LastName || '')));
+
+          // UPDATED ABSENT LIST GENERATION
+          absentList.forEach(s => {
+            const li = document.createElement('li');
+            // Flex layout to hold name and arrow
+            li.className = "flex justify-between items-center hover:bg-gray-200 rounded px-2 py-1 group cursor-default";
+            li.innerHTML = `
+            <span>${escHtml(s.LastName || '')}, ${escHtml(s.FirstName || '')}</span>
+            <button onclick="manualCheckIn('${escHtml(s.StudentID)}')"
+                    class="text-green-600 hover:text-green-800 opacity-0 group-hover:opacity-100 transition-opacity font-bold px-2"
+                    title="Mark Present">
+                ➜
+            </button>
+        `;
+            absentListEl.appendChild(li);
+          });
+        }
+      }
+
+      // Updated Group Report Logic with Undo/Toggle
+      if (!periodSelect.value) {
+        groupReportEl.innerHTML = '<p class="text-gray-500">Select a period to see groups.</p>';
+      } else {
+        const map = new Map(); for (let g = 1; g <= MAX_GROUP; g++) map.set(g, []);
+        // Store whole object, not just name
+        periodAttendanceLog.forEach(l => { if (l.Group && map.has(l.Group)) map.get(l.Group).push(l); });
+
+        groupReportEl.innerHTML = '';
+        if (periodAttendanceLog.length === 0) groupReportEl.innerHTML = '<p class="text-gray-500">Students will appear here as they sign in.</p>';
+        else {
+          map.forEach((arr, grp) => {
+            if (arr.length > 0) {
+              const div = document.createElement('div');
+
+              const listItems = arr.map(s => {
+                let color = 'text-green-600';
+                if (s.Status === 'Late') color = 'text-yellow-600';
+                if (s.Status === 'Truant' || s.Status === 'Absent') color = 'text-red-600';
+
+                return `
+              <li class="flex justify-between items-center group pl-1 py-1 hover:bg-gray-200 rounded">
+                <span>${escHtml(s.Name)}</span>
+                <div class="flex items-center gap-2">
+                  <button onclick="toggleStatus('${escHtml(s.StudentID)}', '${escHtml(s.Status)}')"
+                          class="text-xs font-mono cursor-pointer ${color} hover:underline font-bold"
+                          title="Click to toggle status">
+                    ${escHtml(s.Status.toUpperCase().substring(0, 3))}
+                  </button>
+                  <button onclick="removeStudent('${escHtml(s.StudentID)}')"
+                          class="text-red-400 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold px-1" title="Delete">
+                    &times;
+                  </button>
+                </div>
+              </li>`;
+              }).join('');
+
+              div.innerHTML = `<h4 class="font-bold text-md text-gray-700 mt-2">Group ${grp} (${arr.length})</h4><ul class="text-sm list-disc list-inside mb-2">${listItems}</ul>`;
+              groupReportEl.appendChild(div);
+            }
+          });
+        }
+        updateFullscreenGroupView();
+      }
+
+      renderPeriodIndicator();
+      renderRosterDebug();
+    }
+
+    function renderPeriodIndicator() {
+      const p = periodSelect.value;
+      const nowStr = fmtTime(new Date());
+      const count = periodAttendanceLog.length;
+      const how = isOverride ? 'Override' : 'Auto';
+
+      if (!p) {
+        periodIndicator.textContent = `Waiting for students... (${nowStr})`;
+        return;
+      }
+
+      const tardyInfo = count >= TARDY_AFTER_NTH ? 'tardy active' : `${TARDY_AFTER_NTH - count} more before tardy`;
+      periodIndicator.textContent = `Period ${p} \u2022 ${how} \u2022 ${count} signed in (${tardyInfo}) \u2022 ${nowStr}`;
+    }
+
+    // ===== Tests =====
+    function runParseTests() {
+      const lf = '"1 - Period"\nStu#,Student Name\n1234,"Doe, Jane"\n5678,"Smith, John"';
+      const crlf = '"2 - Period"\r\nStu#,Student Name\r\n1111,"Alpha, A"\r\n2222,"Beta, B"';
+      const A = parseRoster(lf), B = parseRoster(crlf);
+      console.assert(A['1'].length === 2, 'LF parse failed');
+      console.assert(A['1'][0].StudentID === '1234', 'LF first ID');
+      console.assert(B['2'].length === 2, 'CRLF parse failed');
+      console.assert(B['2'][1].LastName === 'Beta', 'CRLF last name');
+      const mix = 'A\nB\r\nC\rD'.split(/\r\n|\n|\r/);
+      console.assert(mix.length === 4, 'newline split handling');
+      const row = '"123","Smith, John",Math,"A,B"';
+      const cells = splitCSVRow(row);
+      console.assert(cells.length === 4, 'CSV split basic');
+      console.assert(cells[1] === 'Smith, John', 'Quoted comma preserved');
+      const L = linesFromText('L1\r\nL2\nL3\rL4');
+      console.assert(L.length === 4 && L[0] === 'L1' && L[3] === 'L4', 'linesFromText normalization');
+    }
+    function runCSVEdgeTests() {
+      const tricky = '"3 - Period"\nStu#,Student Name\n"9000","Last, Jr., Bob"';
+      const P = parseRoster(tricky);
+      console.assert(P['3'].length === 1, 'quoted multi-comma name');
+      console.assert(P['3'][0].FirstName === 'Jr., Bob', 'first name with comma kept');
+    }
+    function runGroupTests() {
+      // Save originals so tests don't corrupt global state
+      const origAP = exceptions.avoidPairs;
+      const origFR = exceptions.frontRow;
+      const origLogs = periodAttendanceLog;
+
+      // Use correct {s1, s2} object format (not arrays)
+      exceptions.avoidPairs = [{ s1: "A1", s2: "B1" }];
+      exceptions.frontRow = new Set(['S1']);
+      periodAttendanceLog = [{ StudentID: 'B1', Group: 5 }, { StudentID: 'X', Group: 1 }];
+
+      const g1 = pickGroup({ StudentID: 'S1' }); console.assert([1, 2, 12, 13].includes(g1), 'front-row preference');
+      const g2 = pickGroup({ StudentID: 'A1' }); console.assert(g2 !== 5, 'avoid-pair enforce');
+
+      // Restore originals
+      exceptions.avoidPairs = origAP;
+      exceptions.frontRow = origFR;
+      periodAttendanceLog = origLogs;
+    }
+
+    // ==================== TARGET TIMER ====================
+    (() => {
+      // Inline (admin panel) elements
+      const tInput = document.getElementById('timer-target-input');
+      const tDisplay = document.getElementById('timer-display');
+      const tStatus = document.getElementById('timer-status');
+      const tTestBtn = document.getElementById('timer-test-audio');
+
+      // Fullscreen elements
+      const tFsOverlay = document.getElementById('timer-fullscreen');
+      const tFsDisplay = document.getElementById('timer-fs-display');
+      const tFsStatus = document.getElementById('timer-fs-status');
+      const tFsOpenBtn = document.getElementById('timer-fullscreen-btn');
+      const tFsCloseBtn = document.getElementById('timer-fs-close');
+      const mainApp = document.querySelector('.w-full.max-w-6xl');
+
+      let tInterval = null;
+      let tFinished = false;
+      function tPlayAlarm() {
+        const ctx = getSharedAudioCtx();
+        if (!ctx) return;
+        const play = (freq, start, dur, type = 'sine') => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+          gain.gain.setValueAtTime(0, ctx.currentTime + start);
+          gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + start + 0.05);
+          gain.gain.setValueAtTime(0.5, ctx.currentTime + start + dur - 0.1);
+          gain.gain.linearRampToValueAtTime(0, ctx.currentTime + start + dur);
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.start(ctx.currentTime + start);
+          osc.stop(ctx.currentTime + start + dur + 0.1);
+        };
+        play(523.25, 0.1, 0.3); play(659.25, 0.25, 0.3);
+        play(783.99, 0.4, 0.3); play(1046.50, 0.55, 0.8);
+        play(1567.98, 0.55, 0.8, 'triangle');
+      }
+
+      function tFormat(ms) {
+        if (ms <= 0) return '00:00:00';
+        const tot = Math.floor(ms / 1000);
+        return [Math.floor(tot / 3600), Math.floor((tot % 3600) / 60), tot % 60]
+          .map(v => String(v).padStart(2, '0')).join(':');
+      }
+
+      function tCalcDist(val) {
+        const [h, m] = val.split(':').map(Number);
+        const target = new Date(); target.setHours(h, m, 0, 0);
+        let diff = target - new Date();
+        if (diff < -60000) { target.setDate(target.getDate() + 1); diff = target - new Date(); }
+        return diff;
+      }
+
+      // Sync both inline and fullscreen displays
+      function tSetDisplay(text, inlineClass, fsClass) {
+        tDisplay.textContent = text;
+        tDisplay.className = inlineClass;
+        tFsDisplay.textContent = text;
+        tFsDisplay.className = fsClass;
+      }
+
+      function tSetStatus(text, inlineClass, fsClass) {
+        tStatus.textContent = text;
+        tStatus.className = inlineClass;
+        tFsStatus.textContent = text;
+        tFsStatus.className = fsClass;
+      }
+
+      function tReset() {
+        if (tInterval) clearInterval(tInterval);
+        tSetDisplay('00:00:00',
+          'text-4xl font-bold font-mono text-gray-300 tabular-nums',
+          'text-8xl md:text-9xl font-bold font-mono tabular-nums text-gray-500 timer-fs-glow select-none');
+        tSetStatus('',
+          'text-xs uppercase tracking-wider mt-2 font-semibold h-4 text-gray-400',
+          'text-sm uppercase tracking-[0.2em] mt-6 font-semibold h-5 text-gray-500');
+        tFinished = false;
+      }
+
+      function tComplete() {
+        if (tFinished) return;
+        if (tInterval) clearInterval(tInterval);
+        tFinished = true;
+        tSetDisplay('00:00:00',
+          'text-4xl font-bold font-mono text-red-500 tabular-nums animate-pulse',
+          'text-8xl md:text-9xl font-bold font-mono tabular-nums text-red-500 timer-fs-glow-finished select-none');
+        tFsDisplay.style.animation = 'timerPulse 1.5s ease-in-out infinite';
+        tSetStatus("Time's up!",
+          'text-xs uppercase tracking-wider mt-2 font-semibold h-4 text-red-500',
+          'text-sm uppercase tracking-[0.2em] mt-6 font-semibold h-5 text-red-400');
+        tPlayAlarm();
+      }
+
+      function tStart() {
+        tReset(); getSharedAudioCtx();
+        tFsDisplay.style.animation = '';
+        const val = tInput.value;
+        if (!val) return;
+        const init = tCalcDist(val);
+        if (init <= 0) { tComplete(); return; }
+        tSetDisplay(tFormat(init),
+          'text-4xl font-bold font-mono text-gray-800 tabular-nums',
+          'text-8xl md:text-9xl font-bold font-mono tabular-nums text-white timer-fs-glow select-none');
+        tSetStatus('Counting down...',
+          'text-xs uppercase tracking-wider mt-2 font-semibold h-4 text-blue-500',
+          'text-sm uppercase tracking-[0.2em] mt-6 font-semibold h-5 text-red-400');
+        tInterval = setInterval(() => {
+          const d = tCalcDist(val);
+          if (d <= 100) tComplete();
+          else {
+            const text = tFormat(d);
+            tDisplay.textContent = text;
+            tFsDisplay.textContent = text;
+          }
+        }, 500);
+      }
+
+      // Fullscreen show/hide
+      function tShowFs() {
+        mainApp.classList.add('hidden');
+        tFsOverlay.classList.remove('hidden');
+      }
+      function tHideFs() {
+        tFsOverlay.classList.add('hidden');
+        mainApp.classList.remove('hidden');
+      }
+
+      tInput.addEventListener('change', tStart);
+      tInput.addEventListener('input', tStart);
+      tTestBtn.addEventListener('click', tPlayAlarm);
+      tFsOpenBtn.addEventListener('click', tShowFs);
+      tFsCloseBtn.addEventListener('click', tHideFs);
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && !tFsOverlay.classList.contains('hidden')) tHideFs();
+      });
+    })();
+    // ======================================================
+  </script>
+</body>
+
+</html>

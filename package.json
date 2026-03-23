@@ -1,0 +1,12 @@
+{
+  "name": "attendance-taker",
+  "version": "1.0.0",
+  "description": "Multi-tenant attendance kiosk — migration and admin scripts",
+  "type": "commonjs",
+  "scripts": {
+    "migrate": "node migrate-to-tenants.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}

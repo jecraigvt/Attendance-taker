@@ -88,12 +88,12 @@ Plans:
   3. A second teacher's data is invisible to the first teacher (Firestore security rules block cross-tenant reads)
   4. Kiosk tablet links to a specific teacher's UID after teacher logs in once; subsequent student sign-ins go to that teacher's data path
   5. Aeries credentials are stored encrypted at rest — plaintext password never written to Firestore
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 05-01: Data migration script — copy existing records to per-teacher path structure, verify counts, confirm kiosk still works
-- [ ] 05-02: Aeries auth integration — replace anonymous auth with Aeries credential login, Fernet encryption, Firestore security rules
-- [ ] 05-03: Kiosk-to-teacher linkage — teacher login sets kiosk mode with UID binding, student sign-ins route to correct path
+- [ ] 05-01-PLAN.md — Data migration script: copy existing records to per-teacher paths, verify counts, confirm kiosk still works
+- [ ] 05-02-PLAN.md — Auth infrastructure: Cloud Function for Aeries credential validation/encryption, Firestore security rules
+- [ ] 05-03-PLAN.md — Kiosk integration: login screen, PIN-based kiosk exit, per-teacher Firestore paths in HTML and sync script
 
 ### Phase 6: Teacher Dashboard and Roster Management
 **Goal**: Teachers can self-serve their full account setup — entering credentials, configuring seating, and triggering roster fetches — without any developer involvement
@@ -146,7 +146,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -154,7 +154,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 2. Audit & Verification | v1.0 | 2/2 | Complete | 2026-02-05 |
 | 3. Schedule Improvements | v1.0 | 1/1 | Complete | 2026-02-05 |
 | 4. Tardy Logic Review | v1.0 | 3/3 | Complete | 2026-02-05 |
-| 5. Auth Foundation and Data Migration | v2.0 | 0/3 | Not started | - |
+| 5. Auth Foundation and Data Migration | v2.0 | 0/3 | Planning complete | - |
 | 6. Teacher Dashboard and Roster Management | v2.0 | 0/4 | Not started | - |
 | 7. Railway Cloud Sync | v2.0 | 0/2 | Not started | - |
 | 8. Self-Healing LLM Layer | v2.0 | 0/2 | Not started | - |

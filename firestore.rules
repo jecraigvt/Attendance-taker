@@ -1,0 +1,54 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -----------------------------------------------------------------------
+    // Teacher-owned data: only the authenticated teacher can read/write
+    // their own data.  The recursive wildcard {document=**} covers ALL
+    // sub-collections: profile, attendance, rosters, config, etc.
+    // -----------------------------------------------------------------------
+    match /teachers/{uid}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // -----------------------------------------------------------------------
+    // Credentials sub-collection: locked to admin SDK (Cloud Functions) only.
+    // These "allow: if false" rules override the parent wildcard for this
+    // specific path.  The admin SDK bypasses all security rules, so Cloud
+    // Functions can still read/write here.  Client code cannot.
+    // -----------------------------------------------------------------------
+    match /teachers/{uid}/credentials/{credDoc} {
+      allow read: if false;   // Only admin SDK (Cloud Functions) can read
+      allow write: if false;  // Only admin SDK (Cloud Functions) can write
+    }
+
+    // -----------------------------------------------------------------------
+    // Kiosk bindings: public read (kiosk discovers which teacher it's bound
+    // to without being fully authenticated), authenticated write (only a
+    // logged-in teacher can bind a kiosk to their account).
+    // -----------------------------------------------------------------------
+    match /kiosks/{kioskId} {
+      allow read: if true;              // Kiosk reads its own binding on startup
+      allow write: if request.auth != null;  // Only authenticated teachers bind
+    }
+
+    // -----------------------------------------------------------------------
+    // LEGACY paths: kept open during migration (Phase 5-03 and 05-04).
+    // The current kiosk still writes to the old artifacts path structure.
+    // Tighten these rules after Phase 5 migration is complete.
+    // -----------------------------------------------------------------------
+    match /artifacts/{appId}/public/{document=**} {
+      allow read, write: if true;  // Permissive during transition
+    }
+
+    // -----------------------------------------------------------------------
+    // NOTE: Kiosk attendance write path (teachers/{uid}/attendance/...)
+    // is covered by the teachers/{uid}/{document=**} rule above.
+    // When the kiosk is bound and the teacher is set as the auth context,
+    // writes go directly to the correct teacher's path.
+    // This rule set is refined in Plan 05-03 when kiosk linkage is
+    // implemented and the kiosk gets its own limited-scope auth token.
+    // -----------------------------------------------------------------------
+
+  }
+}

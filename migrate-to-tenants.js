@@ -143,7 +143,7 @@ async function resolveJeremyUid() {
 // ---------------------------------------------------------------------------
 
 async function writeTeacherProfile(db, uid) {
-  const profileRef = db.doc(`teachers/${uid}/profile`);
+  const profileRef = db.collection('teachers').doc(uid).collection('profile').doc('main');
   const snap = await profileRef.get();
 
   if (snap.exists) {
@@ -151,7 +151,7 @@ async function writeTeacherProfile(db, uid) {
     return;
   }
 
-  log(`\nWriting teacher profile at teachers/${uid}/profile…`);
+  log(`\nWriting teacher profile at teachers/${uid}/profile/main…`);
   await profileRef.set({
     displayName: JEREMY_DISPLAY,
     email:       JEREMY_EMAIL,
@@ -173,7 +173,7 @@ async function writeTeacherProfile(db, uid) {
 async function migrateConfig(db, uid, batchHolder) {
   log(`\nMigrating config…`);
   const srcRef = db.doc(`${SRC_ROOT}/config`);
-  const dstRef = db.doc(`teachers/${uid}/config`);
+  const dstRef = db.doc(`teachers/${uid}/config/main`);
   const result = await copyDoc(db, srcRef, dstRef, batchHolder);
   return { total: 1, written: result === 'written' ? 1 : 0, skipped: result === 'skipped' ? 1 : 0 };
 }
@@ -192,7 +192,7 @@ async function migrateRosters(db, uid, batchHolder) {
 
   for (const periodDoc of periods.docs) {
     const srcRef = db.doc(`${SRC_ROOT}/rosters/periods/${periodDoc.id}`);
-    const dstRef = db.doc(`teachers/${uid}/rosters/periods/${periodDoc.id}`);
+    const dstRef = db.doc(`teachers/${uid}/rosters/${periodDoc.id}`);
     const result = await copyDoc(db, srcRef, dstRef, batchHolder);
     if (result === 'written') written++;
     else skipped++;
@@ -282,7 +282,7 @@ async function verifyMigration(db, uid) {
     {
       name:    'Rosters (periods)',
       srcPath: `${SRC_ROOT}/rosters/periods`,
-      dstPath: `teachers/${uid}/rosters/periods`,
+      dstPath: `teachers/${uid}/rosters`,
     },
     {
       name:    'Attendance (date-level docs)',
@@ -313,7 +313,7 @@ async function verifyMigration(db, uid) {
 
   // Config (single doc)
   const configSrc = await db.doc(`${SRC_ROOT}/config`).get();
-  const configDst = await db.doc(`teachers/${uid}/config`).get();
+  const configDst = await db.doc(`teachers/${uid}/config/main`).get();
   const configMatch = configSrc.exists === configDst.exists;
   if (!configMatch) allMatch = false;
   console.log(

@@ -69,34 +69,35 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-01 | TBD | Pending |
-| AUTH-02 | TBD | Pending |
-| AUTH-03 | TBD | Pending |
-| AUTH-04 | TBD | Pending |
-| AUTH-05 | TBD | Pending |
-| AUTH-06 | TBD | Pending |
-| DASH-01 | TBD | Pending |
-| DASH-02 | TBD | Pending |
-| DASH-03 | TBD | Pending |
-| ROST-01 | TBD | Pending |
-| ROST-02 | TBD | Pending |
-| SEAT-01 | TBD | Pending |
-| SEAT-02 | TBD | Pending |
-| SEAT-03 | TBD | Pending |
-| SEAT-04 | TBD | Pending |
-| KIOSK-01 | TBD | Pending |
-| KIOSK-02 | TBD | Pending |
-| SYNC-01 | TBD | Pending |
-| SYNC-02 | TBD | Pending |
-| SYNC-03 | TBD | Pending |
-| HEAL-01 | TBD | Pending |
-| HEAL-02 | TBD | Pending |
-| HEAL-03 | TBD | Pending |
+| AUTH-01 | Phase 5 | Pending |
+| AUTH-02 | Phase 5 | Pending |
+| AUTH-03 | Phase 5 | Pending |
+| AUTH-04 | Phase 5 | Pending |
+| AUTH-05 | Phase 5 | Pending |
+| AUTH-06 | Phase 5 | Pending |
+| KIOSK-01 | Phase 5 | Pending |
+| KIOSK-02 | Phase 5 | Pending |
+| DASH-01 | Phase 6 | Pending |
+| DASH-02 | Phase 6 | Pending |
+| DASH-03 | Phase 6 | Pending |
+| SEAT-01 | Phase 6 | Pending |
+| SEAT-02 | Phase 6 | Pending |
+| SEAT-03 | Phase 6 | Pending |
+| SEAT-04 | Phase 6 | Pending |
+| ROST-01 | Phase 6 | Pending |
+| ROST-02 | Phase 6 | Pending |
+| SYNC-01 | Phase 7 | Pending |
+| SYNC-02 | Phase 7 | Pending |
+| SYNC-03 | Phase 7 | Pending |
+| HEAL-01 | Phase 8 | Pending |
+| HEAL-02 | Phase 8 | Pending |
+| HEAL-03 | Phase 8 | Pending |
 
 **Coverage:**
 - v2.0 requirements: 23 total
-- Mapped to phases: 0
-- Unmapped: 23
+- Mapped to phases: 23
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-23*
+*Traceability updated: 2026-03-23*

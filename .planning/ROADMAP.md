@@ -1,21 +1,14 @@
-# Roadmap: Attendance Sync Reliability
+# Roadmap: Attendance Taker
 
-## Overview
+## Milestones
 
-This project transforms the attendance sync system from ~97% reliable to near-100% by addressing the root causes of sync failures (17% of errors) and tardy disputes (52% of errors). We progress from core reliability fixes, through audit/verification capabilities, to schedule improvements, and finally tackle the tardy logic that causes the majority of disputes.
+- ✅ **v1.0 Attendance Sync Reliability** - Phases 1-4 (shipped 2026-02-05)
+- 🚧 **v2.0 Multi-Tenant SaaS** - Phases 5-8 (in progress)
 
 ## Phases
 
-**Phase Numbering:**
-- Integer phases (1, 2, 3, 4): Planned milestone work
-- Decimal phases (e.g., 2.1): Urgent insertions if needed (marked with INSERTED)
-
-- [x] **Phase 1: Core Reliability** - Retry logic, failure logging, and selector fallbacks to address sync failures
-- [x] **Phase 2: Audit & Verification** - Track exactly what was synced and verify it succeeded
-- [x] **Phase 3: Schedule Improvements** - More frequent syncs and daily summary reporting
-- [ ] **Phase 4: Tardy Logic Review** - Analyze and fix the threshold logic causing tardy disputes
-
-## Phase Details
+<details>
+<summary>✅ v1.0 Attendance Sync Reliability (Phases 1-4) - SHIPPED 2026-02-05</summary>
 
 ### Phase 1: Core Reliability
 **Goal**: Sync failures are automatically retried, gracefully handled, and fully logged so no student is incorrectly marked absent due to transient errors
@@ -71,18 +64,97 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 04-01-PLAN.md - Document current tardy logic and analyze edge cases
-- [ ] 04-02-PLAN.md - Implement bell-schedule-based tardy calculation
-- [ ] 04-03-PLAN.md - Validate new logic and analyze projected dispute reduction
+- [x] 04-01-PLAN.md - Document current tardy logic and analyze edge cases
+- [x] 04-02-PLAN.md - Implement bell-schedule-based tardy calculation
+- [x] 04-03-PLAN.md - Validate new logic and analyze projected dispute reduction
+
+</details>
+
+---
+
+### 🚧 v2.0 Multi-Tenant SaaS (In Progress)
+
+**Milestone Goal:** Transform from single-teacher tool to multi-tenant platform where any teacher can sign up, manage rosters, and have attendance automatically synced to Aeries via cloud automation — without requiring developer support.
+
+---
+
+### Phase 5: Auth Foundation and Data Migration
+**Goal**: Teachers have isolated accounts with their own data, the existing data is safely migrated, and kiosk sign-ins write to the correct tenant — making multi-tenancy the structural reality every subsequent phase builds on
+**Depends on**: Phase 4
+**Requirements**: AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-06, KIOSK-01, KIOSK-02
+**Success Criteria** (what must be TRUE):
+  1. Teacher can sign in with their Aeries username and password and land on a teacher-specific view
+  2. Jeremy's existing attendance data is accessible after migration — no records missing, kiosk still accepts student sign-ins
+  3. A second teacher's data is invisible to the first teacher (Firestore security rules block cross-tenant reads)
+  4. Kiosk tablet links to a specific teacher's UID after teacher logs in once; subsequent student sign-ins go to that teacher's data path
+  5. Aeries credentials are stored encrypted at rest — plaintext password never written to Firestore
+**Plans**: TBD
+
+Plans:
+- [ ] 05-01: Data migration script — copy existing records to per-teacher path structure, verify counts, confirm kiosk still works
+- [ ] 05-02: Aeries auth integration — replace anonymous auth with Aeries credential login, Fernet encryption, Firestore security rules
+- [ ] 05-03: Kiosk-to-teacher linkage — teacher login sets kiosk mode with UID binding, student sign-ins route to correct path
+
+### Phase 6: Teacher Dashboard and Roster Management
+**Goal**: Teachers can self-serve their full account setup — entering credentials, configuring seating, and triggering roster fetches — without any developer involvement
+**Depends on**: Phase 5
+**Requirements**: DASH-01, DASH-02, DASH-03, SEAT-01, SEAT-02, SEAT-03, SEAT-04, ROST-01, ROST-02
+**Success Criteria** (what must be TRUE):
+  1. A new teacher completes first-time setup (enter Aeries creds, configure seating, fetch roster) through an in-app onboarding flow with no external help
+  2. Teacher can see current sync status — last sync time, success or failure, error details — on their dashboard
+  3. Teacher can update their Aeries credentials through the UI at any time without contacting the developer
+  4. Teacher can choose group-based seating, individual desk-based seating, or no seat assignment — and configure it through the dashboard
+  5. Class rosters are fetched automatically from Aeries using the teacher's credentials and refresh on a schedule or on demand
+**Plans**: TBD
+
+Plans:
+- [ ] 06-01: Teacher onboarding flow — credential entry, seating mode selection, first roster fetch
+- [ ] 06-02: Seating configuration UI — group mode, individual desk mode, and off mode
+- [ ] 06-03: Roster auto-fetch from Aeries — Playwright-based roster pull, scheduled refresh, on-demand trigger
+- [ ] 06-04: Sync status dashboard — last sync time, success/failure display, credential update UI
+
+### Phase 7: Railway Cloud Sync
+**Goal**: Attendance sync runs automatically in the cloud on Railway every 20 minutes during school hours for every teacher — with no dependency on the developer's local machine
+**Depends on**: Phase 6
+**Requirements**: SYNC-01, SYNC-02, SYNC-03
+**Success Criteria** (what must be TRUE):
+  1. Aeries sync runs every 20 minutes during school hours without any action from the developer or teacher
+  2. Each teacher's attendance is processed in the cloud — Jeremy's PC is not involved
+  3. When sync fails for any teacher, that teacher's dashboard shows an error with details; one teacher's failure does not block others
+**Plans**: TBD
+
+Plans:
+- [ ] 07-01: Docker container and Railway deployment — Dockerfile, Playwright smoke test in Railway environment
+- [ ] 07-02: Multi-teacher sync orchestrator — APScheduler, sequential per-teacher loop, credential decryption, sync status writes to Firestore
+
+### Phase 8: Self-Healing LLM Layer
+**Goal**: When Aeries UI changes break selectors, the system repairs itself using Gemini — reducing developer intervention to zero for common selector failures
+**Depends on**: Phase 7
+**Requirements**: HEAL-01, HEAL-02, HEAL-03
+**Success Criteria** (what must be TRUE):
+  1. When all static selector fallbacks are exhausted, Gemini Flash is automatically invoked to identify a replacement selector
+  2. If Flash fails, Gemini Pro is tried as a fallback before the sync is marked failed
+  3. Healed selectors are stored in a config file (not hardcoded) and the healing event appears in the teacher dashboard
+**Plans**: TBD
+
+Plans:
+- [ ] 08-01: Selector config file and healer scaffold — extract selectors to config, wrap find_element_with_fallback(), dry-run validation
+- [ ] 08-02: Gemini Flash/Pro integration — prompt, selector validation, Firestore caching, Flash-to-Pro escalation logic
+
+---
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Core Reliability | 2/2 | Complete | 2026-02-05 |
-| 2. Audit & Verification | 2/2 | Complete | 2026-02-05 |
-| 3. Schedule Improvements | 1/1 | Complete | 2026-02-05 |
-| 4. Tardy Logic Review | 0/3 | Not started | - |
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 1. Core Reliability | v1.0 | 2/2 | Complete | 2026-02-05 |
+| 2. Audit & Verification | v1.0 | 2/2 | Complete | 2026-02-05 |
+| 3. Schedule Improvements | v1.0 | 1/1 | Complete | 2026-02-05 |
+| 4. Tardy Logic Review | v1.0 | 3/3 | Complete | 2026-02-05 |
+| 5. Auth Foundation and Data Migration | v2.0 | 0/3 | Not started | - |
+| 6. Teacher Dashboard and Roster Management | v2.0 | 0/4 | Not started | - |
+| 7. Railway Cloud Sync | v2.0 | 0/2 | Not started | - |
+| 8. Self-Healing LLM Layer | v2.0 | 0/2 | Not started | - |

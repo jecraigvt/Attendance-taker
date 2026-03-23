@@ -5,14 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-03-23)
 
 **Core value:** Every student who signs in must have their correct attendance status reflected in Aeries. The system must work reliably for multiple teachers without requiring technical support.
-**Current focus:** Milestone v2.0 — Multi-Tenant SaaS
+**Current focus:** Phase 5 — Auth Foundation and Data Migration
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-23 — Milestone v2.0 started
+Phase: 5 of 8 (Auth Foundation and Data Migration)
+Plan: 0 of 3 in current phase
+Status: Ready to plan
+Last activity: 2026-03-23 — Milestone v2.0 roadmap created
+
+Progress: [████░░░░░░░░░░░░░░░░] 50% (v1.0 complete; v2.0 phases 5-8 pending)
+
+## Performance Metrics
+
+**Velocity:**
+- Total plans completed: 8 (all v1.0)
+- Average duration: unknown
+- Total execution time: unknown
+
+**By Phase:**
+
+| Phase | Plans | Status |
+|-------|-------|--------|
+| 1. Core Reliability | 2/2 | Complete |
+| 2. Audit & Verification | 2/2 | Complete |
+| 3. Schedule Improvements | 1/1 | Complete |
+| 4. Tardy Logic Review | 3/3 | Complete |
+| 5-8. v2.0 phases | 0/11 | Not started |
 
 ## Accumulated Context
 
@@ -20,26 +39,29 @@ Last activity: 2026-03-23 — Milestone v2.0 started
 
 Carried forward from v1.0:
 
-| ID | Plan | Decision | Impact |
-|----|------|----------|--------|
-| retry-strategy | 01-01 | Exponential backoff with 3 retries (5s, 15s, 45s) | Login failures resolved in 70s max |
-| selector-fallback-order | 01-02 | Fallback order: data-attr -> text-content -> xpath | Prioritizes most stable selectors |
-| cross-cycle-retry | 01-02 | Failed students persist to JSON and retry next cycle | Handles systematic failures |
-| interval-schedule | 03-01 | 20-minute intervals 08:00-15:40, plus 15:45 final | Frequent syncs catch failures fast |
-| bell-schedule-based-logic | 04-01 | Bell-schedule-based tardy logic replaces 5th-student logic | Deterministic, reduces disputes |
+- retry-strategy: Exponential backoff with 3 retries (5s, 15s, 45s)
+- selector-fallback-order: data-attr -> text-content -> xpath
+- interval-schedule: 20-minute intervals 08:00-15:40, plus 15:45 final
+- bell-schedule-based-logic: Bell-schedule tardy logic replaces 5th-student threshold
 
-### Pending Todos
+New for v2.0 (pending confirmation):
 
-None — defining requirements for v2.0.
+- auth-method: Aeries username/password (NOT Google Sign-In) — research reversed PROJECT.md assumption
+- credential-encryption: Fernet encryption; key lives in Railway env vars only, never in Firestore or client JS
+- cloud-sync-host: Railway Hobby plan ($5/month) — free tier RAM insufficient for Chromium
+- kiosk-linkage: Teacher logs in once, switches to kiosk mode; UID bound to that tablet
+- self-healing-order: Build AFTER cloud sync is proven stable (Phase 8, not earlier)
+- migration-timing: Data migration script written and verified BEFORE any auth code ships
 
 ### Blockers/Concerns
 
-- Storing teacher Aeries credentials securely is a significant responsibility
-- Playwright in cloud containers can be resource-intensive
-- Gemini self-healing is cutting-edge; may need iteration
+- [Phase 5] Credential encryption boundary: who performs the encryption (Cloud Function vs. browser-side) — resolve in Phase 5 planning before implementation
+- [Phase 5] Data migration must be verified against live Firestore counts before old paths are decommissioned
+- [Phase 7] Playwright in Docker has environment-specific failure modes; deploy smoke-test container before writing multi-teacher logic
+- [Phase 8] LLM self-healing prompt is not production-validated for Aeries DOM; plan one prompt-tuning iteration
 
 ## Session Continuity
 
 Last session: 2026-03-23
-Stopped at: Milestone v2.0 initialization
+Stopped at: Roadmap created for v2.0 — ready to plan Phase 5
 Resume file: None

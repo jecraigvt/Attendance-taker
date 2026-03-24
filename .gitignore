@@ -34,3 +34,4 @@ node_modules/
 functions/node_modules/
 .firebase/
 .playwright-mcp/
+attendance v *.html

@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 
 ## Current Position
 
-Phase: 6 of 8 (Teacher Dashboard and Roster Management) — COMPLETE
-Plan: 4 of 4 in current phase — COMPLETE
-Status: Phase 6 complete, ready for Phase 7
-Last activity: 2026-03-24 — Completed 06-04-PLAN.md (Onboarding wizard, sync status card, Settings section)
+Phase: 7 of 8 (Railway Cloud Sync Worker) — In progress
+Plan: 1 of 3 in current phase — AT CHECKPOINT (awaiting Railway smoke test verification)
+Status: 07-01 auto tasks complete; waiting for user to deploy and verify on Railway
+Last activity: 2026-03-24 — Completed 07-01-PLAN.md tasks 1-2 (Dockerfile, smoke_test.py); paused at checkpoint
 
-Progress: [█████████░░░░░░░░░░░] 70% (v1.0 complete; v2.0 phases 1-6 complete)
+Progress: [█████████░░░░░░░░░░░] 73% (v1.0 complete; v2.0 phases 1-6 complete, 7 in progress)
 
 ## Performance Metrics
 
@@ -33,7 +33,8 @@ Progress: [█████████░░░░░░░░░░░] 70% (v1
 | 4. Tardy Logic Review | 3/3 | Complete |
 | 5. Auth Foundation | 3/3 | Complete |
 | 6. Teacher Dashboard | 4/4 | Complete |
-| 7-8. Remaining v2.0 | 0/4 | Not started |
+| 7. Railway Cloud Sync | 1/3 | In progress (at checkpoint) |
+| 8. Self-Healing | 0/1 | Not started |
 
 ## Accumulated Context
 
@@ -63,6 +64,15 @@ v2.0 confirmed:
 - kiosk-binding-storage: sessionStorage always; localStorage only if "remember me" checked
 - pin-storage: kioskPin stored in teachers/{uid}/config/main
 
+Phase 7 confirmed (07-01):
+
+- railway-base-image: mcr.microsoft.com/playwright/python:v1.49.1-noble (avoids Chromium system library issues)
+- firebase-admin-init-pattern: FIREBASE_SERVICE_ACCOUNT env var holds full JSON blob parsed with json.loads() (no key file on disk)
+- fernet-python-package: use `cryptography` (not `python-fernet`) for Fernet cross-compatibility with Node fernet npm
+- railway-toml-worker: builder=DOCKERFILE, numReplicas=1, ON_FAILURE restart, no healthcheck (worker not web server)
+- smoke-test-pattern: three independent tests return pass/skip/fail; exits 1 only on actual failures
+- railway-worker-dir: all sync worker source files in railway-worker/ (separate from legacy attendance-sync/)
+
 Phase 6 confirmed:
 
 - dashboard-layout: Fixed fullscreen panel (fixed inset-0) with tab navigation; Attendance tab default on open
@@ -86,11 +96,12 @@ Phase 6 confirmed:
 - [Phase 5] RESOLVED: All deployment issues (IAM, CORS, secrets, token signing) fixed
 - [Phase 5] RESOLVED: Firestore path even-segment requirement — corrected paths propagated to all files
 - [Phase 5] RESOLVED: Token expiry — Firebase Auth session persists via refresh token + onAuthStateChanged
-- [Phase 7] Playwright in Docker has environment-specific failure modes; deploy smoke-test container before writing multi-teacher logic
+- [Phase 7] ACTIVE: Deploy smoke-test container to Railway; verify all three smoke tests pass before proceeding to 07-02
+- [Phase 7] Playwright in Docker has environment-specific failure modes; smoke test proves environment before writing sync logic
 - [Phase 8] LLM self-healing prompt is not production-validated for Aeries DOM; plan one prompt-tuning iteration
 
 ## Session Continuity
 
-Last session: 2026-03-24T06:29Z
-Stopped at: Phase 6 complete — verified and deployed
-Resume file: None — ready to plan Phase 7
+Last session: 2026-03-24T18:06Z
+Stopped at: 07-01 checkpoint — tasks 1-2 committed, awaiting Railway smoke test verification
+Resume file: None — user must verify smoke test on Railway then signal "approved"

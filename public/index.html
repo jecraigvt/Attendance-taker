@@ -66,6 +66,78 @@
       0%, 100% { opacity: 1; transform: scale(1); }
       50% { opacity: 0.85; transform: scale(1.02); }
     }
+
+    /* Fullscreen Seating / Picker — matches timer aesthetic */
+    .seat-fs-bg {
+      background: linear-gradient(135deg, #0a0a0b 0%, #0a0f1a 40%, #101c20 70%, #0a0a0b 100%);
+    }
+
+    .seat-fs-card {
+      backdrop-filter: blur(16px);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .seat-fs-card-header {
+      text-shadow: 0 0 30px rgba(185, 28, 28, 0.5);
+    }
+
+    .picker-ring {
+      box-shadow: 0 0 80px rgba(185, 28, 28, 0.3), inset 0 0 80px rgba(185, 28, 28, 0.05);
+      border: 1px solid rgba(185, 28, 28, 0.2);
+      backdrop-filter: blur(20px);
+      background: rgba(0, 0, 0, 0.4);
+    }
+
+    .picker-name-glow {
+      text-shadow: 0 0 40px rgba(185, 28, 28, 0.6), 0 0 80px rgba(185, 28, 28, 0.3);
+    }
+
+    .picker-spin {
+      animation: pickerCycle 0.08s steps(1) infinite;
+    }
+
+    @keyframes pickerReveal {
+      0% { opacity: 0; transform: scale(0.8); }
+      50% { opacity: 1; transform: scale(1.05); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    /* Animation helpers */
+    .picker-tile {
+      position: absolute;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      white-space: nowrap;
+      transition: all 0.3s ease;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #d1d5db;
+    }
+
+    .picker-tile.eliminated { opacity: 0 !important; transform: scale(0.3) !important; }
+    .picker-tile.winner { background: rgba(185,28,28,0.3) !important; border-color: rgba(185,28,28,0.6) !important; color: white !important; z-index: 10; }
+    .picker-tile.spotlight-dim { opacity: 0.08 !important; }
+    .picker-tile.spotlight-lit { background: rgba(185,28,28,0.25); border-color: rgba(185,28,28,0.5); color: white; }
+
+    .picker-slot-strip {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: transform 0.15s linear;
+    }
+
+    .picker-slot-item {
+      padding: 12px 0;
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: #6b7280;
+      white-space: nowrap;
+    }
+
+    .picker-slot-item.active { color: white; text-shadow: 0 0 30px rgba(185,28,28,0.5); }
   </style>
   <script>
     // Firebase web config (from your Console)
@@ -911,13 +983,45 @@
     </div>
   </div>
 
-  <div id="group-display-fullscreen" class="hidden fixed inset-0 bg-gray-900 text-white z-50 p-8 md:p-12">
-    <button id="close-group-display-btn"
-      class="absolute top-4 right-6 text-5xl font-bold text-gray-400 hover:text-white">&times;</button>
+  <div id="group-display-fullscreen" class="hidden fixed inset-0 seat-fs-bg text-white z-50 overflow-hidden">
+    <div class="timer-fs-orb" style="width:500px;height:500px;background:#1c3a5c;top:-150px;right:-100px;"></div>
+    <div class="timer-fs-orb" style="width:600px;height:600px;background:#7f1d1d;bottom:-200px;left:-150px;"></div>
 
-    <div class="w-full max-w-7xl mx-auto">
-      <h2 class="text-4xl md:text-5xl font-bold text-center mb-8">Group Assignments</h2>
-      <div id="fullscreen-group-list" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8"></div>
+    <button id="close-group-display-btn"
+      class="absolute top-4 right-6 text-5xl font-bold text-gray-500 hover:text-white transition-colors z-10">&times;</button>
+
+    <!-- Tab toggle: Groups / Pick Student -->
+    <div class="relative z-10 flex justify-center gap-2 pt-6 mb-6">
+      <button id="seat-tab-groups" class="px-5 py-2 text-sm font-semibold rounded-full bg-white/10 border border-white/20 text-white transition-all">
+        Groups
+      </button>
+      <button id="seat-tab-picker" class="px-5 py-2 text-sm font-semibold rounded-full text-gray-400 hover:text-white transition-all">
+        Pick a Student
+      </button>
+    </div>
+
+    <!-- Groups View -->
+    <div id="seat-view-groups" class="relative z-10 overflow-y-auto px-8 md:px-12" style="max-height: calc(100vh - 120px);">
+      <div id="fullscreen-group-list" class="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5"></div>
+    </div>
+
+    <!-- Random Picker View -->
+    <div id="seat-view-picker" class="hidden relative z-10 flex flex-col items-center justify-center" style="height: calc(100vh - 120px);">
+      <!-- Animation stage (overlays during animation) -->
+      <div id="picker-stage" class="hidden absolute inset-0 flex items-center justify-center overflow-hidden"></div>
+      <!-- Result display (shown after animation) -->
+      <div id="picker-result" class="picker-ring rounded-3xl px-16 py-12 text-center min-w-[320px]">
+        <p class="text-sm uppercase tracking-[0.25em] text-gray-400 font-semibold mb-6">Random Student</p>
+        <div id="picker-name-display" class="text-5xl md:text-7xl font-bold select-none min-h-[1.2em] text-gray-500">
+          —
+        </div>
+        <p id="picker-group-display" class="text-xl text-gray-400 mt-4 min-h-[1.5em]"></p>
+      </div>
+      <button id="picker-go-btn"
+        class="mt-10 px-10 py-4 bg-red-700 hover:bg-red-600 text-white text-lg font-bold rounded-2xl transition-all shadow-lg shadow-red-900/40 active:scale-95">
+        Pick a Student
+      </button>
+      <p class="mt-4 text-xs text-gray-600 tracking-wider">Press Space to pick &middot; Escape to close</p>
     </div>
   </div>
 
@@ -925,13 +1029,12 @@
 
     // ===== FULLSCREEN DISPLAY FUNCTIONS =====
 
+    // ===== FULLSCREEN SEATING: show/hide, tabs, group view, random picker =====
+
     function showGroupDisplay() {
       const mainAppContainer = document.querySelector('.w-full.max-w-6xl');
       const fullscreenContainer = document.getElementById('group-display-fullscreen');
-
-      // This ensures the fullscreen view has the latest data when opened
       updateFullscreenGroupView();
-
       mainAppContainer.classList.add('hidden');
       fullscreenContainer.classList.remove('hidden');
     }
@@ -939,12 +1042,40 @@
     function hideGroupDisplay() {
       const mainAppContainer = document.querySelector('.w-full.max-w-6xl');
       const fullscreenContainer = document.getElementById('group-display-fullscreen');
-
       mainAppContainer.classList.remove('hidden');
       fullscreenContainer.classList.add('hidden');
     }
 
-    // This helper function will be called by updateUI to keep both views in sync
+    // Tab switching
+    (function initSeatTabs() {
+      const tabGroups = document.getElementById('seat-tab-groups');
+      const tabPicker = document.getElementById('seat-tab-picker');
+      const viewGroups = document.getElementById('seat-view-groups');
+      const viewPicker = document.getElementById('seat-view-picker');
+      if (!tabGroups || !tabPicker) return;
+
+      function activateTab(tab) {
+        [tabGroups, tabPicker].forEach(t => {
+          t.classList.remove('bg-white/10', 'border', 'border-white/20', 'text-white');
+          t.classList.add('text-gray-400');
+        });
+        tab.classList.add('bg-white/10', 'border', 'border-white/20', 'text-white');
+        tab.classList.remove('text-gray-400');
+      }
+
+      tabGroups.addEventListener('click', () => {
+        activateTab(tabGroups);
+        viewGroups.classList.remove('hidden');
+        viewPicker.classList.add('hidden');
+      });
+      tabPicker.addEventListener('click', () => {
+        activateTab(tabPicker);
+        viewGroups.classList.add('hidden');
+        viewPicker.classList.remove('hidden');
+      });
+    })();
+
+    // Updated group view with card styling
     function updateFullscreenGroupView() {
       const fullscreenListEl = document.getElementById('fullscreen-group-list');
       if (!fullscreenListEl) return;
@@ -953,7 +1084,6 @@
       const effectiveCfg = getEffectiveSeatingConfig(period);
       const numGroups = effectiveCfg.enabled ? effectiveCfg.numGroups : MAX_GROUP;
 
-      // Map group -> [{Name, Seat}]
       const map = new Map();
       for (let g = 1; g <= numGroups; g++) map.set(g, []);
       periodAttendanceLog.forEach(l => {
@@ -963,30 +1093,496 @@
       fullscreenListEl.replaceChildren();
       if (periodAttendanceLog.length === 0) {
         const p = document.createElement('p');
-        p.className = 'col-span-full text-center text-gray-400 text-xl';
+        p.className = 'col-span-full text-center text-gray-500 text-xl mt-20';
         p.textContent = 'Students will appear here as they sign in.';
         fullscreenListEl.appendChild(p);
       } else {
         map.forEach((arr, grp) => {
           if (arr.length > 0) {
             const cap = effectiveCfg.enabled ? getGroupCap(grp, effectiveCfg) : 3;
-            const div = document.createElement('div');
+            const card = document.createElement('div');
+            card.className = 'seat-fs-card rounded-2xl p-5';
             const h4 = document.createElement('h4');
-            h4.className = 'font-bold text-2xl text-red-500 mb-2';
-            h4.textContent = 'Group ' + grp + ' (' + arr.length + '/' + cap + ')';
+            h4.className = 'font-bold text-xl text-red-500 mb-3 seat-fs-card-header';
+            h4.textContent = 'Group ' + grp;
+            const countBadge = document.createElement('span');
+            countBadge.className = 'text-sm font-normal text-gray-500 ml-2';
+            countBadge.textContent = arr.length + '/' + cap;
+            h4.appendChild(countBadge);
             const ul = document.createElement('ul');
-            ul.className = 'text-xl space-y-1';
+            ul.className = 'space-y-1.5';
             arr.forEach(entry => {
               const li = document.createElement('li');
-              li.textContent = entry.seat != null ? entry.name + ' (Seat ' + entry.seat + ')' : entry.name;
+              li.className = 'text-gray-300 text-base';
+              li.textContent = entry.seat != null ? entry.name + ' \u2014 Seat ' + entry.seat : entry.name;
               ul.appendChild(li);
             });
-            div.append(h4, ul);
-            fullscreenListEl.appendChild(div);
+            card.append(h4, ul);
+            fullscreenListEl.appendChild(card);
           }
         });
       }
     }
+
+    // ===== RANDOM STUDENT PICKER — weighted probability + 8 animations =====
+
+    const pickerWeights = new Map();
+    let pickerBusy = false;
+    const ANIM_DURATION = 1500; // ms per animation
+
+    function getPickerWeight(id) { return pickerWeights.get(id) || 1.0; }
+
+    function pickWeightedRandom(students) {
+      if (students.length <= 1) return students[0] || null;
+      const w = students.map(s => getPickerWeight(s.StudentID));
+      const total = w.reduce((a, b) => a + b, 0);
+      let r = Math.random() * total;
+      for (let i = 0; i < students.length; i++) { r -= w[i]; if (r <= 0) return students[i]; }
+      return students[students.length - 1];
+    }
+
+    function updateWeightsAfterPick(pickedId, allIds) {
+      allIds.forEach(id => {
+        pickerWeights.set(id, id === pickedId ? 0.1 : Math.min(getPickerWeight(id) + 0.3, 2.0));
+      });
+    }
+
+    function getPresentStudents() {
+      const seen = new Set(), out = [];
+      periodAttendanceLog.forEach(e => { if (!seen.has(e.StudentID)) { seen.add(e.StudentID); out.push(e); } });
+      return out;
+    }
+
+    // --- Stage helpers ---
+    function stageSetup() {
+      const stage = document.getElementById('picker-stage');
+      const result = document.getElementById('picker-result');
+      stage.replaceChildren();
+      stage.classList.remove('hidden');
+      result.style.opacity = '0';
+      return stage;
+    }
+
+    function stageFinish(winner) {
+      const stage = document.getElementById('picker-stage');
+      const result = document.getElementById('picker-result');
+      const nameEl = document.getElementById('picker-name-display');
+      const groupEl = document.getElementById('picker-group-display');
+      stage.classList.add('hidden');
+      stage.replaceChildren();
+      result.style.opacity = '1';
+      nameEl.textContent = winner.Name;
+      nameEl.className = 'text-5xl md:text-7xl font-bold picker-name-glow select-none min-h-[1.2em] text-white';
+      nameEl.style.animation = 'pickerReveal 0.4s ease-out';
+      groupEl.textContent = winner.Group ? 'Group ' + winner.Group + (winner.Seat != null ? ' \u2014 Seat ' + winner.Seat : '') : '';
+      setTimeout(() => { nameEl.style.animation = ''; }, 500);
+    }
+
+    function shuffleArr(a) { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; }
+
+    // --- 8 Animations ---
+
+    // 1. Slot machine — names scroll vertically, decelerate to winner
+    function animSlot(stage, names, winner, done) {
+      const h = stage.clientHeight;
+      const itemH = 72;
+      // Build a long strip: random names + winner at the end
+      const count = 20;
+      const strip = [];
+      for (let i = 0; i < count; i++) strip.push(names[Math.floor(Math.random() * names.length)]);
+      strip.push(winner.Name);
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'position:relative;width:100%;height:100%;overflow:hidden;display:flex;align-items:center;justify-content:center;';
+      const col = document.createElement('div');
+      col.className = 'picker-slot-strip';
+      col.style.position = 'relative';
+      strip.forEach((n, i) => {
+        const d = document.createElement('div');
+        d.className = 'picker-slot-item';
+        d.textContent = n;
+        col.appendChild(d);
+      });
+      wrap.appendChild(col);
+      stage.appendChild(wrap);
+      // Animate: scroll to the last item
+      const totalDist = (strip.length - 1) * itemH;
+      const start = performance.now();
+      function frame(t) {
+        const p = Math.min((t - start) / ANIM_DURATION, 1);
+        const ease = 1 - Math.pow(1 - p, 3); // ease-out cubic
+        const y = ease * totalDist;
+        col.style.transform = 'translateY(' + (-y) + 'px)';
+        // Highlight closest to center
+        const centerIdx = Math.round(y / itemH);
+        col.childNodes.forEach((c, i) => {
+          c.className = 'picker-slot-item' + (i === centerIdx ? ' active' : '');
+        });
+        if (p < 1) requestAnimationFrame(frame); else done();
+      }
+      requestAnimationFrame(frame);
+    }
+
+    // 2. Spotlight — all names visible, circle of light shrinks to winner
+    function animSpotlight(stage, names, winner, done) {
+      const tiles = [];
+      const w = stage.clientWidth, h = stage.clientHeight;
+      // Place winner near center
+      const winX = w / 2 - 60, winY = h / 2 - 15;
+      names.forEach(n => {
+        const el = document.createElement('div');
+        el.className = 'picker-tile';
+        el.textContent = n;
+        const isWin = n === winner.Name;
+        el.style.left = (isWin ? winX : 40 + Math.random() * (w - 160)) + 'px';
+        el.style.top = (isWin ? winY : 40 + Math.random() * (h - 100)) + 'px';
+        stage.appendChild(el);
+        tiles.push({ el, isWin, x: parseFloat(el.style.left), y: parseFloat(el.style.top) });
+      });
+      // Overlay with radial gradient mask
+      const mask = document.createElement('div');
+      mask.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:5;transition:background 0.1s;';
+      stage.appendChild(mask);
+      const cx = winX + 60, cy = winY + 15;
+      const start = performance.now();
+      function frame(t) {
+        const p = Math.min((t - start) / ANIM_DURATION, 1);
+        const radius = Math.max(800 * (1 - p * p), 60);
+        mask.style.background = 'radial-gradient(circle ' + radius + 'px at ' + cx + 'px ' + cy + 'px, transparent 0%, rgba(0,0,0,0.92) 100%)';
+        if (p < 1) requestAnimationFrame(frame); else done();
+      }
+      requestAnimationFrame(frame);
+    }
+
+    // 3. Elimination — grid of names, rapidly disappear until winner remains
+    function animEliminate(stage, names, winner, done) {
+      const w = stage.clientWidth;
+      const cols = Math.min(Math.ceil(Math.sqrt(names.length)), 5);
+      const grid = document.createElement('div');
+      grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-content:center;height:100%;padding:40px;';
+      const els = [];
+      names.forEach(n => {
+        const el = document.createElement('div');
+        el.className = 'picker-tile';
+        el.style.position = 'relative';
+        el.textContent = n;
+        grid.appendChild(el);
+        els.push({ el, name: n });
+      });
+      stage.appendChild(grid);
+      // Remove non-winners one by one
+      const toRemove = shuffleArr(els.filter(e => e.name !== winner.Name));
+      const interval = ANIM_DURATION / (toRemove.length + 1);
+      toRemove.forEach((e, i) => {
+        setTimeout(() => { e.el.classList.add('eliminated'); }, interval * (i + 1));
+      });
+      setTimeout(() => {
+        const winEl = els.find(e => e.name === winner.Name);
+        if (winEl) winEl.el.classList.add('winner');
+        done();
+      }, ANIM_DURATION);
+    }
+
+    // 4. Roulette — names in a circle, highlight spins and slows
+    function animRoulette(stage, names, winner, done) {
+      const cx = stage.clientWidth / 2, cy = stage.clientHeight / 2;
+      const r = Math.min(cx, cy) - 80;
+      const winIdx = names.indexOf(winner.Name);
+      const els = names.map((n, i) => {
+        const angle = (2 * Math.PI * i) / names.length - Math.PI / 2;
+        const el = document.createElement('div');
+        el.className = 'picker-tile';
+        el.textContent = n;
+        el.style.left = (cx + r * Math.cos(angle) - 50) + 'px';
+        el.style.top = (cy + r * Math.sin(angle) - 15) + 'px';
+        stage.appendChild(el);
+        return el;
+      });
+      // Spin a highlight indicator
+      const totalRotations = 3 + Math.random() * 2;
+      const targetAngle = totalRotations * names.length + winIdx;
+      const start = performance.now();
+      let lastHighlight = -1;
+      function frame(t) {
+        const p = Math.min((t - start) / ANIM_DURATION, 1);
+        const ease = 1 - Math.pow(1 - p, 3);
+        const current = Math.floor(ease * targetAngle) % names.length;
+        if (current !== lastHighlight) {
+          els.forEach((e, i) => {
+            e.classList.toggle('spotlight-lit', i === current);
+            e.classList.toggle('spotlight-dim', i !== current);
+          });
+          lastHighlight = current;
+        }
+        if (p < 1) requestAnimationFrame(frame); else done();
+      }
+      requestAnimationFrame(frame);
+    }
+
+    // 5. Shuffle cards — names scatter then winner flies to center
+    function animShuffle(stage, names, winner, done) {
+      const w = stage.clientWidth, h = stage.clientHeight;
+      const els = names.map(n => {
+        const el = document.createElement('div');
+        el.className = 'picker-tile';
+        el.textContent = n;
+        el.style.left = (w / 2 - 50) + 'px';
+        el.style.top = (h / 2 - 15) + 'px';
+        el.style.transition = 'all 0.5s cubic-bezier(0.34,1.56,0.64,1)';
+        stage.appendChild(el);
+        return { el, name: n };
+      });
+      // Phase 1: scatter (0-500ms)
+      setTimeout(() => {
+        els.forEach(e => {
+          e.el.style.left = (30 + Math.random() * (w - 140)) + 'px';
+          e.el.style.top = (30 + Math.random() * (h - 80)) + 'px';
+        });
+      }, 50);
+      // Phase 2: non-winners fade, winner flies to center (800ms)
+      setTimeout(() => {
+        els.forEach(e => {
+          if (e.name !== winner.Name) {
+            e.el.classList.add('eliminated');
+          } else {
+            e.el.classList.add('winner');
+            e.el.style.left = (w / 2 - 60) + 'px';
+            e.el.style.top = (h / 2 - 20) + 'px';
+            e.el.style.fontSize = '2rem';
+            e.el.style.padding = '12px 28px';
+          }
+        });
+      }, 700);
+      setTimeout(done, ANIM_DURATION);
+    }
+
+    // 6. Binary split — names split in half, one half fades, repeat
+    function animBinary(stage, names, winner, done) {
+      const container = document.createElement('div');
+      container.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-content:center;height:100%;padding:40px;';
+      let remaining = [...names];
+      // Make sure winner is in the list
+      const els = new Map();
+      remaining.forEach(n => {
+        const el = document.createElement('div');
+        el.className = 'picker-tile';
+        el.style.position = 'relative';
+        el.textContent = n;
+        container.appendChild(el);
+        els.set(n, el);
+      });
+      stage.appendChild(container);
+      const rounds = Math.ceil(Math.log2(remaining.length));
+      const roundTime = ANIM_DURATION / (rounds + 1);
+      function doRound(r) {
+        if (remaining.length <= 1) { if (els.get(winner.Name)) els.get(winner.Name).classList.add('winner'); done(); return; }
+        const shuffled = shuffleArr(remaining);
+        const winSide = shuffled.indexOf(winner.Name) < shuffled.length / 2 ? 0 : 1;
+        const keep = [], remove = [];
+        shuffled.forEach((n, i) => { (i < shuffled.length / 2 ? (winSide === 0 ? keep : remove) : (winSide === 1 ? keep : remove)).push(n); });
+        remove.forEach(n => { const e = els.get(n); if (e) e.classList.add('eliminated'); });
+        remaining = keep;
+        setTimeout(() => doRound(r + 1), roundTime);
+      }
+      setTimeout(() => doRound(0), 200);
+    }
+
+    // 7. Typewriter — letters appear one by one
+    function animTypewriter(stage, names, winner, done) {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;';
+      const text = document.createElement('div');
+      text.style.cssText = 'font-size:4rem;font-weight:700;color:white;font-family:monospace;';
+      const cursor = document.createElement('span');
+      cursor.style.cssText = 'border-right:3px solid rgba(185,28,28,0.8);padding-right:4px;animation:blink 0.6s step-end infinite;';
+      text.appendChild(cursor);
+      wrap.appendChild(text);
+      stage.appendChild(wrap);
+      // Add style for blink if not present
+      if (!document.getElementById('blink-style')) {
+        const s = document.createElement('style');
+        s.id = 'blink-style';
+        s.textContent = '@keyframes blink{0%,100%{border-color:rgba(185,28,28,0.8);}50%{border-color:transparent;}}';
+        document.head.appendChild(s);
+      }
+      const letters = winner.Name.split('');
+      const delay = Math.min(ANIM_DURATION / (letters.length + 2), 120);
+      letters.forEach((ch, i) => {
+        setTimeout(() => { cursor.before(document.createTextNode(ch)); }, delay * (i + 1));
+      });
+      setTimeout(done, ANIM_DURATION);
+    }
+
+    // 8. Zoom — all names tiny, winner zooms huge
+    function animZoom(stage, names, winner, done) {
+      const w = stage.clientWidth, h = stage.clientHeight;
+      const els = names.map(n => {
+        const el = document.createElement('div');
+        el.className = 'picker-tile';
+        el.style.fontSize = '0.7rem';
+        el.style.padding = '2px 8px';
+        el.style.left = (20 + Math.random() * (w - 120)) + 'px';
+        el.style.top = (20 + Math.random() * (h - 60)) + 'px';
+        el.style.transition = 'all 0.8s cubic-bezier(0.34,1.56,0.64,1)';
+        stage.appendChild(el);
+        return { el, name: n };
+      });
+      // After brief pause, zoom winner
+      setTimeout(() => {
+        els.forEach(e => {
+          if (e.name === winner.Name) {
+            e.el.style.left = (w / 2 - 100) + 'px';
+            e.el.style.top = (h / 2 - 30) + 'px';
+            e.el.style.fontSize = '3rem';
+            e.el.style.padding = '14px 32px';
+            e.el.classList.add('winner');
+          } else {
+            e.el.style.opacity = '0';
+            e.el.style.transform = 'scale(0.2)';
+          }
+        });
+      }, 300);
+      setTimeout(done, ANIM_DURATION);
+    }
+
+    // 9. Amoeba — blobs drift around, absorb each other until winner remains
+    function animAmoeba(stage, names, winner, done) {
+      const w = stage.clientWidth, h = stage.clientHeight;
+      const blobs = names.map(n => {
+        const el = document.createElement('div');
+        el.style.cssText = 'position:absolute;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;color:white;transition:all 0.3s ease;pointer-events:none;';
+        const size = 50 + Math.random() * 20;
+        el.style.width = size + 'px'; el.style.height = size + 'px';
+        el.style.fontSize = '0.6rem';
+        el.style.background = n === winner.Name ? 'rgba(185,28,28,0.5)' : 'rgba(100,120,180,0.3)';
+        el.style.border = '1px solid ' + (n === winner.Name ? 'rgba(185,28,28,0.6)' : 'rgba(150,160,200,0.3)');
+        el.textContent = n.split(' ')[0]; // first name only to fit
+        const x = 60 + Math.random() * (w - 160), y = 60 + Math.random() * (h - 160);
+        el.style.left = x + 'px'; el.style.top = y + 'px';
+        stage.appendChild(el);
+        return { el, name: n, x, y, size, vx: (Math.random() - 0.5) * 3, vy: (Math.random() - 0.5) * 3, alive: true };
+      });
+      // Order so winner blob absorbs last
+      const eatOrder = shuffleArr(blobs.filter(b => b.name !== winner.Name));
+      const interval = (ANIM_DURATION - 200) / (eatOrder.length + 1);
+      const winBlob = blobs.find(b => b.name === winner.Name);
+      // Animate movement
+      let animId;
+      function move() {
+        blobs.forEach(b => {
+          if (!b.alive) return;
+          b.x += b.vx; b.y += b.vy;
+          if (b.x < 10 || b.x > w - b.size - 10) b.vx *= -1;
+          if (b.y < 10 || b.y > h - b.size - 10) b.vy *= -1;
+          b.el.style.left = b.x + 'px'; b.el.style.top = b.y + 'px';
+        });
+        animId = requestAnimationFrame(move);
+      }
+      move();
+      // Absorb blobs one by one
+      eatOrder.forEach((b, i) => {
+        setTimeout(() => {
+          b.alive = false;
+          // Move to winner position and shrink
+          b.el.style.left = winBlob.x + 'px';
+          b.el.style.top = winBlob.y + 'px';
+          b.el.style.width = '0px'; b.el.style.height = '0px'; b.el.style.opacity = '0';
+          // Grow winner
+          winBlob.size += 8;
+          winBlob.el.style.width = winBlob.size + 'px'; winBlob.el.style.height = winBlob.size + 'px';
+          winBlob.el.style.fontSize = Math.min(0.6 + (winBlob.size - 50) * 0.015, 1.8) + 'rem';
+        }, interval * (i + 1));
+      });
+      setTimeout(() => { cancelAnimationFrame(animId); done(); }, ANIM_DURATION);
+    }
+
+    // 10. Rolodex — 3D card flip that spins through names and decelerates
+    function animRolodex(stage, names, winner, done) {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;perspective:600px;';
+      const card = document.createElement('div');
+      card.style.cssText = 'font-size:3rem;font-weight:700;color:white;padding:20px 48px;border-radius:16px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);transform-style:preserve-3d;';
+      wrap.appendChild(card);
+      stage.appendChild(wrap);
+      // Build sequence: random names then winner at end
+      const seq = [];
+      const count = 25;
+      for (let i = 0; i < count; i++) seq.push(names[Math.floor(Math.random() * names.length)]);
+      seq.push(winner.Name);
+      const start = performance.now();
+      let lastIdx = -1;
+      function frame(t) {
+        const p = Math.min((t - start) / ANIM_DURATION, 1);
+        const ease = 1 - Math.pow(1 - p, 3);
+        const idx = Math.min(Math.floor(ease * seq.length), seq.length - 1);
+        if (idx !== lastIdx) {
+          lastIdx = idx;
+          // Flip rotation: each card change does a partial X rotation
+          const rot = (1 - p) * 40; // rotation intensity decreases
+          card.style.transform = 'rotateX(' + rot + 'deg)';
+          card.textContent = seq[idx];
+          setTimeout(() => { card.style.transform = 'rotateX(0deg)'; }, 30);
+        }
+        if (p < 1) requestAnimationFrame(frame); else {
+          card.style.transform = 'rotateX(0deg)';
+          card.textContent = winner.Name;
+          card.style.textShadow = '0 0 30px rgba(185,28,28,0.5)';
+          done();
+        }
+      }
+      requestAnimationFrame(frame);
+    }
+
+    // --- Animation registry ---
+    const pickerAnimations = [animSlot, animSpotlight, animEliminate, animRoulette, animShuffle, animBinary, animTypewriter, animZoom, animAmoeba, animRolodex];
+
+    // --- Main trigger ---
+    function triggerPicker() {
+      if (pickerBusy) return;
+      const students = getPresentStudents();
+      if (students.length === 0) {
+        document.getElementById('picker-name-display').textContent = 'No students yet';
+        return;
+      }
+
+      pickerBusy = true;
+      const btn = document.getElementById('picker-go-btn');
+      btn.disabled = true;
+      btn.classList.add('opacity-50');
+
+      const winner = pickWeightedRandom(students);
+      const names = shuffleArr(students.map(s => s.Name));
+      const stage = stageSetup();
+
+      // Pick a random animation
+      const anim = pickerAnimations[Math.floor(Math.random() * pickerAnimations.length)];
+      anim(stage, names, winner, () => {
+        setTimeout(() => {
+          stageFinish(winner);
+          updateWeightsAfterPick(winner.StudentID, students.map(s => s.StudentID));
+          btn.disabled = false;
+          btn.classList.remove('opacity-50');
+          pickerBusy = false;
+        }, 400); // brief pause before showing result
+      });
+    }
+
+    // Picker button + keyboard
+    (function initPicker() {
+      const btn = document.getElementById('picker-go-btn');
+      if (btn) btn.addEventListener('click', triggerPicker);
+
+      document.addEventListener('keydown', (e) => {
+        const fullscreen = document.getElementById('group-display-fullscreen');
+        if (!fullscreen || fullscreen.classList.contains('hidden')) return;
+        const pickerView = document.getElementById('seat-view-picker');
+        if (!pickerView || pickerView.classList.contains('hidden')) return;
+
+        if (e.code === 'Space') {
+          e.preventDefault();
+          triggerPicker();
+        }
+      });
+    })();
 
 
     async function exportDateRangeCSV() {

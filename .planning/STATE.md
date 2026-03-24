@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-23)
 
 **Core value:** Every student who signs in must have their correct attendance status reflected in Aeries. The system must work reliably for multiple teachers without requiring technical support.
-**Current focus:** Phase 6 in progress — dashboard shell complete, plans 02-04 remaining
+**Current focus:** Phase 6 in progress — plans 01-03 complete, plan 04 remaining
 
 ## Current Position
 
 Phase: 6 of 8 (Teacher Dashboard and Roster Management) — In progress
-Plan: 2 of 4 in current phase — COMPLETE
-Status: Plan 06-02 complete, ready for 06-03 and 06-04
-Last activity: 2026-03-24 — Completed 06-02-PLAN.md (seating config UI and kiosk wiring)
+Plan: 3 of 4 in current phase — COMPLETE
+Status: Plan 06-03 complete, ready for 06-04
+Last activity: 2026-03-24 — Completed 06-03-PLAN.md (fetchRoster Cloud Function + roster management UI)
 
-Progress: [████████░░░░░░░░░░░░] 62% (v1.0 complete; v2.0 phases 1-5 + 6-01 + 6-02 complete)
+Progress: [████████░░░░░░░░░░░░] 65% (v1.0 complete; v2.0 phases 1-5 + 6-01 + 6-02 + 6-03 complete)
 
 ## Performance Metrics
 
@@ -32,7 +32,7 @@ Progress: [████████░░░░░░░░░░░░] 62% (v1
 | 3. Schedule Improvements | 1/1 | Complete |
 | 4. Tardy Logic Review | 3/3 | Complete |
 | 5. Auth Foundation | 3/3 | Complete |
-| 6. Teacher Dashboard | 2/4 | In progress |
+| 6. Teacher Dashboard | 3/4 | In progress |
 | 7-8. Remaining v2.0 | 0/4 | Not started |
 
 ## Accumulated Context
@@ -73,6 +73,10 @@ Phase 6 confirmed:
 - pickGroup-return-type: pickGroup() returns { group, overflow } — callers must destructure
 - seat-field-in-logs: attendance log entries now include Seat field (number or absent)
 - seating-front-groups: first 15% of numGroups are "front" groups for front-row preference logic
+- fetchRoster-fallback: fetchRoster returns { error: "roster_requires_browser", fallback: "csv_upload" } when HTTP scraping fails — CSV upload always available
+- preferredName-field: every student record has preferredName field; getDisplayName() helper returns it (or FirstName); used in kiosk, absent list, group display
+- roster-upload-location: CSV upload moved to Roster tab; Attendance tab has hidden stubs for JS compat (rosterUpload, rosterStatus, rosterWarning, rosterSummary, rosterDebug, clearRostersBtn)
+- roster-source-field: student records have source field ('aeries'|'csv'|'manual'); manual students preserved across Aeries re-fetches
 
 ### Blockers/Concerns
 
@@ -85,5 +89,5 @@ Phase 6 confirmed:
 ## Session Continuity
 
 Last session: 2026-03-24
-Stopped at: Completed 06-02-PLAN.md — seating config UI and kiosk wiring
-Resume file: None — ready for 06-03 and 06-04
+Stopped at: Completed 06-03-PLAN.md — fetchRoster Cloud Function and roster management UI
+Resume file: None — ready for 06-04

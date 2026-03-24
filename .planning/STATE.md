@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 
 ## Current Position
 
-Phase: 7 of 8 (Railway Cloud Sync) — COMPLETE
-Plan: 2 of 2 in current phase — COMPLETE
-Status: Phase 7 complete, ready for Phase 8
-Last activity: 2026-03-24 — Completed phase 7 execution (Docker infra + multi-teacher sync worker)
+Phase: 8 of 8 (Self-Healing) — In progress
+Plan: 1 of 2 in current phase — COMPLETE
+Status: Phase 8 plan 1 complete — selector config + healer module built
+Last activity: 2026-03-24 — Completed 08-01-PLAN.md (selectors.json, healer.py, Firestore helpers)
 
-Progress: [████████████░░░░░░░] 85% (v1.0 complete; v2.0 phases 5-7 complete)
+Progress: [████████████████░░░] 89% (v1.0 complete; v2.0 phases 5-8.1 complete)
 
 ## Performance Metrics
 
@@ -34,7 +34,7 @@ Progress: [████████████░░░░░░░] 85% (v1.0 
 | 5. Auth Foundation | 3/3 | Complete |
 | 6. Teacher Dashboard | 4/4 | Complete |
 | 7. Railway Cloud Sync | 2/2 | Complete |
-| 8. Self-Healing | 0/2 | Not started |
+| 8. Self-Healing | 1/2 | In progress |
 
 ## Accumulated Context
 
@@ -99,6 +99,17 @@ Phase 6 confirmed:
 - sync-status-path: sync status read from teachers/{uid}/sync/status (onSnapshot); doc written by Phase 7 Railway sync worker
 - settings-section: credential update calls authenticateTeacher CF; PIN change saves to config/main and updates kiosk binding
 
+Phase 8 plan 1 confirmed:
+
+- selectors-config-file: SELECTOR_STRATEGIES loaded from railway-worker/selectors.json at module import; _DEFAULT_SELECTORS hardcoded fallback if file missing
+- healing-daily-cap: DAILY_HEALING_CAP=25 per UTC day, global across all teachers (not per-teacher)
+- healing-event-collection: healing_events is a top-level Firestore collection (not per-teacher subcollection)
+- gemini-escalation-order: Flash first (gemini-2.0-flash), Pro escalation (gemini-2.0-pro) on Flash validation failure
+- healing-fail-open: attempt_heal() returns None on cap hit, API error, or missing GEMINI_API_KEY — never crashes sync
+- healing-dom-prep: strip script/style tags, truncate to 30KB before sending to Gemini
+- healing-validation: Gemini candidate tested with page.locator(formatted).count() > 0 before acceptance
+- google-generativeai-package: required for self-healing (add to requirements.txt before Phase 8 plan 2)
+
 ### Blockers/Concerns
 
 - [Phase 5] RESOLVED: All deployment issues (IAM, CORS, secrets, token signing) fixed
@@ -111,6 +122,6 @@ Phase 6 confirmed:
 
 ## Session Continuity
 
-Last session: 2026-03-24T19:00Z
-Stopped at: Phase 7 complete — code verified, gap closed, ready to deploy
-Resume file: None — ready to plan Phase 8
+Last session: 2026-03-24T19:47Z
+Stopped at: Phase 8 plan 1 complete — selectors.json, healer.py, Firestore helpers
+Resume file: None — ready to execute 08-02-PLAN.md (wire healing into live sync flow)

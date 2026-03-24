@@ -23,6 +23,7 @@ from firestore_client import (
     get_last_sync_time,
     get_latest_attendance_timestamp,
     is_sync_blocked,
+    is_sync_enabled,
     write_sync_status,
 )
 
@@ -277,7 +278,14 @@ def sync_teacher(uid: str) -> dict:
     logger.info(f"[{uid}] Starting sync for {today}")
 
     # ------------------------------------------------------------------
-    # Step 0: Check if sync is blocked (e.g. invalid credentials)
+    # Step 0a: Check if sync is enabled for this teacher
+    # ------------------------------------------------------------------
+    if not is_sync_enabled(uid):
+        logger.info(f"[{uid}] Sync not enabled — skipping")
+        return {"status": "skipped", "reason": "sync_not_enabled"}
+
+    # ------------------------------------------------------------------
+    # Step 0b: Check if sync is blocked (e.g. invalid credentials)
     # ------------------------------------------------------------------
     if is_sync_blocked(uid):
         logger.info(

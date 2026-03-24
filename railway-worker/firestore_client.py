@@ -328,6 +328,24 @@ def write_sync_status(
         logger.error(f"[{uid}] Failed to write sync status: {exc}")
 
 
+def is_sync_enabled(uid: str) -> bool:
+    """
+    Return True if the teacher has syncEnabled set to True in config/main.
+
+    Sync is OFF by default — the admin must explicitly enable it per teacher
+    by setting syncEnabled: true in teachers/{uid}/config/main.
+    """
+    db = get_db()
+    try:
+        doc = db.document(f"teachers/{uid}/config/main").get()
+        if not doc.exists:
+            return False
+        return doc.to_dict().get("syncEnabled", False) is True
+    except Exception as exc:
+        logger.error(f"[{uid}] Error checking syncEnabled: {exc}")
+        return False  # fail-closed: don't sync if we can't confirm it's enabled
+
+
 def is_sync_blocked(uid: str) -> bool:
     """
     Return True if the teacher's sync is blocked due to credentials_invalid.

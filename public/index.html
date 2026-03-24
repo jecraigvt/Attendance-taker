@@ -382,6 +382,11 @@
           class="dashboard-nav-btn whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors">
           Settings
         </button>
+        <button id="sync-nav-btn" data-section="sync"
+          class="dashboard-nav-btn whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors"
+          style="display: none;">
+          Sync
+        </button>
       </nav>
     </header>
 
@@ -391,14 +396,7 @@
       <!-- ===== ATTENDANCE SECTION (default) ===== -->
       <section id="dashboard-attendance" class="dashboard-section max-w-7xl mx-auto px-4 sm:px-6 py-6">
 
-        <!-- Sync Status Card -->
-        <div id="sync-status-card" class="mb-4 flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm">
-          <div id="sync-status-icon" class="flex-shrink-0 w-2 h-2 rounded-full bg-gray-300"></div>
-          <span id="sync-status-text" class="text-gray-500 flex-1">Sync not configured yet — coming soon</span>
-          <button id="sync-status-details-btn" class="hidden text-xs text-red-600 hover:underline flex-shrink-0">Details</button>
-        </div>
-        <!-- Sync error details (expandable) -->
-        <div id="sync-status-error-details" class="hidden mb-4 bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700"></div>
+        <!-- Sync status moved to Sync tab -->
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 
@@ -811,6 +809,57 @@
         </div>
 
       </section><!-- dashboard-settings -->
+
+      <!-- ===== SYNC SECTION (hidden until secret code or syncEnabled) ===== -->
+      <section id="dashboard-sync" class="dashboard-section hidden max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+        <!-- Disclaimer -->
+        <div class="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
+          This feature is in progress and may sometimes break. Use at your own risk.
+        </div>
+
+        <!-- Sync Toggle -->
+        <div class="bg-white rounded-xl border border-gray-200 p-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-900">Aeries Attendance Sync</h2>
+              <p class="text-sm text-gray-500 mt-1">Automatically sync attendance records to Aeries every 30 minutes during school hours.</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="sync-enabled-toggle" class="sr-only peer">
+              <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-red-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-700"></div>
+            </label>
+          </div>
+          <div id="sync-toggle-status" class="mt-3 text-xs text-gray-400"></div>
+        </div>
+
+        <!-- Sync Status Card (moved from Attendance tab) -->
+        <div id="sync-status-section" class="hidden">
+          <div class="bg-white rounded-xl border border-gray-200 p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">Sync Status</h2>
+            <div id="sync-status-card" class="flex items-center gap-3 text-sm">
+              <div id="sync-status-icon" class="flex-shrink-0 w-2 h-2 rounded-full bg-gray-300"></div>
+              <span id="sync-status-text" class="text-gray-500 flex-1">Waiting for first sync...</span>
+              <button id="sync-status-details-btn" class="hidden text-xs text-red-600 hover:underline flex-shrink-0">Details</button>
+            </div>
+            <div id="sync-status-error-details" class="hidden mt-3 bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700"></div>
+          </div>
+
+          <!-- Credentials blocked warning -->
+          <div id="sync-creds-blocked" class="hidden mt-4 bg-red-50 border border-red-200 rounded-xl p-4">
+            <p class="text-sm text-red-800 font-medium">Sync is blocked — your Aeries credentials are invalid.</p>
+            <p class="text-xs text-red-600 mt-1">Update your password in <button onclick="switchDashboardSection('settings')" class="underline hover:text-red-800">Settings</button> to resume syncing.</p>
+          </div>
+
+          <!-- Unsyncable students -->
+          <div id="sync-unsyncable-section" class="hidden mt-4 bg-white rounded-xl border border-gray-200 p-6">
+            <h3 class="text-sm font-semibold text-gray-900 mb-1">Students that didn't sync</h3>
+            <p class="text-xs text-gray-500 mb-3">These students need to be manually marked in Aeries.</p>
+            <ul id="sync-unsyncable-list" class="space-y-1.5 text-sm"></ul>
+          </div>
+        </div>
+
+      </section><!-- dashboard-sync -->
 
     </div><!-- content area -->
   </div><!-- dashboard-panel -->
@@ -2048,7 +2097,7 @@
         watchRostersFromCloud();
         loadExceptions();
         watchCurrentPeriod();
-        watchSyncStatus();
+        initSyncTab();
       } else {
         // Local mode: try to load seating config from localStorage
         try {
@@ -3674,8 +3723,88 @@
       periodIndicator.textContent = `Period ${p} \u2022 ${how} \u2022 ${count} signed in (${tardyInfo}) \u2022 ${nowStr}`;
     }
 
-    // ===== Sync Status =====
+    // ===== Sync Tab (secret code + toggle + status) =====
     let unsubSyncStatus = null;
+    let syncSecretBuffer = '';
+    let syncSecretTimer = null;
+
+    function revealSyncTab() {
+      const btn = document.getElementById('sync-nav-btn');
+      if (btn) btn.style.display = '';
+    }
+
+    async function initSyncTab() {
+      if (!db || !teacherUid) return;
+      // Check if syncEnabled — if so, auto-show the tab
+      try {
+        const configSnap = await getDoc(doc(db, teacherPath('config/main')));
+        if (configSnap.exists() && configSnap.data().syncEnabled === true) {
+          revealSyncTab();
+          document.getElementById('sync-enabled-toggle').checked = true;
+          document.getElementById('sync-status-section').classList.remove('hidden');
+          document.getElementById('sync-toggle-status').textContent = 'Sync is enabled. Attendance syncs to Aeries every 30 minutes during school hours.';
+          watchSyncStatus();
+        }
+      } catch (e) {
+        console.warn('[initSyncTab]', e);
+      }
+
+      // Toggle handler
+      const toggle = document.getElementById('sync-enabled-toggle');
+      if (toggle) {
+        toggle.addEventListener('change', async () => {
+          const enabled = toggle.checked;
+          try {
+            const configRef = doc(db, teacherPath('config/main'));
+            await setDoc(configRef, { syncEnabled: enabled }, { merge: true });
+            const statusEl = document.getElementById('sync-toggle-status');
+            const statusSection = document.getElementById('sync-status-section');
+            if (enabled) {
+              statusEl.textContent = 'Sync is enabled. Attendance syncs to Aeries every 30 minutes during school hours.';
+              statusSection.classList.remove('hidden');
+              watchSyncStatus();
+            } else {
+              statusEl.textContent = 'Sync is disabled. Attendance will not be sent to Aeries.';
+              statusSection.classList.add('hidden');
+              if (unsubSyncStatus) { unsubSyncStatus(); unsubSyncStatus = null; }
+            }
+          } catch (e) {
+            console.error('[syncToggle]', e);
+            toggle.checked = !enabled; // revert on error
+          }
+        });
+      }
+
+      // Details button toggle
+      const detailsBtn = document.getElementById('sync-status-details-btn');
+      if (detailsBtn) {
+        detailsBtn.addEventListener('click', () => {
+          const errorDetails = document.getElementById('sync-status-error-details');
+          if (errorDetails) {
+            errorDetails.classList.toggle('hidden');
+            detailsBtn.textContent = errorDetails.classList.contains('hidden') ? 'Details' : 'Hide';
+          }
+        });
+      }
+
+      // Secret code keyboard listener: type "sync" anywhere on dashboard
+      document.addEventListener('keydown', (e) => {
+        // Ignore if typing in an input/textarea
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+        // Ignore modifier keys
+        if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+        syncSecretBuffer += e.key.toLowerCase();
+        clearTimeout(syncSecretTimer);
+        syncSecretTimer = setTimeout(() => { syncSecretBuffer = ''; }, 2000);
+
+        if (syncSecretBuffer.includes('sync')) {
+          syncSecretBuffer = '';
+          revealSyncTab();
+          switchDashboardSection('sync');
+        }
+      });
+    }
 
     function watchSyncStatus() {
       if (!db || !teacherUid) return;
@@ -3686,11 +3815,18 @@
         const textEl = document.getElementById('sync-status-text');
         const detailsBtn = document.getElementById('sync-status-details-btn');
         const errorDetails = document.getElementById('sync-status-error-details');
+        const credsBlocked = document.getElementById('sync-creds-blocked');
+        const unsyncSection = document.getElementById('sync-unsyncable-section');
+        const unsyncList = document.getElementById('sync-unsyncable-list');
         if (!iconEl || !textEl) return;
+
+        // Reset extra sections
+        if (credsBlocked) credsBlocked.classList.add('hidden');
+        if (unsyncSection) unsyncSection.classList.add('hidden');
 
         if (!snap.exists()) {
           iconEl.className = 'flex-shrink-0 w-2 h-2 rounded-full bg-gray-300';
-          textEl.textContent = 'Sync not configured yet — coming soon';
+          textEl.textContent = 'Waiting for first sync...';
           textEl.className = 'text-gray-500 flex-1';
           if (detailsBtn) detailsBtn.classList.add('hidden');
           if (errorDetails) errorDetails.classList.add('hidden');
@@ -3702,6 +3838,31 @@
         const lastSync = data.lastSyncTime;
         const isSuccess = status === 'success';
         const isFailed = status === 'failed' || status === 'error';
+
+        // Credentials blocked?
+        if (credsBlocked && data.errorCategory === 'credentials_invalid') {
+          credsBlocked.classList.remove('hidden');
+        }
+
+        // Unsyncable students?
+        const unsyncable = data.unsyncableStudents;
+        if (unsyncSection && unsyncList && Array.isArray(unsyncable) && unsyncable.length > 0) {
+          unsyncSection.classList.remove('hidden');
+          unsyncList.replaceChildren();
+          unsyncable.forEach(u => {
+            const li = document.createElement('li');
+            li.className = 'flex items-center gap-2 text-gray-700';
+            const dot = document.createElement('span');
+            dot.className = 'w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0';
+            const text = document.createElement('span');
+            const reason = u.reason === 'student_not_in_grid' ? 'not found in Aeries'
+              : u.reason === 'attendance_locked' ? 'attendance locked'
+              : u.reason || 'unknown error';
+            text.textContent = 'ID ' + u.studentId + ' (Period ' + u.period + ') \u2014 ' + reason;
+            li.append(dot, text);
+            unsyncList.appendChild(li);
+          });
+        }
 
         let timeStr = '';
         if (lastSync) {

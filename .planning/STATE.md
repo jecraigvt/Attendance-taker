@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-23)
 
 **Core value:** Every student who signs in must have their correct attendance status reflected in Aeries. The system must work reliably for multiple teachers without requiring technical support.
-**Current focus:** Phase 6 in progress — plans 01-03 complete, plan 04 remaining
+**Current focus:** Phase 7 — Cloud Sync Worker (Railway)
 
 ## Current Position
 
-Phase: 6 of 8 (Teacher Dashboard and Roster Management) — In progress
-Plan: 3 of 4 in current phase — COMPLETE
-Status: Plan 06-03 complete, ready for 06-04
-Last activity: 2026-03-24 — Completed 06-03-PLAN.md (fetchRoster Cloud Function + roster management UI)
+Phase: 6 of 8 (Teacher Dashboard and Roster Management) — COMPLETE
+Plan: 4 of 4 in current phase — COMPLETE
+Status: Phase 6 complete, ready for Phase 7
+Last activity: 2026-03-24 — Completed 06-04-PLAN.md (Onboarding wizard, sync status card, Settings section)
 
-Progress: [████████░░░░░░░░░░░░] 65% (v1.0 complete; v2.0 phases 1-5 + 6-01 + 6-02 + 6-03 complete)
+Progress: [█████████░░░░░░░░░░░] 70% (v1.0 complete; v2.0 phases 1-6 complete)
 
 ## Performance Metrics
 
@@ -32,7 +32,7 @@ Progress: [████████░░░░░░░░░░░░] 65% (v1
 | 3. Schedule Improvements | 1/1 | Complete |
 | 4. Tardy Logic Review | 3/3 | Complete |
 | 5. Auth Foundation | 3/3 | Complete |
-| 6. Teacher Dashboard | 3/4 | In progress |
+| 6. Teacher Dashboard | 4/4 | Complete |
 | 7-8. Remaining v2.0 | 0/4 | Not started |
 
 ## Accumulated Context
@@ -77,6 +77,9 @@ Phase 6 confirmed:
 - preferredName-field: every student record has preferredName field; getDisplayName() helper returns it (or FirstName); used in kiosk, absent list, group display
 - roster-upload-location: CSV upload moved to Roster tab; Attendance tab has hidden stubs for JS compat (rosterUpload, rosterStatus, rosterWarning, rosterSummary, rosterDebug, clearRostersBtn)
 - roster-source-field: student records have source field ('aeries'|'csv'|'manual'); manual students preserved across Aeries re-fetches
+- onboarding-wizard: showOnboardingWizard() triggered from handleLogin(); checkNeedsOnboarding() detects new teachers by absence of kioskPin/seatingConfig/frontRow/avoidPairs; onboardingComplete flag set to true on wizard completion
+- sync-status-path: sync status read from teachers/{uid}/sync/status (onSnapshot); doc written by Phase 7 Railway sync worker
+- settings-section: credential update calls authenticateTeacher CF; PIN change saves to config/main and updates kiosk binding; initSettingsUI() called on every showDashboard()
 
 ### Blockers/Concerns
 
@@ -88,6 +91,6 @@ Phase 6 confirmed:
 
 ## Session Continuity
 
-Last session: 2026-03-24
-Stopped at: Completed 06-03-PLAN.md — fetchRoster Cloud Function and roster management UI
-Resume file: None — ready for 06-04
+Last session: 2026-03-24T06:29Z
+Stopped at: Completed 06-04-PLAN.md — onboarding wizard, sync status card, Settings section; awaiting human verify checkpoint
+Resume file: None — checkpoint paused for human verification

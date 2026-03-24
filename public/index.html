@@ -864,9 +864,9 @@
       adminPanel.classList.add('hidden');
       kioskPanel.classList.remove('hidden');
       // Show teacher name on kiosk
-      if (kioskTeacherName && teacherName) {
-        kioskTeacherName.textContent = teacherName + "'s Class";
-        kioskTeacherName.classList.remove('hidden');
+      if (kioskTeacherName) {
+        kioskTeacherName.textContent = '';
+        kioskTeacherName.classList.add('hidden');
       }
       studentIdInput.value = '';
       signInButton.disabled = true;

@@ -1004,6 +1004,14 @@
         const exportRangeBtn = document.getElementById('export-range-csv');
         if (exportRangeBtn) exportRangeBtn.addEventListener('click', exportDateRangeCSV);
 
+        // Roster tab: Fetch from Aeries button
+        const fetchRosterBtn = document.getElementById('fetch-roster-btn');
+        if (fetchRosterBtn) fetchRosterBtn.addEventListener('click', fetchRosterFromAeries);
+
+        // Roster tab: CSV upload (tab version)
+        const rosterUploadTab = document.getElementById('roster-upload-tab');
+        if (rosterUploadTab) rosterUploadTab.addEventListener('change', onRosterUpload);
+
         // Login screen listeners
         const loginSubmitBtn = document.getElementById('login-submit');
         if (loginSubmitBtn) loginSubmitBtn.addEventListener('click', handleLogin);
@@ -1448,6 +1456,7 @@
       if (saved) { allRosters = JSON.parse(saved); rosterStatus.textContent = 'Loaded saved rosters from browser.'; }
       else { allRosters = {}; rosterStatus.textContent = 'No local rosters yet — upload CSV(s) or use Cloud Rosters.'; }
       renderRosterSummary();
+      renderRosterManagementUI();
     }
 
     function watchRostersFromCloud() {
@@ -1467,6 +1476,7 @@
         allRosters = { ...allRosters, ...incoming };
         try { localStorage.setItem('allRosters', JSON.stringify(allRosters)); } catch (e) { console.warn('localStorage full:', e); }
         renderRosterSummary();
+        renderRosterManagementUI();
 
         // Re-populate period dropdown when cloud rosters arrive
         const curVal = periodSelect.value;
@@ -1499,6 +1509,174 @@
         rosterStatus.textContent = 'Cloud sync interrupted — using cached data.';
         rosterStatus.classList.add('text-red-600');
       });
+    }
+
+    // ===== Roster Management UI (dashboard-roster section) =====
+
+    function renderRosterManagementUI() {
+      const container = document.getElementById('roster-periods-container');
+      if (!container) return;
+      const periods = Object.keys(allRosters).sort(periodSort);
+      if (periods.length === 0) {
+        container.innerHTML = '<div class="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500"><p class="font-medium">No rosters loaded yet.</p><p class="text-sm mt-1">Fetch from Aeries or upload a roster CSV to get started.</p></div>';
+        return;
+      }
+      container.innerHTML = '';
+      periods.forEach((period, idx) => {
+        const students = allRosters[period] || [];
+        const sectionId = 'roster-period-' + period;
+        const tableId = 'roster-table-' + period;
+        const section = document.createElement('div');
+        section.className = 'bg-white rounded-xl border border-gray-200 mb-4 overflow-hidden';
+        const header = document.createElement('div');
+        header.className = 'flex items-center justify-between px-5 py-3.5 cursor-pointer hover:bg-gray-50 select-none';
+        header.innerHTML = '<div class="flex items-center gap-3"><span class="font-semibold text-gray-900">Period ' + escHtml(period) + '</span><span class="text-xs bg-gray-100 text-gray-600 font-medium px-2 py-0.5 rounded-full">' + students.length + ' students</span></div><svg class="roster-chevron w-5 h-5 text-gray-400 transition-transform' + (idx === 0 ? ' rotate-180' : '') + '" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>';
+        const body = document.createElement('div');
+        body.id = sectionId;
+        body.className = 'roster-period-body border-t border-gray-100' + (idx !== 0 ? ' hidden' : '');
+        const tableWrap = document.createElement('div');
+        tableWrap.className = 'overflow-x-auto';
+        const table = document.createElement('table');
+        table.id = tableId;
+        table.className = 'w-full text-sm';
+        table.innerHTML = '<thead class="bg-gray-50 text-xs text-gray-500 uppercase tracking-wider"><tr><th class="px-4 py-2 text-left font-medium">ID</th><th class="px-4 py-2 text-left font-medium">Official Name</th><th class="px-4 py-2 text-left font-medium">Preferred Name</th><th class="px-4 py-2 text-left font-medium">Source</th><th class="px-4 py-2 text-left font-medium">Remove</th></tr></thead><tbody id="' + tableId + '-body"></tbody>';
+        const tbody = table.querySelector('tbody');
+        students.forEach(s => {
+          const tr = document.createElement('tr');
+          tr.className = 'border-t border-gray-100 hover:bg-gray-50';
+          tr.setAttribute('data-student-id', s.StudentID);
+          const srcBadge = s.source === 'manual'
+            ? '<span class="text-xs bg-blue-100 text-blue-700 font-medium px-2 py-0.5 rounded-full">Manual</span>'
+            : '<span class="text-xs bg-green-100 text-green-700 font-medium px-2 py-0.5 rounded-full">Aeries</span>';
+          const pn = escHtml(s.preferredName || s.FirstName || '');
+          const sp = escHtml(period);
+          const si = escHtml(s.StudentID);
+          tr.innerHTML = '<td class="px-4 py-2 text-gray-500 font-mono text-xs">' + escHtml(s.StudentID || '') + '</td>'
+            + '<td class="px-4 py-2 text-gray-700">' + escHtml(s.LastName || '') + ', ' + escHtml(s.FirstName || '') + '</td>'
+            + '<td class="px-4 py-2"><input type="text" class="w-full border border-transparent rounded px-2 py-1 text-sm hover:border-gray-300 focus:border-red-500 focus:ring-1 focus:ring-red-500 focus:outline-none bg-transparent" value="' + pn + '" placeholder="' + escHtml(s.FirstName || '') + '" onblur="savePreferredName(\'' + sp + '\',\'' + si + '\',this.value)" onkeyup="if(event.key===\'Enter\')this.blur()" /></td>'
+            + '<td class="px-4 py-2">' + srcBadge + '</td>'
+            + '<td class="px-4 py-2"><button onclick="removeStudentFromRoster(\'' + sp + '\',\'' + si + '\')" class="text-red-400 hover:text-red-700 text-xs font-bold px-2 py-1 rounded hover:bg-red-50" title="Remove">&times;</button></td>';
+          tbody.appendChild(tr);
+        });
+        const addRow = document.createElement('tr');
+        addRow.className = 'border-t border-dashed border-gray-200 bg-gray-50';
+        const spp = escHtml(period);
+        addRow.innerHTML = '<td class="px-4 py-2"><input type="text" id="add-id-' + spp + '" maxlength="10" placeholder="Student ID" class="w-full border border-gray-300 rounded px-2 py-1 text-xs font-mono focus:ring-1 focus:ring-red-500 focus:outline-none" /></td>'
+          + '<td class="px-4 py-2" colspan="2"><div class="flex gap-1"><input type="text" id="add-first-' + spp + '" placeholder="First name" class="w-1/2 border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-red-500 focus:outline-none" /><input type="text" id="add-last-' + spp + '" placeholder="Last name" class="w-1/2 border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-red-500 focus:outline-none" /></div></td>'
+          + '<td class="px-4 py-2"><span class="text-xs text-gray-400">Manual</span></td>'
+          + '<td class="px-4 py-2"><button onclick="addManualStudent(\'' + spp + '\')" class="text-green-600 hover:text-green-800 text-xs font-semibold px-2 py-1 rounded bg-green-50 hover:bg-green-100">+ Add</button></td>';
+        tbody.appendChild(addRow);
+        tableWrap.appendChild(table);
+        body.appendChild(tableWrap);
+        header.addEventListener('click', () => {
+          const isOpen = !body.classList.contains('hidden');
+          body.classList.toggle('hidden', isOpen);
+          header.querySelector('.roster-chevron').classList.toggle('rotate-180', !isOpen);
+        });
+        section.appendChild(header);
+        section.appendChild(body);
+        container.appendChild(section);
+      });
+    }
+
+    async function savePreferredName(period, studentId, newName) {
+      const trimmed = newName.trim();
+      const roster = allRosters[period];
+      if (!roster) return;
+      const student = roster.find(s => s.StudentID === studentId);
+      if (!student) return;
+      if (trimmed === (student.preferredName || student.FirstName)) return;
+      student.preferredName = trimmed || student.FirstName;
+      try { localStorage.setItem('allRosters', JSON.stringify(allRosters)); } catch (e) { console.warn('localStorage full:', e); }
+      if (db && teacherUid) {
+        try {
+          const docRef = doc(db, teacherPath('rosters/' + period));
+          await setDoc(docRef, { roster: allRosters[period], updatedAt: serverTimestamp() }, { merge: true });
+        } catch (err) { console.error('[savePreferredName] Firestore write failed:', err); }
+      }
+    }
+    window.savePreferredName = savePreferredName;
+
+    async function removeStudentFromRoster(period, studentId) {
+      if (!confirm('Remove student ' + studentId + ' from Period ' + period + '? This only affects this app, not Aeries.')) return;
+      const roster = allRosters[period];
+      if (!roster) return;
+      allRosters[period] = roster.filter(s => s.StudentID !== studentId);
+      try { localStorage.setItem('allRosters', JSON.stringify(allRosters)); } catch (e) { console.warn('localStorage full:', e); }
+      if (db && teacherUid) {
+        try {
+          const docRef = doc(db, teacherPath('rosters/' + period));
+          await setDoc(docRef, { roster: allRosters[period], updatedAt: serverTimestamp() }, { merge: true });
+        } catch (err) { console.error('[removeStudentFromRoster] Firestore write failed:', err); }
+      }
+      renderRosterManagementUI();
+    }
+    window.removeStudentFromRoster = removeStudentFromRoster;
+
+    async function addManualStudent(period) {
+      const idInput = document.getElementById('add-id-' + period);
+      const firstInput = document.getElementById('add-first-' + period);
+      const lastInput = document.getElementById('add-last-' + period);
+      if (!idInput || !firstInput || !lastInput) return;
+      const studentId = idInput.value.trim();
+      const firstName = firstInput.value.trim();
+      const lastName = lastInput.value.trim();
+      if (!studentId || !firstName) { alert('Student ID and first name are required.'); return; }
+      const roster = allRosters[period] || [];
+      if (roster.find(s => s.StudentID === studentId)) { alert('Student ID ' + studentId + ' is already in Period ' + period + '.'); return; }
+      const newStudent = { StudentID: studentId, FirstName: firstName, LastName: lastName, preferredName: firstName, source: 'manual' };
+      allRosters[period] = [...roster, newStudent];
+      try { localStorage.setItem('allRosters', JSON.stringify(allRosters)); } catch (e) { console.warn('localStorage full:', e); }
+      if (db && teacherUid) {
+        try {
+          const docRef = doc(db, teacherPath('rosters/' + period));
+          await setDoc(docRef, { roster: allRosters[period], updatedAt: serverTimestamp() }, { merge: true });
+        } catch (err) { console.error('[addManualStudent] Firestore write failed:', err); }
+      }
+      idInput.value = ''; firstInput.value = ''; lastInput.value = '';
+      renderRosterManagementUI();
+    }
+    window.addManualStudent = addManualStudent;
+
+    async function fetchRosterFromAeries() {
+      if (!functions || !teacherUid) { showRosterTabStatus('Cloud connection required to fetch from Aeries.', 'error'); return; }
+      const btn = document.getElementById('fetch-roster-btn');
+      const spinner = document.getElementById('fetch-roster-spinner');
+      const fallbackNotice = document.getElementById('roster-csv-fallback-notice');
+      if (btn) btn.disabled = true;
+      if (spinner) spinner.classList.remove('hidden');
+      if (fallbackNotice) fallbackNotice.classList.add('hidden');
+      showRosterTabStatus('Connecting to Aeries\u2026', 'info');
+      try {
+        const fetchRosterFn = httpsCallable(functions, 'fetchRoster');
+        const result = await fetchRosterFn({});
+        const data = result.data;
+        if (data.success) {
+          const counts = data.periods || {};
+          const summary = Object.entries(counts).sort(([a], [b]) => periodSort(a, b)).map(([p, n]) => 'Period ' + p + ': ' + n).join(' \u2022 ');
+          showRosterTabStatus('Roster fetched: ' + summary, 'success');
+        } else if (data.error === 'roster_requires_browser') {
+          showRosterTabStatus('Automatic fetch unavailable \u2014 please upload a CSV.', 'warning');
+          if (fallbackNotice) fallbackNotice.classList.remove('hidden');
+        } else {
+          showRosterTabStatus(data.message || 'Fetch failed. Please try again.', 'error');
+        }
+      } catch (err) {
+        console.error('[fetchRosterFromAeries] error', err);
+        showRosterTabStatus('Fetch failed: ' + (err.message || 'unknown error'), 'error');
+      } finally {
+        if (btn) btn.disabled = false;
+        if (spinner) spinner.classList.add('hidden');
+      }
+    }
+
+    function showRosterTabStatus(message, type) {
+      const el = document.getElementById('roster-tab-status');
+      if (!el) return;
+      el.textContent = message;
+      el.classList.remove('hidden', 'text-gray-600', 'text-green-700', 'text-red-700', 'text-yellow-700');
+      const colorMap = { info: 'text-gray-600', success: 'text-green-700', error: 'text-red-700', warning: 'text-yellow-700' };
+      el.classList.add(colorMap[type] || 'text-gray-600');
     }
 
     function onRosterUpload(evt) {
@@ -1564,6 +1742,11 @@
         }
 
         renderRosterSummary();
+        renderRosterManagementUI();
+
+        // Show status in roster tab if teacher has it open
+        showRosterTabStatus('CSV loaded: ' + processed + ' file(s). Review and edit below.', 'success');
+
         checkDuplicateIDs(allRosters);
         onPeriodChange();
       })(evt);
@@ -2030,7 +2213,8 @@
           const last = comma >= 0 ? studentName.slice(0, comma).trim() : '';
           const first = comma >= 0 ? studentName.slice(comma + 1).trim() : studentName.trim();
 
-          rosters[curPeriod].push({ StudentID: studentId, LastName: last, FirstName: first });
+          // preferredName defaults to FirstName; teachers can customize in Roster tab
+          rosters[curPeriod].push({ StudentID: studentId, LastName: last, FirstName: first, preferredName: first, source: 'csv' });
         }
       }
 

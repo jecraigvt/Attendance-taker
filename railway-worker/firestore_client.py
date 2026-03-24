@@ -347,6 +347,83 @@ def is_sync_blocked(uid: str) -> bool:
         return False
 
 
+# ---------------------------------------------------------------------------
+# Self-healing event helpers
+# ---------------------------------------------------------------------------
+
+def write_healing_event(
+    element_type: str,
+    model: str,
+    candidate: Optional[str],
+    success: bool,
+    teacher_uid: Optional[str] = None,
+    format_args: Optional[dict] = None,
+) -> None:
+    """
+    Write a healing attempt event to the global `healing_events` collection.
+
+    This collection is NOT per-teacher — it lives at the top level so the
+    developer can review all healing activity in one place.
+
+    Document structure:
+        timestamp       — SERVER_TIMESTAMP (UTC)
+        elementType     — e.g. "absent_checkbox"
+        model           — "gemini-2.0-flash" or "gemini-2.0-pro"
+        candidateSelector — the selector Gemini returned (or None)
+        success         — bool: whether the selector validated on the page
+        teacherUid      — optional: which teacher's sync triggered healing
+        formatArgs      — optional: the format_args dict (e.g. {"student_id": "..."})
+    """
+    db = get_db()
+    try:
+        doc_data = {
+            "timestamp": firestore.SERVER_TIMESTAMP,
+            "elementType": element_type,
+            "model": model,
+            "candidateSelector": candidate,
+            "success": success,
+        }
+        if teacher_uid is not None:
+            doc_data["teacherUid"] = teacher_uid
+        if format_args is not None:
+            # Serialize format_args as a string to avoid type issues with non-string keys
+            doc_data["formatArgs"] = {str(k): str(v) for k, v in format_args.items()}
+
+        db.collection("healing_events").add(doc_data)
+        logger.info(
+            f"[healing] Logged event: element={element_type} model={model} "
+            f"success={success}"
+        )
+    except Exception as exc:
+        # Non-fatal — don't let a logging failure break the sync
+        logger.error(f"[healing] Failed to write healing event: {exc}")
+
+
+def get_healing_call_count_today() -> int:
+    """
+    Return the number of healing events logged today (UTC).
+
+    Used to enforce the DAILY_HEALING_CAP before making a Gemini API call.
+    Returns 0 on any error (fail-open: prefer attempting healing over blocking it).
+    """
+    db = get_db()
+    try:
+        today_start = datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        query = (
+            db.collection("healing_events")
+            .where("timestamp", ">=", today_start)
+        )
+        docs = list(query.stream())
+        count = len(docs)
+        logger.debug(f"[healing] Healing call count today: {count}")
+        return count
+    except Exception as exc:
+        logger.error(f"[healing] Failed to count today's healing events: {exc}")
+        return 0  # fail-open
+
+
 def get_teacher_profile(uid: str) -> dict:
     """
     Return the teacher's profile from teachers/{uid}/profile/main.

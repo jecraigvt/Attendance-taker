@@ -105,13 +105,13 @@ Plans:
   3. Teacher can update their Aeries credentials through the UI at any time without contacting the developer
   4. Teacher can choose group-based seating, individual desk-based seating, or no seat assignment — and configure it through the dashboard
   5. Class rosters are fetched automatically from Aeries using the teacher's credentials and refresh on a schedule or on demand
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 06-01: Teacher onboarding flow — credential entry, seating mode selection, first roster fetch
-- [ ] 06-02: Seating configuration UI — group mode, individual desk mode, and off mode
-- [ ] 06-03: Roster auto-fetch from Aeries — Playwright-based roster pull, scheduled refresh, on-demand trigger
-- [ ] 06-04: Sync status dashboard — last sync time, success/failure display, credential update UI
+- [ ] 06-01-PLAN.md — Dashboard shell and navigation: restructure admin panel into tabbed dashboard (Attendance, Roster, Seating, Settings)
+- [ ] 06-02-PLAN.md — Seating configuration: configurable groups/seats, per-period overrides, dynamic pickGroup(), "Group X, Seat Y" display
+- [ ] 06-03-PLAN.md — Roster management: HTTP-based Aeries roster fetch Cloud Function, roster viewer/editor, preferred names, manual add/remove
+- [ ] 06-04-PLAN.md — Onboarding wizard, sync status card, and Settings section (credential update, PIN change)
 
 ### Phase 7: Railway Cloud Sync
 **Goal**: Attendance sync runs automatically in the cloud on Railway every 20 minutes during school hours for every teacher — with no dependency on the developer's local machine

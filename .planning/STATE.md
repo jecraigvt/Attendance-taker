@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 ## Current Position
 
 Phase: 7 of 8 (Railway Cloud Sync Worker) — In progress
-Plan: 1 of 3 in current phase — AT CHECKPOINT (awaiting Railway smoke test verification)
-Status: 07-01 auto tasks complete; waiting for user to deploy and verify on Railway
-Last activity: 2026-03-24 — Completed 07-01-PLAN.md tasks 1-2 (Dockerfile, smoke_test.py); paused at checkpoint
+Plan: 2 of 3 in current phase — AT CHECKPOINT (awaiting Railway sync deployment verification)
+Status: 07-02 auto tasks complete; waiting for user to deploy to Railway and verify sync runs
+Last activity: 2026-03-24 — Completed 07-02-PLAN.md tasks 1-3 (firestore_client.py, sync_engine.py, worker.py); paused at checkpoint
 
-Progress: [█████████░░░░░░░░░░░] 73% (v1.0 complete; v2.0 phases 1-6 complete, 7 in progress)
+Progress: [█████████░░░░░░░░░░░] 75% (v1.0 complete; v2.0 phases 1-6 complete, 7 in progress)
 
 ## Performance Metrics
 
@@ -33,7 +33,7 @@ Progress: [█████████░░░░░░░░░░░] 73% (v1
 | 4. Tardy Logic Review | 3/3 | Complete |
 | 5. Auth Foundation | 3/3 | Complete |
 | 6. Teacher Dashboard | 4/4 | Complete |
-| 7. Railway Cloud Sync | 1/3 | In progress (at checkpoint) |
+| 7. Railway Cloud Sync | 2/3 | In progress (at checkpoint) |
 | 8. Self-Healing | 0/1 | Not started |
 
 ## Accumulated Context
@@ -73,6 +73,15 @@ Phase 7 confirmed (07-01):
 - smoke-test-pattern: three independent tests return pass/skip/fail; exits 1 only on actual failures
 - railway-worker-dir: all sync worker source files in railway-worker/ (separate from legacy attendance-sync/)
 
+Phase 7 confirmed (07-02):
+
+- time-of-day-guard-location: in run_all_teachers() body (not scheduler config) — scheduler fires unconditionally, guard is cheap early return
+- skipped-sync-no-write: skipped syncs (no_data, already_synced) do NOT write sync/status — preserves last real sync timestamp on dashboard
+- sync-engine-never-raises: sync_teacher() catches all exceptions internally, returns result dict, writes Firestore status
+- error-categories-4: credentials_invalid, aeries_unreachable, selector_broken, unknown — mapped to friendly dashboard messages
+- unsyncable-list-pattern: per-student failures accumulate in unsyncable list, whole sync continues; list written to unsyncableStudents in sync/status
+- startup-immediate-sync: worker runs one sync cycle immediately on startup before scheduler begins
+
 Phase 6 confirmed:
 
 - dashboard-layout: Fixed fullscreen panel (fixed inset-0) with tab navigation; Attendance tab default on open
@@ -96,12 +105,13 @@ Phase 6 confirmed:
 - [Phase 5] RESOLVED: All deployment issues (IAM, CORS, secrets, token signing) fixed
 - [Phase 5] RESOLVED: Firestore path even-segment requirement — corrected paths propagated to all files
 - [Phase 5] RESOLVED: Token expiry — Firebase Auth session persists via refresh token + onAuthStateChanged
-- [Phase 7] ACTIVE: Deploy smoke-test container to Railway; verify all three smoke tests pass before proceeding to 07-02
+- [Phase 7] RESOLVED: Smoke-test checkpoint passed; proceeding to 07-02
+- [Phase 7] ACTIVE: Deploy full sync worker to Railway; verify sync runs and writes to teachers/{uid}/sync/status
 - [Phase 7] Playwright in Docker has environment-specific failure modes; smoke test proves environment before writing sync logic
 - [Phase 8] LLM self-healing prompt is not production-validated for Aeries DOM; plan one prompt-tuning iteration
 
 ## Session Continuity
 
-Last session: 2026-03-24T18:06Z
-Stopped at: 07-01 checkpoint — tasks 1-2 committed, awaiting Railway smoke test verification
-Resume file: None — user must verify smoke test on Railway then signal "approved"
+Last session: 2026-03-24T18:27Z
+Stopped at: 07-02 checkpoint — tasks 1-3 committed (firestore_client.py, sync_engine.py, worker.py); awaiting Railway deployment verification
+Resume file: None — user must deploy to Railway, verify sync runs, then signal "approved"

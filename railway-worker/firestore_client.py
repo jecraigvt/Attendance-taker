@@ -164,10 +164,10 @@ def get_teacher_attendance(uid: str, date_str: str) -> list:
             timestamps.sort()
             nth_ts = timestamps[MIN_STUDENTS_BEFORE_SYNC - 1]
             now_utc = datetime.now(timezone.utc)
+            # Ensure timezone-aware comparison (guard against naive by treating as UTC)
             if nth_ts.tzinfo is None:
-                minutes_elapsed = (datetime.now() - nth_ts).total_seconds() / 60
-            else:
-                minutes_elapsed = (now_utc - nth_ts).total_seconds() / 60
+                nth_ts = nth_ts.replace(tzinfo=timezone.utc)
+            minutes_elapsed = (now_utc - nth_ts).total_seconds() / 60
 
             if minutes_elapsed < PERIOD_SETTLE_MINUTES:
                 logger.info(

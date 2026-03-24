@@ -1758,7 +1758,7 @@
       statusEl.classList.add('text-blue-600');
 
       const rows = [["Date", "Period", "StudentID", "LastName", "FirstName", "Status", "SignInTime", "Group"]];
-      const masterPeriodList = ["0", "1", "2", "2A", "2B", "3", "4", "5", "6", "7"];
+      const masterPeriodList = [...new Set(["0", "1", "2", "2A", "2B", "3", "4", "5", "6", "7", ...Object.keys(allRosters)])];
 
       const datesToCheck = [];
       let currentDate = new Date(startDate);
@@ -1827,7 +1827,7 @@
     // ===== Import modern Firebase SDK =====
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getAuth, signInWithCustomToken, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-    import { getFirestore, initializeFirestore, persistentLocalCache, collection, doc, onSnapshot, setDoc, serverTimestamp, getDoc, addDoc, where, query, getDocs, deleteDoc, documentId } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getFirestore, initializeFirestore, persistentLocalCache, collection, doc, onSnapshot, setDoc, serverTimestamp, getDoc, addDoc, where, query, getDocs, deleteDoc, documentId, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
 
     // ===== Config & Constants =====
@@ -2016,6 +2016,7 @@
     // Start listening for currentPeriod changes from Firebase
     function watchCurrentPeriod() {
       if (!db || !teacherUid) return;
+      if (unsubCurrentPeriod) { unsubCurrentPeriod(); unsubCurrentPeriod = null; }
       const today = nowISODate();
       const periodDocRef = doc(db, teacherPath(`attendance/${today}/meta/currentPeriod`));
       unsubCurrentPeriod = onSnapshot(periodDocRef, snap => {
@@ -3996,43 +3997,54 @@
           setDoc(rosterSnapshotRef, { roster_snapshot: currentRoster, updatedAt: serverTimestamp() }, { merge: true })
             .catch(e => console.error("Roster snapshot error:", e));
 
-          // Check existing sign-in (direct doc read — faster & cheaper than query)
-          const existingSnap = await getDoc(studentDocRef);
-
-          if (existingSnap.exists()) {
-            const existing = existingSnap.data();
-            const g = typeof existing.Group === 'number' ? existing.Group : null;
-            const seat = existing.Seat != null ? existing.Seat : null;
-            showGroup(g, existing.Status || status, getDisplayName(student), seat);
-            updateUI();
-            if (wasSmartSwitched) restoreToGlobalPeriod();
-            return;
-          }
-
-          // Assign group and build log entry
-          const { group: g, overflow } = pickGroup(student);
-          if (overflow) {
-            showMessage('error', 'All groups full', 'Check with your teacher for a seat.');
-            signInButton.disabled = false;
-            if (wasSmartSwitched) restoreToGlobalPeriod();
-            return;
-          }
-          const seat = g != null ? calcSeatNumber(g) : null;
-          const log = buildLogEntry(student, p, status, g, true, seat);
-
+          // Use a transaction to prevent concurrent kiosks from assigning
+          // duplicate groups/seats (check-then-write atomicity)
           try {
-            // Write to Firebase FIRST — don't show success until confirmed
-            await setDoc(studentDocRef, log);
+            const txResult = await runTransaction(db, async (tx) => {
+              const existingSnap = await tx.get(studentDocRef);
+
+              if (existingSnap.exists()) {
+                const existing = existingSnap.data();
+                return { alreadyExists: true, existing };
+              }
+
+              // Assign group and build log entry (reads local state — acceptable
+              // since group assignment is best-effort, not financial)
+              const { group: g, overflow } = pickGroup(student);
+              if (overflow) return { overflow: true };
+
+              const seat = g != null ? calcSeatNumber(g) : null;
+              const log = buildLogEntry(student, p, status, g, true, seat);
+              tx.set(studentDocRef, log);
+              return { alreadyExists: false, log, g, seat };
+            });
+
+            if (txResult.alreadyExists) {
+              const existing = txResult.existing;
+              const g = typeof existing.Group === 'number' ? existing.Group : null;
+              const seat = existing.Seat != null ? existing.Seat : null;
+              showGroup(g, existing.Status || status, getDisplayName(student), seat);
+              updateUI();
+              if (wasSmartSwitched) restoreToGlobalPeriod();
+              return;
+            }
+
+            if (txResult.overflow) {
+              showMessage('error', 'All groups full', 'Check with your teacher for a seat.');
+              signInButton.disabled = false;
+              if (wasSmartSwitched) restoreToGlobalPeriod();
+              return;
+            }
 
             // Optimistically update local state so the NEXT sign-in sees this student
             // (covers the gap before onSnapshot fires with the server-confirmed data)
             periodAttendanceLog.push({
-              ...log,
+              ...txResult.log,
               Timestamp: Date.now()  // Replace sentinel with local timestamp for local use
             });
 
             // THEN show success
-            showGroup(g, status, getDisplayName(student), seat);
+            showGroup(txResult.g, status, getDisplayName(student), txResult.seat);
 
             // Check if this sign-in should trigger a global period switch
             maybeUpdateGlobalPeriod(p);
@@ -4080,7 +4092,7 @@
     async function exportCSV() {
       const today = nowISODate();
       const rows = [["Date", "Period", "StudentID", "LastName", "FirstName", "Status", "SignInTime", "Group"]];
-      const masterPeriodList = ["0", "1", "2", "2A", "2B", "3", "4", "5", "6", "7"];
+      const masterPeriodList = [...new Set(["0", "1", "2", "2A", "2B", "3", "4", "5", "6", "7", ...Object.keys(allRosters)])];
       for (const p of masterPeriodList) {
         const present = new Map();
         if (db && teacherUid) {
@@ -4644,6 +4656,7 @@
     }
 
     // ===== Settings Section =====
+    let _settingsListenersAttached = false;
     function initSettingsUI() {
       // Populate username display
       const settingsUsername = document.getElementById('settings-username');
@@ -4670,6 +4683,10 @@
           try { lastLogin.textContent = new Date(user.metadata.lastSignInTime).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch { }
         }
       }
+
+      // Event listeners — only attach once to prevent stacking on repeated showDashboard() calls
+      if (_settingsListenersAttached) return;
+      _settingsListenersAttached = true;
 
       // Sync status details toggle
       const detailsBtn = document.getElementById('sync-status-details-btn');
@@ -5029,6 +5046,7 @@
       }
 
       function tHideFs() {
+        if (tInterval) { clearInterval(tInterval); tInterval = null; }
         tFsOverlay.classList.add('hidden');
       }
 

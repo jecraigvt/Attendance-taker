@@ -116,6 +116,186 @@
     </div>
   </div>
 
+  <!-- ================== ONBOARDING WIZARD ================== -->
+  <div id="onboarding-wizard" class="hidden fixed inset-0 bg-gray-900 flex items-center justify-center z-50 overflow-y-auto py-8">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4">
+
+      <!-- Wizard Header / Progress -->
+      <div class="px-8 pt-8 pb-4">
+        <div class="flex items-center justify-between mb-1">
+          <h1 class="text-xl font-bold text-gray-900">Welcome to Attendance Taker</h1>
+          <span id="wizard-step-label" class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Step 1 of 3</span>
+        </div>
+        <!-- Progress bar -->
+        <div class="w-full bg-gray-200 rounded-full h-1.5 mt-3">
+          <div id="wizard-progress-bar" class="bg-red-700 h-1.5 rounded-full transition-all duration-300" style="width:33%"></div>
+        </div>
+        <!-- Step dots -->
+        <div class="flex items-center gap-2 mt-3">
+          <div id="wizard-dot-1" class="w-2 h-2 rounded-full bg-red-700"></div>
+          <div id="wizard-dot-2" class="w-2 h-2 rounded-full bg-gray-300"></div>
+          <div id="wizard-dot-3" class="w-2 h-2 rounded-full bg-gray-300"></div>
+          <span id="wizard-step-title" class="text-sm font-medium text-gray-600 ml-1">Credentials Verified</span>
+        </div>
+      </div>
+
+      <div class="border-t border-gray-100"></div>
+
+      <!-- ===== STEP 1: Credentials Confirmed ===== -->
+      <div id="wizard-step-1" class="px-8 py-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+            <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
+            </svg>
+          </div>
+          <div>
+            <h2 class="text-lg font-semibold text-gray-900">Your Aeries credentials have been verified!</h2>
+            <p class="text-sm text-gray-500 mt-0.5">You're signed in as <span id="wizard-username-display" class="font-medium text-gray-700"></span></p>
+          </div>
+        </div>
+        <p class="text-sm text-gray-600 mb-6">Let's take a minute to set up your account. This only takes a moment and you won't need to do it again.</p>
+        <div class="bg-gray-50 rounded-lg p-4 text-sm text-gray-600 space-y-1.5 mb-6">
+          <p class="font-medium text-gray-700 mb-2">We'll set up:</p>
+          <div class="flex items-center gap-2"><span class="text-red-600 font-bold">1.</span> Your class roster (from Aeries or CSV)</div>
+          <div class="flex items-center gap-2"><span class="text-red-600 font-bold">2.</span> Your seating configuration</div>
+        </div>
+        <button id="wizard-step1-next"
+          class="w-full bg-red-700 text-white font-bold py-3 rounded-lg hover:bg-red-800 transition-all">
+          Let's Get Started &rarr;
+        </button>
+      </div>
+
+      <!-- ===== STEP 2: Roster Setup ===== -->
+      <div id="wizard-step-2" class="px-8 py-6 hidden">
+        <h2 class="text-lg font-semibold text-gray-900 mb-1">Set up your class roster</h2>
+        <p class="text-sm text-gray-500 mb-4">Fetch your roster automatically from Aeries, or upload a CSV file.</p>
+
+        <!-- Fetch button -->
+        <div id="wizard-roster-fetch-section" class="space-y-3 mb-4">
+          <button id="wizard-fetch-roster-btn"
+            class="w-full flex items-center justify-center gap-2 bg-red-700 text-white font-semibold py-3 rounded-lg hover:bg-red-800 transition-all disabled:opacity-50">
+            <svg id="wizard-fetch-spinner" class="hidden animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+            </svg>
+            Fetch Roster from Aeries
+          </button>
+          <div class="flex items-center gap-3">
+            <div class="flex-1 border-t border-gray-200"></div>
+            <span class="text-xs text-gray-400 font-medium">or</span>
+            <div class="flex-1 border-t border-gray-200"></div>
+          </div>
+          <label for="wizard-roster-upload"
+            class="file-input-button flex items-center justify-center w-full bg-gray-100 text-gray-700 font-semibold py-2.5 rounded-lg hover:bg-gray-200 transition-all cursor-pointer text-sm">
+            Upload CSV File
+          </label>
+          <input type="file" id="wizard-roster-upload" accept=".csv" class="hidden" multiple />
+        </div>
+
+        <!-- Status message -->
+        <div id="wizard-roster-status" class="hidden text-sm font-medium mb-4 p-3 rounded-lg"></div>
+
+        <!-- CSV fallback notice -->
+        <div id="wizard-csv-fallback" class="hidden bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4 text-xs text-yellow-800">
+          Automatic roster fetch requires HTTP access to your Aeries server. Please upload a CSV instead:
+          export from Aeries using File &rarr; Export &rarr; Class Roster.
+        </div>
+
+        <!-- Roster success summary -->
+        <div id="wizard-roster-success" class="hidden bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+          <p class="text-sm font-semibold text-green-800 mb-1">Roster loaded successfully!</p>
+          <div id="wizard-roster-summary" class="text-xs text-green-700 space-y-0.5"></div>
+        </div>
+
+        <!-- Preferred names review (shown after roster is loaded) -->
+        <div id="wizard-preferred-names-section" class="hidden mb-4">
+          <div class="border-t border-gray-200 pt-4 mb-3">
+            <h3 class="text-sm font-semibold text-gray-800 mb-0.5">Review Preferred Names</h3>
+            <p class="text-xs text-gray-500">These names will appear on the sign-in screen. Edit any that need changing.</p>
+          </div>
+          <div id="wizard-preferred-names-list" class="max-h-48 overflow-y-auto space-y-1 border border-gray-200 rounded-lg p-2 bg-gray-50">
+            <!-- Populated dynamically -->
+          </div>
+          <p class="text-xs text-gray-400 mt-1.5">Changes save automatically.</p>
+        </div>
+
+        <div class="flex gap-2">
+          <button id="wizard-step2-skip"
+            class="flex-1 text-sm text-gray-500 border border-gray-200 py-2.5 rounded-lg hover:bg-gray-50 transition-all">
+            Skip for now
+          </button>
+          <button id="wizard-step2-next" disabled
+            class="flex-1 bg-red-700 text-white font-bold py-2.5 rounded-lg hover:bg-red-800 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+            Next &rarr;
+          </button>
+        </div>
+      </div>
+
+      <!-- ===== STEP 3: Seating Configuration ===== -->
+      <div id="wizard-step-3" class="px-8 py-6 hidden">
+        <h2 class="text-lg font-semibold text-gray-900 mb-1">How do you want to assign seats?</h2>
+        <p class="text-sm text-gray-500 mb-4">Students will be randomly assigned to a group and seat when they sign in.</p>
+
+        <!-- Seating option cards -->
+        <div class="space-y-3 mb-4" id="wizard-seating-options">
+
+          <!-- Option A: Group seating -->
+          <label class="flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 cursor-pointer hover:border-red-300 hover:bg-red-50 transition-all has-[:checked]:border-red-700 has-[:checked]:bg-red-50">
+            <input type="radio" name="wizard-seating-mode" value="group" class="mt-0.5 accent-red-700" checked />
+            <div class="flex-1">
+              <p class="font-semibold text-gray-800 text-sm">Group seating</p>
+              <p class="text-xs text-gray-500 mt-0.5">Students are assigned to groups with multiple seats (e.g., lab tables)</p>
+            </div>
+          </label>
+
+          <!-- Option B: Individual desks -->
+          <label class="flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 cursor-pointer hover:border-red-300 hover:bg-red-50 transition-all has-[:checked]:border-red-700 has-[:checked]:bg-red-50">
+            <input type="radio" name="wizard-seating-mode" value="individual" class="mt-0.5 accent-red-700" />
+            <div class="flex-1">
+              <p class="font-semibold text-gray-800 text-sm">Individual desks</p>
+              <p class="text-xs text-gray-500 mt-0.5">Each student gets their own numbered desk (tip: set seats per group to 1)</p>
+            </div>
+          </label>
+
+          <!-- Option C: No seating -->
+          <label class="flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 cursor-pointer hover:border-red-300 hover:bg-red-50 transition-all has-[:checked]:border-red-700 has-[:checked]:bg-red-50">
+            <input type="radio" name="wizard-seating-mode" value="none" class="mt-0.5 accent-red-700" />
+            <div class="flex-1">
+              <p class="font-semibold text-gray-800 text-sm">No seating</p>
+              <p class="text-xs text-gray-500 mt-0.5">Students just sign in — no group or seat assigned</p>
+            </div>
+          </label>
+        </div>
+
+        <!-- Config controls (shown for group/individual options) -->
+        <div id="wizard-seating-config" class="bg-gray-50 rounded-xl border border-gray-200 p-4 mb-4">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-gray-700 mb-1">Number of Groups</label>
+              <input type="number" id="wizard-num-groups" min="1" max="50" value="6"
+                class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-700 mb-1">Seats per Group</label>
+              <input type="number" id="wizard-seats-per-group" min="1" max="10" value="4"
+                class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500" />
+            </div>
+          </div>
+          <p id="wizard-seating-tip" class="text-xs text-gray-400 mt-2">Tip: You can fine-tune group seat counts individually in the Seating tab later.</p>
+        </div>
+
+        <div id="wizard-step3-error" class="hidden text-sm text-red-600 mb-3"></div>
+
+        <button id="wizard-step3-finish"
+          class="w-full bg-red-700 text-white font-bold py-3 rounded-lg hover:bg-red-800 transition-all disabled:opacity-50">
+          Finish Setup
+        </button>
+      </div>
+
+    </div>
+  </div>
+
   <!-- ================== PIN SETUP SCREEN ================== -->
   <div id="pin-setup-screen" class="hidden fixed inset-0 bg-gray-900 flex items-center justify-center z-50">
     <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center">
@@ -210,6 +390,16 @@
 
       <!-- ===== ATTENDANCE SECTION (default) ===== -->
       <section id="dashboard-attendance" class="dashboard-section max-w-7xl mx-auto px-4 sm:px-6 py-6">
+
+        <!-- Sync Status Card -->
+        <div id="sync-status-card" class="mb-4 flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm">
+          <div id="sync-status-icon" class="flex-shrink-0 w-2 h-2 rounded-full bg-gray-300"></div>
+          <span id="sync-status-text" class="text-gray-500 flex-1">Sync not configured yet — coming soon</span>
+          <button id="sync-status-details-btn" class="hidden text-xs text-red-600 hover:underline flex-shrink-0">Details</button>
+        </div>
+        <!-- Sync error details (expandable) -->
+        <div id="sync-status-error-details" class="hidden mb-4 bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700"></div>
+
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 
           <!-- ===== LEFT COLUMN (PRIMARY CONTROLS) ===== -->
@@ -508,17 +698,118 @@
       </section><!-- dashboard-seating -->
 
       <!-- ===== SETTINGS SECTION ===== -->
-      <section id="dashboard-settings" class="dashboard-section hidden max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        <div class="bg-white rounded-xl border border-gray-200 p-8 text-center">
-          <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-            </svg>
+      <section id="dashboard-settings" class="dashboard-section hidden max-w-3xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+        <!-- Aeries Credentials -->
+        <div class="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-1">Aeries Credentials</h2>
+          <p class="text-sm text-gray-500 mb-4">Your Aeries username and password are used to verify your account.</p>
+
+          <div class="flex items-center gap-3 mb-4">
+            <div>
+              <p class="text-xs text-gray-500 uppercase tracking-wider font-medium mb-0.5">Username</p>
+              <p id="settings-username" class="text-sm font-semibold text-gray-800">—</p>
+            </div>
+            <div class="ml-4">
+              <span id="settings-cred-badge" class="text-xs bg-green-100 text-green-700 font-semibold px-2 py-0.5 rounded-full">Validated</span>
+            </div>
           </div>
-          <h2 class="text-xl font-semibold text-gray-800 mb-2">Settings</h2>
-          <p class="text-gray-500 text-sm">Settings are coming soon. You'll be able to manage your account, Aeries credentials, and app preferences here.</p>
+
+          <!-- Update password -->
+          <div id="settings-update-password-section">
+            <button id="settings-update-password-btn"
+              class="text-sm text-red-700 border border-red-200 hover:bg-red-50 px-4 py-2 rounded-lg transition-all">
+              Update Password
+            </button>
+          </div>
+
+          <div id="settings-update-password-form" class="hidden mt-4 space-y-3 border-t border-gray-100 pt-4">
+            <div>
+              <label class="block text-xs font-medium text-gray-700 mb-1">New Password</label>
+              <input type="password" id="settings-new-password" autocomplete="new-password"
+                class="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                placeholder="Enter new Aeries password" />
+            </div>
+            <div id="settings-password-error" class="hidden text-xs text-red-600"></div>
+            <div id="settings-password-success" class="hidden text-xs text-green-600 font-medium"></div>
+            <div class="flex gap-2">
+              <button id="settings-update-password-submit"
+                class="bg-red-700 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-red-800 transition-all disabled:opacity-50">
+                Update Password
+              </button>
+              <button id="settings-update-password-cancel"
+                class="text-sm text-gray-500 border border-gray-200 px-4 py-2 rounded-lg hover:bg-gray-50">
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
+
+        <!-- Kiosk PIN -->
+        <div class="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-1">Kiosk PIN</h2>
+          <p class="text-sm text-gray-500 mb-4">Your 4-digit PIN lets you exit kiosk mode and access the dashboard.</p>
+
+          <button id="settings-change-pin-btn"
+            class="text-sm text-red-700 border border-red-200 hover:bg-red-50 px-4 py-2 rounded-lg transition-all">
+            Change PIN
+          </button>
+
+          <div id="settings-change-pin-form" class="hidden mt-4 space-y-3 border-t border-gray-100 pt-4">
+            <div>
+              <label class="block text-xs font-medium text-gray-700 mb-1">New 4-digit PIN</label>
+              <input type="password" id="settings-new-pin" maxlength="4" inputmode="numeric" pattern="[0-9]*"
+                class="w-32 text-center text-2xl font-mono p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                placeholder="_ _ _ _" />
+            </div>
+            <div id="settings-pin-error" class="hidden text-xs text-red-600"></div>
+            <div id="settings-pin-success" class="hidden text-xs text-green-600 font-medium"></div>
+            <div class="flex gap-2">
+              <button id="settings-save-pin-btn"
+                class="bg-red-700 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-red-800 transition-all disabled:opacity-50">
+                Save PIN
+              </button>
+              <button id="settings-change-pin-cancel"
+                class="text-sm text-gray-500 border border-gray-200 px-4 py-2 rounded-lg hover:bg-gray-50">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Account Info -->
+        <div class="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-4">Account Information</h2>
+          <div class="space-y-2.5 text-sm">
+            <div class="flex justify-between">
+              <span class="text-gray-500">Aeries Username</span>
+              <span id="settings-account-username" class="text-gray-800 font-medium">—</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-500">Account Created</span>
+              <span id="settings-account-created" class="text-gray-800">—</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-500">Last Sign-in</span>
+              <span id="settings-account-last-login" class="text-gray-800">—</span>
+            </div>
+            <div class="flex justify-between items-start pt-1 border-t border-gray-100">
+              <span class="text-gray-400 text-xs">Account ID</span>
+              <span id="settings-account-uid" class="text-gray-400 text-xs font-mono break-all text-right max-w-[60%]">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Danger Zone -->
+        <div class="bg-white rounded-xl border border-red-100 p-6">
+          <h2 class="text-lg font-semibold text-red-700 mb-1">Danger Zone</h2>
+          <p class="text-sm text-gray-500 mb-4">Signing out will clear your kiosk session on this device. You'll need to sign in again with your Aeries credentials.</p>
+          <button id="settings-signout-btn"
+            class="text-sm text-red-700 border border-red-200 hover:bg-red-50 px-4 py-2 rounded-lg transition-all">
+            Sign Out of This Device
+          </button>
+        </div>
+
       </section><!-- dashboard-settings -->
 
     </div><!-- content area -->
@@ -1012,6 +1303,9 @@
         const rosterUploadTab = document.getElementById('roster-upload-tab');
         if (rosterUploadTab) rosterUploadTab.addEventListener('change', onRosterUpload);
 
+        // Onboarding wizard listeners
+        initWizardListeners();
+
         // Login screen listeners
         const loginSubmitBtn = document.getElementById('login-submit');
         if (loginSubmitBtn) loginSubmitBtn.addEventListener('click', handleLogin);
@@ -1171,12 +1465,16 @@
       pinEntryScreen.classList.add('hidden');
       adminPanel.classList.remove('hidden');
       kioskPanel.classList.add('hidden');
+      const wizardEl = document.getElementById('onboarding-wizard');
+      if (wizardEl) wizardEl.classList.add('hidden');
       // Show teacher name and logout in dashboard header
       if (teacherNameDisplay && teacherName) {
         teacherNameDisplay.textContent = teacherName;
         teacherNameDisplay.classList.remove('hidden');
       }
       if (teacherLogoutBtn) teacherLogoutBtn.classList.remove('hidden');
+      // Populate settings with current user info
+      initSettingsUI();
       // Default to Attendance section on open
       switchDashboardSection('attendance');
     }
@@ -1184,6 +1482,343 @@
     // Keep showAdminPanel as an alias for backwards compatibility
     function showAdminPanel() {
       showDashboard();
+    }
+
+    // ===== Onboarding Wizard =====
+    let wizardRosterLoaded = false;
+
+    function showOnboardingWizard(username) {
+      const wizardEl = document.getElementById('onboarding-wizard');
+      loginScreen.classList.add('hidden');
+      pinSetupScreen.classList.add('hidden');
+      pinEntryScreen.classList.add('hidden');
+      adminPanel.classList.add('hidden');
+      kioskPanel.classList.add('hidden');
+      wizardEl.classList.remove('hidden');
+
+      // Display username on step 1
+      const usernameDisplay = document.getElementById('wizard-username-display');
+      if (usernameDisplay) usernameDisplay.textContent = username || '';
+
+      // Reset to step 1
+      wizardRosterLoaded = false;
+      showWizardStep(1);
+    }
+
+    function hideOnboardingWizard() {
+      const wizardEl = document.getElementById('onboarding-wizard');
+      if (wizardEl) wizardEl.classList.add('hidden');
+    }
+
+    function showWizardStep(step) {
+      // Hide all steps
+      [1, 2, 3].forEach(n => {
+        const el = document.getElementById('wizard-step-' + n);
+        if (el) el.classList.add('hidden');
+      });
+      // Show target step
+      const target = document.getElementById('wizard-step-' + step);
+      if (target) target.classList.remove('hidden');
+
+      // Update progress
+      const stepLabel = document.getElementById('wizard-step-label');
+      const stepTitle = document.getElementById('wizard-step-title');
+      const progressBar = document.getElementById('wizard-progress-bar');
+      const titles = ['Credentials Verified', 'Roster Setup', 'Seating Configuration'];
+      if (stepLabel) stepLabel.textContent = 'Step ' + step + ' of 3';
+      if (stepTitle) stepTitle.textContent = titles[step - 1];
+      if (progressBar) progressBar.style.width = (step * 33.33) + '%';
+
+      // Update dots
+      [1, 2, 3].forEach(n => {
+        const dot = document.getElementById('wizard-dot-' + n);
+        if (!dot) return;
+        if (n <= step) {
+          dot.className = 'w-2 h-2 rounded-full bg-red-700';
+        } else {
+          dot.className = 'w-2 h-2 rounded-full bg-gray-300';
+        }
+      });
+    }
+
+    function initWizardListeners() {
+      // Step 1 next
+      const step1Next = document.getElementById('wizard-step1-next');
+      if (step1Next) step1Next.addEventListener('click', () => showWizardStep(2));
+
+      // Step 2: Fetch roster
+      const wizardFetchBtn = document.getElementById('wizard-fetch-roster-btn');
+      if (wizardFetchBtn) wizardFetchBtn.addEventListener('click', async () => {
+        if (!functions || !teacherUid) {
+          showWizardRosterStatus('Cloud connection required to fetch from Aeries.', 'error');
+          return;
+        }
+        wizardFetchBtn.disabled = true;
+        const spinner = document.getElementById('wizard-fetch-spinner');
+        if (spinner) spinner.classList.remove('hidden');
+        showWizardRosterStatus('Connecting to Aeries...', 'info');
+        const fallback = document.getElementById('wizard-csv-fallback');
+        if (fallback) fallback.classList.add('hidden');
+        try {
+          const fetchRosterFn = httpsCallable(functions, 'fetchRoster');
+          const result = await fetchRosterFn({});
+          const data = result.data;
+          if (data.success) {
+            const counts = data.periods || {};
+            const summaryEl = document.getElementById('wizard-roster-summary');
+            if (summaryEl) {
+              summaryEl.innerHTML = Object.entries(counts)
+                .sort(([a], [b]) => periodSort(a, b))
+                .map(([p, n]) => '<div>Period ' + escHtml(p) + ': ' + escHtml(String(n)) + ' students</div>')
+                .join('');
+            }
+            showWizardRosterStatus('', 'info');
+            const successEl = document.getElementById('wizard-roster-success');
+            if (successEl) successEl.classList.remove('hidden');
+            wizardRosterLoaded = true;
+            renderWizardPreferredNames();
+            const nextBtn = document.getElementById('wizard-step2-next');
+            if (nextBtn) nextBtn.disabled = false;
+          } else if (data.error === 'roster_requires_browser') {
+            showWizardRosterStatus('Automatic fetch unavailable for your Aeries setup.', 'warning');
+            if (fallback) fallback.classList.remove('hidden');
+          } else {
+            showWizardRosterStatus(data.message || 'Fetch failed. Please try again or upload CSV.', 'error');
+          }
+        } catch (err) {
+          console.error('[wizard fetchRoster]', err);
+          showWizardRosterStatus('Fetch failed: ' + (err.message || 'unknown error'), 'error');
+        } finally {
+          wizardFetchBtn.disabled = false;
+          if (spinner) spinner.classList.add('hidden');
+        }
+      });
+
+      // Step 2: CSV upload
+      const wizardUpload = document.getElementById('wizard-roster-upload');
+      if (wizardUpload) wizardUpload.addEventListener('change', async (e) => {
+        const files = e.target.files;
+        if (!files || !files.length) return;
+        let processed = 0;
+        const merged = { ...allRosters };
+        const changed = new Set();
+        for (const f of files) {
+          try {
+            const text = await f.text();
+            const parsed = parseRoster(text);
+            for (const p in parsed) { merged[p] = parsed[p]; changed.add(String(p)); }
+            processed++;
+          } catch (err) {
+            showWizardRosterStatus('Error reading ' + f.name + ': ' + err.message, 'error');
+            return;
+          }
+        }
+        allRosters = merged;
+        try { localStorage.setItem('allRosters', JSON.stringify(allRosters)); } catch { }
+        if (db && teacherUid) {
+          const uploadPromises = [];
+          for (const p of changed) {
+            const docRef = doc(db, teacherPath('rosters/' + p));
+            uploadPromises.push(setDoc(docRef, { roster: allRosters[p], updatedAt: serverTimestamp() }, { merge: true }));
+          }
+          await Promise.all(uploadPromises).catch(err => console.error('[wizard upload]', err));
+        }
+        const summaryEl = document.getElementById('wizard-roster-summary');
+        if (summaryEl) {
+          summaryEl.innerHTML = Array.from(changed)
+            .sort(periodSort)
+            .map(p => '<div>Period ' + escHtml(p) + ': ' + ((allRosters[p] || []).length) + ' students</div>')
+            .join('');
+        }
+        const successEl = document.getElementById('wizard-roster-success');
+        if (successEl) successEl.classList.remove('hidden');
+        showWizardRosterStatus('', 'info');
+        wizardRosterLoaded = true;
+        renderWizardPreferredNames();
+        const nextBtn = document.getElementById('wizard-step2-next');
+        if (nextBtn) nextBtn.disabled = false;
+      });
+
+      // Step 2: Skip
+      const step2Skip = document.getElementById('wizard-step2-skip');
+      if (step2Skip) step2Skip.addEventListener('click', () => showWizardStep(3));
+
+      // Step 2: Next
+      const step2Next = document.getElementById('wizard-step2-next');
+      if (step2Next) step2Next.addEventListener('click', () => showWizardStep(3));
+
+      // Step 3: Seating mode changes
+      const seatingRadios = document.querySelectorAll('input[name="wizard-seating-mode"]');
+      seatingRadios.forEach(radio => {
+        radio.addEventListener('change', () => {
+          const configEl = document.getElementById('wizard-seating-config');
+          const tipEl = document.getElementById('wizard-seating-tip');
+          const mode = radio.value;
+          if (mode === 'none') {
+            if (configEl) configEl.classList.add('hidden');
+          } else {
+            if (configEl) configEl.classList.remove('hidden');
+            if (tipEl) {
+              tipEl.textContent = mode === 'individual'
+                ? 'Tip: For individual desks, set groups = number of desks, seats per group = 1.'
+                : 'Tip: You can fine-tune group seat counts individually in the Seating tab later.';
+            }
+            // Auto-set seats per group to 1 if individual
+            if (mode === 'individual') {
+              const seatsInput = document.getElementById('wizard-seats-per-group');
+              if (seatsInput && seatsInput.value !== '1') seatsInput.value = '1';
+            }
+          }
+        });
+      });
+
+      // Step 3: Finish
+      const step3Finish = document.getElementById('wizard-step3-finish');
+      if (step3Finish) step3Finish.addEventListener('click', completeOnboardingWizard);
+    }
+
+    function showWizardRosterStatus(message, type) {
+      const el = document.getElementById('wizard-roster-status');
+      if (!el) return;
+      if (!message) { el.classList.add('hidden'); return; }
+      const colorMap = {
+        info: 'bg-blue-50 text-blue-700 border border-blue-200',
+        success: 'bg-green-50 text-green-700 border border-green-200',
+        error: 'bg-red-50 text-red-700 border border-red-200',
+        warning: 'bg-yellow-50 text-yellow-800 border border-yellow-200'
+      };
+      el.className = 'text-sm font-medium mb-4 p-3 rounded-lg ' + (colorMap[type] || colorMap.info);
+      el.textContent = message;
+      el.classList.remove('hidden');
+    }
+
+    function renderWizardPreferredNames() {
+      const section = document.getElementById('wizard-preferred-names-section');
+      const list = document.getElementById('wizard-preferred-names-list');
+      if (!section || !list) return;
+
+      const periods = Object.keys(allRosters).sort(periodSort);
+      if (periods.length === 0) return;
+
+      list.innerHTML = '';
+      let hasStudents = false;
+      periods.forEach(period => {
+        const students = allRosters[period] || [];
+        if (students.length === 0) return;
+        hasStudents = true;
+        const periodHeader = document.createElement('div');
+        periodHeader.className = 'text-xs font-semibold text-gray-500 uppercase tracking-wider px-2 pt-2 pb-1';
+        periodHeader.textContent = 'Period ' + period;
+        list.appendChild(periodHeader);
+        students.forEach(s => {
+          const row = document.createElement('div');
+          row.className = 'flex items-center gap-2 px-2 py-1 hover:bg-white rounded';
+          const nameSpan = document.createElement('span');
+          nameSpan.className = 'text-xs text-gray-600 w-32 truncate flex-shrink-0';
+          nameSpan.textContent = (s.LastName || '') + ', ' + (s.FirstName || '');
+          const inp = document.createElement('input');
+          inp.type = 'text';
+          inp.value = s.preferredName || s.FirstName || '';
+          inp.placeholder = s.FirstName || '';
+          inp.className = 'flex-1 text-xs border border-transparent rounded px-2 py-0.5 hover:border-gray-300 focus:border-red-500 focus:ring-1 focus:ring-red-500 focus:outline-none bg-transparent';
+          inp.addEventListener('blur', () => {
+            const sp = String(period);
+            const si = String(s.StudentID);
+            savePreferredName(sp, si, inp.value);
+          });
+          inp.addEventListener('keyup', e => { if (e.key === 'Enter') inp.blur(); });
+          row.append(nameSpan, inp);
+          list.appendChild(row);
+        });
+      });
+
+      if (hasStudents) {
+        section.classList.remove('hidden');
+      }
+    }
+
+    async function completeOnboardingWizard() {
+      const finishBtn = document.getElementById('wizard-step3-finish');
+      const errorEl = document.getElementById('wizard-step3-error');
+      if (finishBtn) finishBtn.disabled = true;
+      if (finishBtn) finishBtn.textContent = 'Saving...';
+      if (errorEl) errorEl.classList.add('hidden');
+
+      try {
+        // Read seating mode selection
+        const selectedMode = document.querySelector('input[name="wizard-seating-mode"]:checked');
+        const mode = selectedMode ? selectedMode.value : 'group';
+        const numGroupsInput = document.getElementById('wizard-num-groups');
+        const seatsInput = document.getElementById('wizard-seats-per-group');
+        const numGroups = Math.max(1, Math.min(50, parseInt(numGroupsInput ? numGroupsInput.value : '6') || 6));
+        const seatsPerGroup = Math.max(1, Math.min(10, parseInt(seatsInput ? seatsInput.value : '4') || 4));
+
+        const newSeatingConfig = {
+          enabled: mode !== 'none',
+          numGroups: mode === 'none' ? 6 : numGroups,
+          defaultSeatsPerGroup: mode === 'none' ? 4 : (mode === 'individual' ? 1 : seatsPerGroup),
+          perGroupOverrides: {},
+          perPeriodOverrides: {}
+        };
+
+        // Save to Firestore
+        if (db && teacherUid) {
+          const configRef = doc(db, teacherPath('config/main'));
+          await setDoc(configRef, {
+            seatingConfig: newSeatingConfig,
+            onboardingComplete: true,
+            updatedAt: serverTimestamp()
+          }, { merge: true });
+        }
+
+        // Update local state
+        currentSeatingConfig = newSeatingConfig;
+        renderSeatingUI();
+
+        // Done — proceed to PIN setup or dashboard
+        hideOnboardingWizard();
+        const binding = loadKioskBinding();
+        const remember = binding ? !!localStorage.getItem(KIOSK_STORAGE_KEY) : false;
+        await onTeacherAuthenticated(remember);
+
+        const existingPin = await loadTeacherPin();
+        if (!existingPin) {
+          showPinSetup();
+        } else {
+          teacherPin = existingPin;
+          saveKioskBinding(teacherUid, teacherName, teacherPin, remember);
+          showDashboard();
+        }
+      } catch (err) {
+        console.error('[completeOnboardingWizard]', err);
+        if (errorEl) {
+          errorEl.textContent = 'Failed to save setup: ' + (err.message || 'unknown error');
+          errorEl.classList.remove('hidden');
+        }
+        if (finishBtn) finishBtn.disabled = false;
+        if (finishBtn) finishBtn.textContent = 'Finish Setup';
+      }
+    }
+
+    // Check if teacher needs onboarding
+    async function checkNeedsOnboarding() {
+      if (!db || !teacherUid) return false;
+      try {
+        const configRef = doc(db, teacherPath('config/main'));
+        const snap = await getDoc(configRef);
+        if (!snap.exists()) return true;
+        const data = snap.data();
+        // If onboardingComplete is explicitly set, respect it
+        if (data.onboardingComplete === true) return false;
+        if (data.onboardingComplete === false) return true;
+        // If there's existing config data (like kioskPin or seatingConfig), they've been using the app
+        // Don't re-onboard existing users
+        if (data.kioskPin || data.seatingConfig || data.avoidPairs || data.frontRow) return false;
+        return true;
+      } catch (e) {
+        console.warn('[checkNeedsOnboarding]', e);
+        return false; // Fail safe — don't force onboarding on error
+      }
     }
 
     // ===== Dashboard Navigation =====
@@ -1273,6 +1908,14 @@
         teacherName = displayName || username;
 
         const remember = rememberInput ? rememberInput.checked : false;
+
+        // Check if this is a new teacher who needs onboarding
+        const needsOnboarding = await checkNeedsOnboarding();
+        if (needsOnboarding) {
+          saveKioskBinding(teacherUid, teacherName, null, remember);
+          showOnboardingWizard(username);
+          return;
+        }
 
         // Check if teacher already has a PIN stored
         const existingPin = await loadTeacherPin();
@@ -1387,6 +2030,7 @@
       if (unsubExceptions) { unsubExceptions(); unsubExceptions = null; }
       if (unsubAttendance) { unsubAttendance(); unsubAttendance = null; }
       if (unsubCurrentPeriod) { unsubCurrentPeriod(); unsubCurrentPeriod = null; }
+      if (unsubSyncStatus) { unsubSyncStatus(); unsubSyncStatus = null; }
       if (auth) { try { await signOut(auth); } catch { } }
       // Reset UI
       teacherNameDisplay.classList.add('hidden');
@@ -1404,6 +2048,7 @@
         watchRostersFromCloud();
         loadExceptions();
         watchCurrentPeriod();
+        watchSyncStatus();
       } else {
         // Local mode: try to load seating config from localStorage
         try {
@@ -3027,6 +3672,247 @@
 
       const tardyInfo = count >= TARDY_AFTER_NTH ? 'tardy active' : `${TARDY_AFTER_NTH - count} more before tardy`;
       periodIndicator.textContent = `Period ${p} \u2022 ${how} \u2022 ${count} signed in (${tardyInfo}) \u2022 ${nowStr}`;
+    }
+
+    // ===== Sync Status =====
+    let unsubSyncStatus = null;
+
+    function watchSyncStatus() {
+      if (!db || !teacherUid) return;
+      const syncRef = doc(db, teacherPath('sync/status'));
+      if (unsubSyncStatus) unsubSyncStatus();
+      unsubSyncStatus = onSnapshot(syncRef, snap => {
+        const iconEl = document.getElementById('sync-status-icon');
+        const textEl = document.getElementById('sync-status-text');
+        const detailsBtn = document.getElementById('sync-status-details-btn');
+        const errorDetails = document.getElementById('sync-status-error-details');
+        if (!iconEl || !textEl) return;
+
+        if (!snap.exists()) {
+          iconEl.className = 'flex-shrink-0 w-2 h-2 rounded-full bg-gray-300';
+          textEl.textContent = 'Sync not configured yet — coming soon';
+          textEl.className = 'text-gray-500 flex-1';
+          if (detailsBtn) detailsBtn.classList.add('hidden');
+          if (errorDetails) errorDetails.classList.add('hidden');
+          return;
+        }
+
+        const data = snap.data();
+        const status = data.status || 'unknown';
+        const lastSync = data.lastSyncTime;
+        const isSuccess = status === 'success';
+        const isFailed = status === 'failed' || status === 'error';
+
+        let timeStr = '';
+        if (lastSync) {
+          try {
+            const d = lastSync.toDate ? lastSync.toDate() : new Date(lastSync);
+            timeStr = d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+          } catch { timeStr = String(lastSync); }
+        }
+
+        if (isSuccess) {
+          iconEl.className = 'flex-shrink-0 w-2 h-2 rounded-full bg-green-500';
+          const perStr = data.periodsProcessed != null ? ' \u2022 ' + data.periodsProcessed + ' period(s)' : '';
+          textEl.textContent = 'Last sync: ' + (timeStr || 'just now') + ' \u2014 Success' + perStr;
+          textEl.className = 'text-gray-600 flex-1';
+          if (detailsBtn) detailsBtn.classList.add('hidden');
+          if (errorDetails) errorDetails.classList.add('hidden');
+        } else if (isFailed) {
+          iconEl.className = 'flex-shrink-0 w-2 h-2 rounded-full bg-red-500';
+          textEl.textContent = 'Last sync: ' + (timeStr || 'unknown') + ' \u2014 Failed';
+          textEl.className = 'text-red-600 flex-1 font-medium';
+          if (detailsBtn) {
+            detailsBtn.classList.remove('hidden');
+            const isOpen = !errorDetails.classList.contains('hidden');
+            detailsBtn.textContent = isOpen ? 'Hide' : 'Details';
+          }
+          if (data.error && errorDetails) {
+            errorDetails.textContent = 'Error: ' + data.error;
+          }
+        } else {
+          iconEl.className = 'flex-shrink-0 w-2 h-2 rounded-full bg-gray-300';
+          textEl.textContent = timeStr ? 'Last sync: ' + timeStr : 'Sync status unknown';
+          textEl.className = 'text-gray-500 flex-1';
+          if (detailsBtn) detailsBtn.classList.add('hidden');
+        }
+      }, err => {
+        console.error('[watchSyncStatus]', err);
+      });
+    }
+
+    // ===== Settings Section =====
+    function initSettingsUI() {
+      // Populate username display
+      const settingsUsername = document.getElementById('settings-username');
+      const settingsAccountUsername = document.getElementById('settings-account-username');
+      const settingsAccountUid = document.getElementById('settings-account-uid');
+
+      if (teacherName) {
+        if (settingsUsername) settingsUsername.textContent = teacherName;
+        if (settingsAccountUsername) settingsAccountUsername.textContent = teacherName;
+      }
+      if (teacherUid) {
+        if (settingsAccountUid) settingsAccountUid.textContent = teacherUid;
+      }
+
+      // Populate timestamps from Firebase Auth user
+      if (auth && auth.currentUser) {
+        const user = auth.currentUser;
+        const createdAt = document.getElementById('settings-account-created');
+        const lastLogin = document.getElementById('settings-account-last-login');
+        if (createdAt && user.metadata && user.metadata.creationTime) {
+          try { createdAt.textContent = new Date(user.metadata.creationTime).toLocaleDateString(); } catch { }
+        }
+        if (lastLogin && user.metadata && user.metadata.lastSignInTime) {
+          try { lastLogin.textContent = new Date(user.metadata.lastSignInTime).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch { }
+        }
+      }
+
+      // Sync status details toggle
+      const detailsBtn = document.getElementById('sync-status-details-btn');
+      const errorDetails = document.getElementById('sync-status-error-details');
+      if (detailsBtn && errorDetails) {
+        detailsBtn.addEventListener('click', () => {
+          const isHidden = errorDetails.classList.contains('hidden');
+          errorDetails.classList.toggle('hidden', !isHidden);
+          detailsBtn.textContent = isHidden ? 'Hide' : 'Details';
+        });
+      }
+
+      // Update Password button
+      const updatePwBtn = document.getElementById('settings-update-password-btn');
+      const updatePwForm = document.getElementById('settings-update-password-form');
+      const updatePwCancel = document.getElementById('settings-update-password-cancel');
+      const updatePwSubmit = document.getElementById('settings-update-password-submit');
+      const newPwInput = document.getElementById('settings-new-password');
+      const pwError = document.getElementById('settings-password-error');
+      const pwSuccess = document.getElementById('settings-password-success');
+
+      if (updatePwBtn && updatePwForm) {
+        updatePwBtn.addEventListener('click', () => {
+          updatePwForm.classList.remove('hidden');
+          updatePwBtn.classList.add('hidden');
+          if (newPwInput) setTimeout(() => newPwInput.focus(), 100);
+        });
+      }
+      if (updatePwCancel && updatePwForm) {
+        updatePwCancel.addEventListener('click', () => {
+          updatePwForm.classList.add('hidden');
+          if (updatePwBtn) updatePwBtn.classList.remove('hidden');
+          if (newPwInput) newPwInput.value = '';
+          if (pwError) pwError.classList.add('hidden');
+          if (pwSuccess) pwSuccess.classList.add('hidden');
+        });
+      }
+      if (updatePwSubmit && newPwInput) {
+        updatePwSubmit.addEventListener('click', async () => {
+          const newPw = newPwInput.value;
+          if (!newPw) {
+            if (pwError) { pwError.textContent = 'Please enter a new password.'; pwError.classList.remove('hidden'); }
+            return;
+          }
+          if (pwError) pwError.classList.add('hidden');
+          if (pwSuccess) pwSuccess.classList.add('hidden');
+          updatePwSubmit.disabled = true;
+          updatePwSubmit.textContent = 'Updating...';
+          try {
+            if (!functions) throw new Error('No cloud connection.');
+            const authenticateTeacher = httpsCallable(functions, 'authenticateTeacher');
+            await authenticateTeacher({ username: teacherName, password: newPw });
+            if (pwSuccess) { pwSuccess.textContent = 'Password updated successfully!'; pwSuccess.classList.remove('hidden'); }
+            if (newPwInput) newPwInput.value = '';
+            setTimeout(() => {
+              if (updatePwForm) updatePwForm.classList.add('hidden');
+              if (updatePwBtn) updatePwBtn.classList.remove('hidden');
+              if (pwSuccess) pwSuccess.classList.add('hidden');
+            }, 2000);
+          } catch (err) {
+            console.error('[settings updatePassword]', err);
+            if (pwError) { pwError.textContent = err.message || 'Update failed. Please try again.'; pwError.classList.remove('hidden'); }
+          } finally {
+            updatePwSubmit.disabled = false;
+            updatePwSubmit.textContent = 'Update Password';
+          }
+        });
+      }
+      if (newPwInput) {
+        newPwInput.addEventListener('keyup', e => { if (e.key === 'Enter' && updatePwSubmit) updatePwSubmit.click(); });
+      }
+
+      // Change PIN
+      const changePinBtn = document.getElementById('settings-change-pin-btn');
+      const changePinForm = document.getElementById('settings-change-pin-form');
+      const changePinCancel = document.getElementById('settings-change-pin-cancel');
+      const savePinBtn = document.getElementById('settings-save-pin-btn');
+      const newPinInput = document.getElementById('settings-new-pin');
+      const pinError = document.getElementById('settings-pin-error');
+      const pinSuccess = document.getElementById('settings-pin-success');
+
+      if (changePinBtn && changePinForm) {
+        changePinBtn.addEventListener('click', () => {
+          changePinForm.classList.remove('hidden');
+          changePinBtn.classList.add('hidden');
+          if (newPinInput) setTimeout(() => newPinInput.focus(), 100);
+        });
+      }
+      if (changePinCancel && changePinForm) {
+        changePinCancel.addEventListener('click', () => {
+          changePinForm.classList.add('hidden');
+          if (changePinBtn) changePinBtn.classList.remove('hidden');
+          if (newPinInput) newPinInput.value = '';
+          if (pinError) pinError.classList.add('hidden');
+          if (pinSuccess) pinSuccess.classList.add('hidden');
+        });
+      }
+      if (savePinBtn && newPinInput) {
+        savePinBtn.addEventListener('click', async () => {
+          const newPin = newPinInput.value.trim();
+          if (!/^\d{4}$/.test(newPin)) {
+            if (pinError) { pinError.textContent = 'PIN must be exactly 4 digits.'; pinError.classList.remove('hidden'); }
+            return;
+          }
+          if (pinError) pinError.classList.add('hidden');
+          if (pinSuccess) pinSuccess.classList.add('hidden');
+          savePinBtn.disabled = true;
+          savePinBtn.textContent = 'Saving...';
+          try {
+            if (db && teacherUid) {
+              const configRef = doc(db, teacherPath('config/main'));
+              await setDoc(configRef, { kioskPin: newPin, updatedAt: serverTimestamp() }, { merge: true });
+            }
+            teacherPin = newPin;
+            const remember = !!localStorage.getItem(KIOSK_STORAGE_KEY);
+            saveKioskBinding(teacherUid, teacherName, teacherPin, remember);
+            if (pinSuccess) { pinSuccess.textContent = 'PIN updated successfully!'; pinSuccess.classList.remove('hidden'); }
+            if (newPinInput) newPinInput.value = '';
+            setTimeout(() => {
+              if (changePinForm) changePinForm.classList.add('hidden');
+              if (changePinBtn) changePinBtn.classList.remove('hidden');
+              if (pinSuccess) pinSuccess.classList.add('hidden');
+            }, 2000);
+          } catch (err) {
+            console.error('[settings savePin]', err);
+            if (pinError) { pinError.textContent = 'Failed to save PIN. Please try again.'; pinError.classList.remove('hidden'); }
+          } finally {
+            savePinBtn.disabled = false;
+            savePinBtn.textContent = 'Save PIN';
+          }
+        });
+      }
+      if (newPinInput) {
+        newPinInput.addEventListener('keyup', e => { if (e.key === 'Enter' && savePinBtn) savePinBtn.click(); });
+        newPinInput.addEventListener('input', () => {
+          // Auto-filter non-digits
+          newPinInput.value = newPinInput.value.replace(/\D/g, '');
+        });
+      }
+
+      // Sign out button
+      const signoutBtn = document.getElementById('settings-signout-btn');
+      if (signoutBtn) {
+        signoutBtn.addEventListener('click', handleTeacherLogout);
+      }
     }
 
     // ===== Tests =====

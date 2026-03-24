@@ -121,11 +121,11 @@ Plans:
   1. Aeries sync runs every 20 minutes during school hours without any action from the developer or teacher
   2. Each teacher's attendance is processed in the cloud — Jeremy's PC is not involved
   3. When sync fails for any teacher, that teacher's dashboard shows an error with details; one teacher's failure does not block others
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 07-01: Docker container and Railway deployment — Dockerfile, Playwright smoke test in Railway environment
-- [ ] 07-02: Multi-teacher sync orchestrator — APScheduler, sequential per-teacher loop, credential decryption, sync status writes to Firestore
+- [ ] 07-01-PLAN.md — Docker container and Railway deployment: Dockerfile with Playwright base image, smoke test, railway.toml config
+- [ ] 07-02-PLAN.md — Multi-teacher sync orchestrator: APScheduler worker, per-teacher Playwright upload, credential decryption, Firestore sync status writes
 
 ### Phase 8: Self-Healing LLM Layer
 **Goal**: When Aeries UI changes break selectors, the system repairs itself using Gemini — reducing developer intervention to zero for common selector failures

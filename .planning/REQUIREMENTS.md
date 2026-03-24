@@ -39,9 +39,9 @@
 
 ### Cloud Sync
 
-- [ ] **SYNC-01**: Aeries attendance sync runs on Railway (Docker + Playwright), not local PC
-- [ ] **SYNC-02**: Each teacher's attendance syncs every 20 minutes during school hours
-- [ ] **SYNC-03**: Teacher is notified on dashboard when sync fails
+- [x] **SYNC-01**: Aeries attendance sync runs on Railway (Docker + Playwright), not local PC
+- [x] **SYNC-02**: Each teacher's attendance syncs every 30 minutes during school hours
+- [x] **SYNC-03**: Teacher is notified on dashboard when sync fails
 
 ### Self-Healing Automation
 
@@ -86,9 +86,9 @@
 | SEAT-04 | Phase 6 | Complete |
 | ROST-01 | Phase 6 | Complete |
 | ROST-02 | Phase 6 | Complete |
-| SYNC-01 | Phase 7 | Pending |
-| SYNC-02 | Phase 7 | Pending |
-| SYNC-03 | Phase 7 | Pending |
+| SYNC-01 | Phase 7 | Complete |
+| SYNC-02 | Phase 7 | Complete |
+| SYNC-03 | Phase 7 | Complete |
 | HEAL-01 | Phase 8 | Pending |
 | HEAL-02 | Phase 8 | Pending |
 | HEAL-03 | Phase 8 | Pending |

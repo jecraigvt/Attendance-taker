@@ -114,18 +114,18 @@ Plans:
 - [x] 06-04-PLAN.md — Onboarding wizard, sync status card, and Settings section (credential update, PIN change)
 
 ### Phase 7: Railway Cloud Sync
-**Goal**: Attendance sync runs automatically in the cloud on Railway every 20 minutes during school hours for every teacher — with no dependency on the developer's local machine
+**Goal**: Attendance sync runs automatically in the cloud on Railway every 30 minutes during school hours for every teacher — with no dependency on the developer's local machine
 **Depends on**: Phase 6
 **Requirements**: SYNC-01, SYNC-02, SYNC-03
 **Success Criteria** (what must be TRUE):
-  1. Aeries sync runs every 20 minutes during school hours without any action from the developer or teacher
+  1. Aeries sync runs every 30 minutes during school hours without any action from the developer or teacher
   2. Each teacher's attendance is processed in the cloud — Jeremy's PC is not involved
   3. When sync fails for any teacher, that teacher's dashboard shows an error with details; one teacher's failure does not block others
 **Plans**: 2 plans
 
 Plans:
-- [ ] 07-01-PLAN.md — Docker container and Railway deployment: Dockerfile with Playwright base image, smoke test, railway.toml config
-- [ ] 07-02-PLAN.md — Multi-teacher sync orchestrator: APScheduler worker, per-teacher Playwright upload, credential decryption, Firestore sync status writes
+- [x] 07-01-PLAN.md — Docker container and Railway deployment: Dockerfile with Playwright base image, smoke test, railway.toml config
+- [x] 07-02-PLAN.md — Multi-teacher sync orchestrator: APScheduler worker, per-teacher Playwright upload, credential decryption, Firestore sync status writes
 
 ### Phase 8: Self-Healing LLM Layer
 **Goal**: When Aeries UI changes break selectors, the system repairs itself using Gemini — reducing developer intervention to zero for common selector failures
@@ -156,5 +156,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 4. Tardy Logic Review | v1.0 | 3/3 | Complete | 2026-02-05 |
 | 5. Auth Foundation and Data Migration | v2.0 | 3/3 | Complete | 2026-03-23 |
 | 6. Teacher Dashboard and Roster Management | v2.0 | 4/4 | Complete | 2026-03-24 |
-| 7. Railway Cloud Sync | v2.0 | 0/2 | Not started | - |
+| 7. Railway Cloud Sync | v2.0 | 2/2 | Complete | 2026-03-24 |
 | 8. Self-Healing LLM Layer | v2.0 | 0/2 | Not started | - |

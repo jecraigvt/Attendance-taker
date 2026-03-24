@@ -237,25 +237,14 @@
               </div>
             </div>
 
-            <!-- Seating Exceptions -->
-            <div class="pt-6 border-t">
-              <h3 class="text-lg font-semibold text-gray-800 mb-2">Seating Exceptions</h3>
-              <p class="text-xs text-gray-500 mb-2">Front row tables are 1, 2, 12, 13. Enter full Student IDs.</p>
-
-              <label class="block text-xs font-medium text-gray-700">Front Row IDs (one per line)</label>
-              <textarea id="front-row-input" class="w-full mt-1 p-2 border rounded-md h-20"
-                placeholder="800024418&#10;800024885"></textarea>
-
-              <label class="block text-xs font-medium text-gray-700 mt-3">Do-Not-Sit-Together Pairs (ID1,ID2 per
-                line)</label>
-              <textarea id="avoid-pairs-input" class="w-full mt-1 p-2 border rounded-md h-20"
-                placeholder="800024418,800026182"></textarea>
-
-              <div class="flex items-center gap-2 mt-3">
-                <button id="save-exceptions" class="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700">Save
-                  Exceptions</button>
-                <span id="exceptions-status" class="text-xs text-gray-600"></span>
-              </div>
+            <!-- Seating Exceptions (kept here for layout, also shown in Seating tab) -->
+            <div class="pt-6 border-t" id="attendance-exceptions-note">
+              <p class="text-xs text-gray-500 italic">Seating exceptions (front row / avoid pairs) have moved to the <button onclick="switchDashboardSection('seating')" class="text-red-600 underline hover:text-red-800">Seating tab</button>.</p>
+              <!-- Hidden inputs kept for JS compatibility -->
+              <textarea id="front-row-input" class="hidden"></textarea>
+              <textarea id="avoid-pairs-input" class="hidden"></textarea>
+              <button id="save-exceptions" class="hidden"></button>
+              <span id="exceptions-status" class="hidden"></span>
             </div>
 
             <!-- Target Timer -->
@@ -335,24 +324,16 @@
               </div>
             </div>
 
-            <!-- Roster Management (LOWER PRIORITY) -->
+            <!-- Roster Management — moved to Roster tab -->
             <div class="pt-6 border-t">
-              <h3 class="text-lg font-semibold text-gray-800 mb-2">Roster Management</h3>
-              <p class="text-xs text-gray-500 mb-2">Upload one or more roster CSVs. Saved locally and synced to cloud
-                (if configured).</p>
-
+              <p class="text-xs text-gray-500 italic">Roster management has moved to the <button onclick="switchDashboardSection('roster')" class="text-red-600 underline hover:text-red-800">Roster tab</button>.</p>
+              <!-- Hidden elements kept for JS compatibility -->
+              <p id="roster-status" class="hidden"></p>
+              <div id="roster-warning" class="hidden"></div>
+              <div id="roster-summary" class="hidden"></div>
+              <div id="roster-debug" class="hidden"></div>
               <input type="file" id="roster-upload" accept=".csv" class="hidden" multiple />
-              <label for="roster-upload"
-                class="file-input-button w-full text-center bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition-all">Add/Update
-                Roster File(s)</label>
-
-              <p id="roster-status" class="text-xs mt-2 font-medium"></p>
-              <div id="roster-warning" class="mt-2 text-sm text-red-600 font-semibold"></div>
-              <div id="roster-summary" class="mt-2 text-xs text-gray-600"></div>
-              <div id="roster-debug" class="mt-1 text-xs text-gray-500"></div>
-
-              <button id="clear-rosters" class="text-xs text-red-500 hover:underline mt-2">Clear all saved
-                rosters</button>
+              <button id="clear-rosters" class="hidden"></button>
             </div>
 
           </div><!-- End Right Column -->
@@ -362,28 +343,168 @@
 
       <!-- ===== ROSTER SECTION ===== -->
       <section id="dashboard-roster" class="dashboard-section hidden max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        <div class="bg-white rounded-xl border border-gray-200 p-8 text-center">
-          <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
-            </svg>
+
+        <!-- Top controls card -->
+        <div class="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+          <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+            <div class="flex-1">
+              <h2 class="text-xl font-semibold text-gray-900">Roster Management</h2>
+              <p class="text-sm text-gray-500 mt-0.5">Fetch from Aeries or upload a CSV. Edit preferred names and make manual adjustments.</p>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-2 flex-shrink-0">
+              <button id="fetch-roster-btn"
+                class="bg-red-700 text-white font-semibold text-sm py-2 px-4 rounded-lg hover:bg-red-800 transition-all disabled:opacity-50 flex items-center gap-2 justify-center">
+                <svg id="fetch-roster-spinner" class="hidden animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                </svg>
+                Fetch from Aeries
+              </button>
+              <label for="roster-upload-tab"
+                class="file-input-button text-center bg-gray-100 text-gray-700 font-semibold text-sm py-2 px-4 rounded-lg hover:bg-gray-200 transition-all cursor-pointer">
+                Upload CSV
+              </label>
+              <input type="file" id="roster-upload-tab" accept=".csv" class="hidden" multiple />
+            </div>
           </div>
-          <h2 class="text-xl font-semibold text-gray-800 mb-2">Roster Management</h2>
-          <p class="text-gray-500 text-sm">Roster management is coming soon. You'll be able to view and edit your class rosters, manage preferred names, and sync from Aeries here.</p>
+          <div id="roster-tab-status" class="mt-3 text-sm font-medium text-gray-600 hidden"></div>
         </div>
+
+        <!-- CSV fallback notice (shown when Aeries requires browser) -->
+        <div id="roster-csv-fallback-notice" class="hidden bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6 text-sm text-yellow-800">
+          <strong>Automatic roster fetch requires your school's Aeries setup to support HTTP access.</strong>
+          Please upload a roster CSV instead: export from Aeries using File &rarr; Export &rarr; Class Roster, then click "Upload CSV" above.
+        </div>
+
+        <!-- Period tabs / roster viewer -->
+        <div id="roster-periods-container">
+          <!-- Populated dynamically by renderRosterManagementUI() -->
+          <div class="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500">
+            <p class="font-medium">No rosters loaded yet.</p>
+            <p class="text-sm mt-1">Fetch from Aeries or upload a roster CSV to get started.</p>
+          </div>
+        </div>
+
       </section><!-- dashboard-roster -->
 
       <!-- ===== SEATING SECTION ===== -->
       <section id="dashboard-seating" class="dashboard-section hidden max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        <div class="bg-white rounded-xl border border-gray-200 p-8 text-center">
-          <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
-            </svg>
-          </div>
-          <h2 class="text-xl font-semibold text-gray-800 mb-2">Seating Configuration</h2>
-          <p class="text-gray-500 text-sm">Seating configuration is coming soon. You'll be able to set up groups, seat counts, and per-period overrides here.</p>
-        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+          <!-- LEFT: Main seating config -->
+          <div class="lg:col-span-2 space-y-6">
+
+            <!-- Global toggle card -->
+            <div class="bg-white rounded-xl border border-gray-200 p-6">
+              <div class="flex items-center justify-between mb-1">
+                <h2 class="text-xl font-semibold text-gray-800">Seating Assignment</h2>
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <span id="seating-toggle-label" class="text-sm font-medium text-gray-600">Enabled</span>
+                  <div class="relative">
+                    <input type="checkbox" id="seating-enabled-toggle" class="sr-only peer" checked />
+                    <div class="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-red-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+                  </div>
+                </label>
+              </div>
+              <p class="text-sm text-gray-500">When off, students see "Signed in!" without a group or seat number.</p>
+            </div>
+
+            <!-- Default config card (shown when enabled) -->
+            <div id="seating-config-card" class="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+              <h3 class="text-lg font-semibold text-gray-800">Default Configuration</h3>
+
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label for="seating-num-groups" class="block text-sm font-medium text-gray-700 mb-1">Number of Groups</label>
+                  <input type="number" id="seating-num-groups" min="1" max="50" value="6"
+                    class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500" />
+                </div>
+                <div>
+                  <label for="seating-default-seats" class="block text-sm font-medium text-gray-700 mb-1">Default Seats per Group</label>
+                  <input type="number" id="seating-default-seats" min="1" max="10" value="4"
+                    class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500" />
+                </div>
+              </div>
+              <p class="text-xs text-gray-500">For individual desk assignment, set groups to your number of desks and seats per group to 1.</p>
+
+              <!-- Apply defaults button -->
+              <button id="seating-apply-defaults"
+                class="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-all">
+                Update Group List
+              </button>
+
+              <!-- Per-group overrides -->
+              <div>
+                <h4 class="text-sm font-semibold text-gray-700 mb-2">Per-Group Seat Overrides <span class="font-normal text-gray-400">(optional — leave blank to use default)</span></h4>
+                <div id="seating-group-overrides" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
+              </div>
+
+              <!-- Visual preview -->
+              <div>
+                <h4 class="text-sm font-semibold text-gray-700 mb-2">Preview</h4>
+                <div id="seating-preview" class="flex flex-wrap gap-2"></div>
+              </div>
+            </div>
+
+            <!-- Per-period overrides (collapsible) -->
+            <div id="seating-period-card" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <button id="seating-period-toggle-btn"
+                class="w-full flex items-center justify-between p-6 text-left hover:bg-gray-50 transition-colors">
+                <div>
+                  <h3 class="text-lg font-semibold text-gray-800">Period-Specific Settings <span class="text-sm font-normal text-gray-500">(optional)</span></h3>
+                  <p class="text-xs text-gray-400 mt-0.5">Override seating per period — disable or use different group counts.</p>
+                </div>
+                <svg id="seating-period-chevron" class="w-5 h-5 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+              </button>
+              <div id="seating-period-body" class="hidden px-6 pb-6 space-y-3">
+                <p class="text-xs text-gray-500">No overrides configured. Period-specific settings will appear here once you have rosters loaded.</p>
+                <div id="seating-period-overrides"></div>
+              </div>
+            </div>
+
+            <!-- Save button -->
+            <div class="flex items-center gap-4">
+              <button id="seating-save-btn"
+                class="bg-red-700 text-white font-bold px-6 py-2.5 rounded-lg hover:bg-red-800 transition-all">
+                Save Seating Config
+              </button>
+              <span id="seating-save-status" class="text-sm text-gray-600"></span>
+            </div>
+
+          </div><!-- end left -->
+
+          <!-- RIGHT: Exceptions -->
+          <div class="space-y-6">
+
+            <!-- Seating Exceptions card -->
+            <div class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+              <h3 class="text-lg font-semibold text-gray-800">Seating Exceptions</h3>
+
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">Front Row Student IDs <span class="text-gray-400">(one per line)</span></label>
+                <p class="text-xs text-gray-400 mb-1">These students will be prioritized for the first few groups.</p>
+                <textarea id="seating-front-row-input" class="w-full p-2 border border-gray-300 rounded-md h-24 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  placeholder="800024418&#10;800024885"></textarea>
+              </div>
+
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">Do-Not-Sit-Together Pairs <span class="text-gray-400">(ID1,ID2 per line)</span></label>
+                <textarea id="seating-avoid-pairs-input" class="w-full p-2 border border-gray-300 rounded-md h-24 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  placeholder="800024418,800026182"></textarea>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button id="seating-save-exceptions-btn"
+                  class="bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 text-sm">Save Exceptions</button>
+                <span id="seating-exceptions-status" class="text-xs text-gray-600"></span>
+              </div>
+            </div>
+
+          </div><!-- end right -->
+
+        </div><!-- grid -->
       </section><!-- dashboard-seating -->
 
       <!-- ===== SETTINGS SECTION ===== -->
@@ -488,10 +609,15 @@
       const fullscreenListEl = document.getElementById('fullscreen-group-list');
       if (!fullscreenListEl) return;
 
+      const period = periodSelect ? periodSelect.value : null;
+      const effectiveCfg = getEffectiveSeatingConfig(period);
+      const numGroups = effectiveCfg.enabled ? effectiveCfg.numGroups : MAX_GROUP;
+
+      // Map group -> [{Name, Seat}]
       const map = new Map();
-      for (let g = 1; g <= MAX_GROUP; g++) map.set(g, []);
+      for (let g = 1; g <= numGroups; g++) map.set(g, []);
       periodAttendanceLog.forEach(l => {
-        if (l.Group && map.has(l.Group)) map.get(l.Group).push(l.Name);
+        if (l.Group && map.has(l.Group)) map.get(l.Group).push({ name: l.Name, seat: l.Seat });
       });
 
       fullscreenListEl.replaceChildren();
@@ -503,15 +629,16 @@
       } else {
         map.forEach((arr, grp) => {
           if (arr.length > 0) {
+            const cap = effectiveCfg.enabled ? getGroupCap(grp, effectiveCfg) : 3;
             const div = document.createElement('div');
             const h4 = document.createElement('h4');
             h4.className = 'font-bold text-2xl text-red-500 mb-2';
-            h4.textContent = `Group ${grp} (${arr.length})`;
+            h4.textContent = 'Group ' + grp + ' (' + arr.length + '/' + cap + ')';
             const ul = document.createElement('ul');
             ul.className = 'text-xl space-y-1';
-            arr.forEach(n => {
+            arr.forEach(entry => {
               const li = document.createElement('li');
-              li.textContent = n;
+              li.textContent = entry.seat != null ? entry.name + ' (Seat ' + entry.seat + ')' : entry.name;
               ul.appendChild(li);
             });
             div.append(h4, ul);
@@ -635,17 +762,34 @@
     const csvQuote = s => '"' + String(s).replace(/"/g, '""') + '"';
 
     // Build a log entry object (shared by handleSignIn and manualCheckIn)
-    function buildLogEntry(student, period, status, group, useServerTimestamp) {
-      return {
+    // Uses preferredName if set on the student record; falls back to FirstName.
+    function buildLogEntry(student, period, status, group, useServerTimestamp, seat) {
+      const displayName = student.preferredName || student.FirstName;
+      const entry = {
         Date: new Date().toLocaleDateString(),
         StudentID: student.StudentID,
-        Name: `${student.FirstName} ${student.LastName}`,
+        Name: `${displayName} ${student.LastName}`,
         SignInTime: new Date().toLocaleTimeString(),
         Status: status,
         Group: group,
         Period: period,
         Timestamp: useServerTimestamp ? serverTimestamp() : Date.now()
       };
+      if (seat != null) entry.Seat = seat;
+      return entry;
+    }
+
+    // Calculate seat number for a student being assigned to `group`
+    // Returns the next available seat number (1-based count within group)
+    function calcSeatNumber(group) {
+      if (group == null) return null;
+      const occupants = periodAttendanceLog.filter(l => l.Group === group);
+      return occupants.length + 1;
+    }
+
+    // Get the display name for a student (preferred name or first name)
+    function getDisplayName(student) {
+      return student.preferredName || student.FirstName || '';
     }
 
     // Cloud config passed in by host page (optional)
@@ -677,6 +821,16 @@
     let isOverride = false;
 
     let exceptions = { avoidPairs: [], frontRow: new Set() };
+
+    // Current seating config (loaded from Firestore or defaults)
+    let currentSeatingConfig = {
+      enabled: true,
+      numGroups: 6,
+      defaultSeatsPerGroup: 4,
+      perGroupOverrides: {},
+      perPeriodOverrides: {}
+    };
+    let unsubSeatingConfig = null;
 
     // ===== DOM =====
     const $ = sel => document.querySelector(sel);
@@ -714,6 +868,25 @@
     const saveExceptionsBtn = $('#save-exceptions');
     const exceptionsStatus = $('#exceptions-status');
     const periodIndicator = $('#period-indicator');
+
+    // Seating tab UI refs
+    const seatingEnabledToggle = $('#seating-enabled-toggle');
+    const seatingToggleLabel = $('#seating-toggle-label');
+    const seatingConfigCard = $('#seating-config-card');
+    const seatingPeriodCard = $('#seating-period-card');
+    const seatingNumGroups = $('#seating-num-groups');
+    const seatingDefaultSeats = $('#seating-default-seats');
+    const seatingGroupOverrides = $('#seating-group-overrides');
+    const seatingPreview = $('#seating-preview');
+    const seatingPeriodBody = $('#seating-period-body');
+    const seatingPeriodChevron = $('#seating-period-chevron');
+    const seatingPeriodOverrides = $('#seating-period-overrides');
+    const seatingSaveBtn = $('#seating-save-btn');
+    const seatingSaveStatus = $('#seating-save-status');
+    const seatingFrontRowInput = $('#seating-front-row-input');
+    const seatingAvoidPairsInput = $('#seating-avoid-pairs-input');
+    const seatingSaveExceptionsBtn = $('#seating-save-exceptions-btn');
+    const seatingExceptionsStatus = $('#seating-exceptions-status');
 
     // ===== Helpers =====
     const nowISODate = () => new Date().toISOString().slice(0, 10);
@@ -1223,6 +1396,21 @@
         watchRostersFromCloud();
         loadExceptions();
         watchCurrentPeriod();
+      } else {
+        // Local mode: try to load seating config from localStorage
+        try {
+          const stored = localStorage.getItem('seatingConfigLocal');
+          if (stored) {
+            const sc = JSON.parse(stored);
+            currentSeatingConfig = {
+              enabled: sc.enabled !== false,
+              numGroups: sc.numGroups || 6,
+              defaultSeatsPerGroup: sc.defaultSeatsPerGroup || 4,
+              perGroupOverrides: sc.perGroupOverrides || {},
+              perPeriodOverrides: sc.perPeriodOverrides || {}
+            };
+          }
+        } catch (e) { console.warn('[onTeacherAuthenticated] local seating config load failed', e); }
       }
       loadRostersLocal();
       renderRosterSummary();
@@ -1250,6 +1438,7 @@
 
       if (sessionStorage.getItem('periodOverride') === 'true') { isOverride = true; }
       updateUI();
+      initSeatingUI();
     }
 
 
@@ -1440,6 +1629,8 @@
             exceptions.avoidPairs = ap; exceptions.frontRow = new Set(fr);
             try { localStorage.setItem('exceptions', JSON.stringify({ avoidPairs: ap, frontRow: fr })); } catch (e) { console.warn('localStorage full:', e); }
             renderExceptionsInputs();
+            // Also apply seating config from same doc
+            applySeatingConfigFromDoc(d);
           }
         }, err => {
           console.error('[onSnapshot] exceptions listener error:', err);
@@ -1447,8 +1638,12 @@
       }
     }
     function renderExceptionsInputs() {
-      frontRowInput.value = Array.from(exceptions.frontRow).join('\n');
-      avoidPairsInput.value = exceptions.avoidPairs.map(p => `${p.s1},${p.s2}`).join('\n');
+      // Sync hidden inputs (kept for JS compatibility)
+      if (frontRowInput) frontRowInput.value = Array.from(exceptions.frontRow).join('\n');
+      if (avoidPairsInput) avoidPairsInput.value = exceptions.avoidPairs.map(p => `${p.s1},${p.s2}`).join('\n');
+      // Also update seating tab inputs
+      if (seatingFrontRowInput) seatingFrontRowInput.value = Array.from(exceptions.frontRow).join('\n');
+      if (seatingAvoidPairsInput) seatingAvoidPairsInput.value = exceptions.avoidPairs.map(p => `${p.s1},${p.s2}`).join('\n');
     }
     async function saveExceptions() {
       const fr = frontRowInput.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
@@ -1471,6 +1666,292 @@
         } catch {
           exceptionsStatus.textContent = 'Cloud save failed';
           setTimeout(() => exceptionsStatus.textContent = '', 2000);
+        }
+      }
+    }
+
+    // ===== Seating Config: load/save/watch =====
+    function getEffectiveSeatingConfig(period) {
+      const cfg = currentSeatingConfig;
+      if (!cfg.enabled) return { enabled: false };
+      const override = period && cfg.perPeriodOverrides && cfg.perPeriodOverrides[String(period)];
+      if (override) {
+        if (override.enabled === false) return { enabled: false };
+        return {
+          enabled: true,
+          numGroups: override.numGroups || cfg.numGroups,
+          defaultSeatsPerGroup: override.defaultSeatsPerGroup || cfg.defaultSeatsPerGroup,
+          perGroupOverrides: cfg.perGroupOverrides || {}
+        };
+      }
+      return {
+        enabled: true,
+        numGroups: cfg.numGroups,
+        defaultSeatsPerGroup: cfg.defaultSeatsPerGroup,
+        perGroupOverrides: cfg.perGroupOverrides || {}
+      };
+    }
+
+    function getGroupCap(groupNum, effectiveCfg) {
+      const key = String(groupNum);
+      if (effectiveCfg.perGroupOverrides && effectiveCfg.perGroupOverrides[key] != null) {
+        return effectiveCfg.perGroupOverrides[key];
+      }
+      return effectiveCfg.defaultSeatsPerGroup;
+    }
+
+    function applySeatingConfigFromDoc(d) {
+      if (d && d.seatingConfig) {
+        const sc = d.seatingConfig;
+        currentSeatingConfig = {
+          enabled: sc.enabled !== false,
+          numGroups: sc.numGroups || 6,
+          defaultSeatsPerGroup: sc.defaultSeatsPerGroup || 4,
+          perGroupOverrides: sc.perGroupOverrides || {},
+          perPeriodOverrides: sc.perPeriodOverrides || {}
+        };
+      }
+      renderSeatingUI();
+    }
+
+    async function saveSeatingConfig() {
+      const enabled = seatingEnabledToggle ? seatingEnabledToggle.checked : true;
+      const numGroups = Math.max(1, Math.min(50, parseInt(seatingNumGroups.value) || 6));
+      const defaultSeatsPerGroup = Math.max(1, Math.min(10, parseInt(seatingDefaultSeats.value) || 4));
+      const perGroupOverrides = {};
+      if (seatingGroupOverrides) {
+        seatingGroupOverrides.querySelectorAll('.group-override-input').forEach(inp => {
+          const g = inp.dataset.group;
+          const val = inp.value.trim();
+          if (val !== '') {
+            const n = Math.max(1, Math.min(10, parseInt(val) || defaultSeatsPerGroup));
+            if (n !== defaultSeatsPerGroup) perGroupOverrides[g] = n;
+          }
+        });
+      }
+      const perPeriodOverrides = {};
+      if (seatingPeriodOverrides) {
+        seatingPeriodOverrides.querySelectorAll('.period-override-row').forEach(row => {
+          const period = row.dataset.period;
+          const modeEl = row.querySelector('.period-override-mode');
+          const mode = modeEl ? modeEl.value : 'default';
+          if (mode === 'disabled') {
+            perPeriodOverrides[period] = { enabled: false };
+          } else if (mode === 'custom') {
+            const ngEl = row.querySelector('.period-override-groups');
+            const dsEl = row.querySelector('.period-override-seats');
+            const ng = ngEl ? (parseInt(ngEl.value) || numGroups) : numGroups;
+            const ds = dsEl ? (parseInt(dsEl.value) || defaultSeatsPerGroup) : defaultSeatsPerGroup;
+            perPeriodOverrides[period] = { numGroups: ng, defaultSeatsPerGroup: ds };
+          }
+        });
+      }
+      currentSeatingConfig = { enabled, numGroups, defaultSeatsPerGroup, perGroupOverrides, perPeriodOverrides };
+      if (seatingSaveStatus) { seatingSaveStatus.textContent = 'Saving...'; seatingSaveStatus.className = 'text-sm text-blue-600'; }
+      if (db && teacherUid) {
+        try {
+          const docRef = doc(db, teacherPath('config/main'));
+          await setDoc(docRef, { seatingConfig: currentSeatingConfig, updatedAt: serverTimestamp() }, { merge: true });
+          if (seatingSaveStatus) { seatingSaveStatus.textContent = 'Saved to cloud'; seatingSaveStatus.className = 'text-sm text-green-600'; }
+        } catch (e) {
+          console.error('[saveSeatingConfig]', e);
+          if (seatingSaveStatus) { seatingSaveStatus.textContent = 'Cloud save failed'; seatingSaveStatus.className = 'text-sm text-red-600'; }
+        }
+      } else {
+        try {
+          localStorage.setItem('seatingConfigLocal', JSON.stringify(currentSeatingConfig));
+          if (seatingSaveStatus) { seatingSaveStatus.textContent = 'Saved locally'; seatingSaveStatus.className = 'text-sm text-green-600'; }
+        } catch (e) { console.warn('[saveSeatingConfig local]', e); }
+      }
+      setTimeout(() => { if (seatingSaveStatus) seatingSaveStatus.textContent = ''; }, 3000);
+      renderSeatingPreview();
+    }
+
+    function renderSeatingUI() {
+      if (!seatingEnabledToggle) return;
+      const cfg = currentSeatingConfig;
+      seatingEnabledToggle.checked = cfg.enabled;
+      if (seatingToggleLabel) seatingToggleLabel.textContent = cfg.enabled ? 'Enabled' : 'Disabled';
+      if (seatingConfigCard) seatingConfigCard.classList.toggle('hidden', !cfg.enabled);
+      if (seatingPeriodCard) seatingPeriodCard.classList.toggle('hidden', !cfg.enabled);
+      if (seatingNumGroups) seatingNumGroups.value = cfg.numGroups;
+      if (seatingDefaultSeats) seatingDefaultSeats.value = cfg.defaultSeatsPerGroup;
+      renderGroupOverrideInputs();
+      renderSeatingPreview();
+      renderPeriodOverrideRows();
+      if (seatingFrontRowInput) seatingFrontRowInput.value = Array.from(exceptions.frontRow).join('\n');
+      if (seatingAvoidPairsInput) seatingAvoidPairsInput.value = exceptions.avoidPairs.map(p => `${p.s1},${p.s2}`).join('\n');
+    }
+
+    function renderGroupOverrideInputs() {
+      if (!seatingGroupOverrides || !seatingNumGroups) return;
+      const n = Math.max(1, Math.min(50, parseInt(seatingNumGroups.value) || 6));
+      const defaultSeats = parseInt(seatingDefaultSeats ? seatingDefaultSeats.value : '4') || 4;
+      const overrides = currentSeatingConfig.perGroupOverrides || {};
+      seatingGroupOverrides.replaceChildren();
+      for (let g = 1; g <= n; g++) {
+        const key = String(g);
+        const val = overrides[key] != null ? overrides[key] : '';
+        const wrap = document.createElement('div');
+        wrap.className = 'flex items-center gap-1';
+        const lbl = document.createElement('label');
+        lbl.className = 'text-xs text-gray-600 w-14 flex-shrink-0';
+        lbl.textContent = `Group ${g}`;
+        const inp = document.createElement('input');
+        inp.type = 'number';
+        inp.min = '1';
+        inp.max = '10';
+        inp.value = val;
+        inp.placeholder = String(defaultSeats);
+        inp.dataset.group = key;
+        inp.className = 'group-override-input w-16 p-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-red-500';
+        inp.addEventListener('input', renderSeatingPreview);
+        wrap.append(lbl, inp);
+        seatingGroupOverrides.appendChild(wrap);
+      }
+    }
+
+    function renderSeatingPreview() {
+      if (!seatingPreview || !seatingNumGroups) return;
+      const n = Math.max(1, Math.min(50, parseInt(seatingNumGroups.value) || 6));
+      const defaultSeats = parseInt(seatingDefaultSeats ? seatingDefaultSeats.value : '4') || 4;
+      const overrides = {};
+      if (seatingGroupOverrides) {
+        seatingGroupOverrides.querySelectorAll('.group-override-input').forEach(inp => {
+          if (inp.value.trim() !== '') overrides[inp.dataset.group] = parseInt(inp.value) || defaultSeats;
+        });
+      }
+      seatingPreview.replaceChildren();
+      for (let g = 1; g <= n; g++) {
+        const seats = overrides[String(g)] != null ? overrides[String(g)] : defaultSeats;
+        const chip = document.createElement('div');
+        chip.className = 'flex flex-col items-center bg-gray-100 rounded-lg px-3 py-2 border border-gray-200 min-w-[56px]';
+        const gl = document.createElement('span');
+        gl.className = 'text-xs font-semibold text-gray-700';
+        gl.textContent = `G${g}`;
+        const sl = document.createElement('span');
+        sl.className = 'text-xs text-gray-500';
+        sl.textContent = seats + (seats !== 1 ? ' seats' : ' seat');
+        chip.append(gl, sl);
+        seatingPreview.appendChild(chip);
+      }
+    }
+
+    function renderPeriodOverrideRows() {
+      if (!seatingPeriodOverrides || !seatingPeriodBody) return;
+      const periods = Object.keys(allRosters).sort((a, b) => {
+        const na = parseFloat(a) || 0, nb = parseFloat(b) || 0;
+        return na - nb || String(a).localeCompare(String(b));
+      });
+      const p0 = seatingPeriodBody.querySelector('p');
+      if (periods.length === 0) {
+        if (p0) p0.textContent = 'No periods loaded. Upload a roster to configure period-specific settings.';
+        seatingPeriodOverrides.replaceChildren();
+        return;
+      }
+      if (p0) p0.textContent = 'Configure seating for specific periods (leave as "Use defaults" for most periods):';
+      seatingPeriodOverrides.replaceChildren();
+      const periodOverrides = currentSeatingConfig.perPeriodOverrides || {};
+      const numGroups = parseInt(seatingNumGroups ? seatingNumGroups.value : '6') || 6;
+      const defSeats = parseInt(seatingDefaultSeats ? seatingDefaultSeats.value : '4') || 4;
+      periods.forEach(period => {
+        const existing = periodOverrides[String(period)];
+        let mode = 'default';
+        if (existing) {
+          if (existing.enabled === false) mode = 'disabled';
+          else if (existing.numGroups || existing.defaultSeatsPerGroup) mode = 'custom';
+        }
+        const row = document.createElement('div');
+        row.className = 'period-override-row flex flex-wrap items-center gap-2 py-2 border-b border-gray-100 last:border-0';
+        row.dataset.period = period;
+        const label = document.createElement('span');
+        label.className = 'text-sm font-medium text-gray-700 w-20 flex-shrink-0';
+        label.textContent = 'Period ' + period;
+        const modeSelect = document.createElement('select');
+        modeSelect.className = 'period-override-mode text-sm border border-gray-300 rounded p-1 focus:ring-1 focus:ring-red-500';
+        [['default', 'Use defaults'], ['disabled', 'No seating'], ['custom', 'Custom groups/seats']].forEach(([val, txt]) => {
+          const opt = document.createElement('option');
+          opt.value = val;
+          opt.textContent = txt;
+          if (val === mode) opt.selected = true;
+          modeSelect.appendChild(opt);
+        });
+        const customFields = document.createElement('div');
+        customFields.className = 'flex items-center gap-2';
+        if (mode !== 'custom') customFields.classList.add('hidden');
+        const ngInp = document.createElement('input');
+        ngInp.type = 'number';
+        ngInp.min = '1'; ngInp.max = '50';
+        ngInp.value = (existing && existing.numGroups) ? existing.numGroups : numGroups;
+        ngInp.className = 'period-override-groups w-16 text-sm p-1 border border-gray-300 rounded';
+        ngInp.placeholder = 'Groups';
+        const ngLabel = document.createElement('span');
+        ngLabel.className = 'text-xs text-gray-500';
+        ngLabel.textContent = 'groups,';
+        const dsInp = document.createElement('input');
+        dsInp.type = 'number';
+        dsInp.min = '1'; dsInp.max = '10';
+        dsInp.value = (existing && existing.defaultSeatsPerGroup) ? existing.defaultSeatsPerGroup : defSeats;
+        dsInp.className = 'period-override-seats w-14 text-sm p-1 border border-gray-300 rounded';
+        dsInp.placeholder = 'Seats';
+        const dsLabel = document.createElement('span');
+        dsLabel.className = 'text-xs text-gray-500';
+        dsLabel.textContent = 'seats each';
+        customFields.append(ngInp, ngLabel, dsInp, dsLabel);
+        modeSelect.addEventListener('change', () => {
+          customFields.classList.toggle('hidden', modeSelect.value !== 'custom');
+        });
+        row.append(label, modeSelect, customFields);
+        seatingPeriodOverrides.appendChild(row);
+      });
+    }
+
+    function initSeatingUI() {
+      if (!seatingEnabledToggle) return;
+      seatingEnabledToggle.addEventListener('change', () => {
+        const on = seatingEnabledToggle.checked;
+        if (seatingToggleLabel) seatingToggleLabel.textContent = on ? 'Enabled' : 'Disabled';
+        if (seatingConfigCard) seatingConfigCard.classList.toggle('hidden', !on);
+        if (seatingPeriodCard) seatingPeriodCard.classList.toggle('hidden', !on);
+      });
+      const applyDefBtn = $('#seating-apply-defaults');
+      if (applyDefBtn) applyDefBtn.addEventListener('click', () => {
+        renderGroupOverrideInputs();
+        renderSeatingPreview();
+        renderPeriodOverrideRows();
+      });
+      if (seatingNumGroups) seatingNumGroups.addEventListener('input', renderSeatingPreview);
+      if (seatingDefaultSeats) seatingDefaultSeats.addEventListener('input', renderSeatingPreview);
+      const periodToggleBtn = $('#seating-period-toggle-btn');
+      if (periodToggleBtn) periodToggleBtn.addEventListener('click', () => {
+        if (seatingPeriodBody) seatingPeriodBody.classList.toggle('hidden');
+        if (seatingPeriodChevron) seatingPeriodChevron.classList.toggle('rotate-180');
+      });
+      if (seatingSaveBtn) seatingSaveBtn.addEventListener('click', saveSeatingConfig);
+      if (seatingSaveExceptionsBtn) seatingSaveExceptionsBtn.addEventListener('click', saveSeatingExceptions);
+      renderSeatingUI();
+    }
+
+    async function saveSeatingExceptions() {
+      const fr = seatingFrontRowInput ? seatingFrontRowInput.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean) : [];
+      const ap = seatingAvoidPairsInput ? seatingAvoidPairsInput.value.split(/\r?\n/).map(line => {
+        const pair = line.split(',').map(s => s.trim()).filter(Boolean);
+        if (pair.length === 2) return { s1: pair[0], s2: pair[1] };
+        return null;
+      }).filter(Boolean) : [];
+      exceptions.frontRow = new Set(fr);
+      exceptions.avoidPairs = ap;
+      if (frontRowInput) frontRowInput.value = fr.join('\n');
+      if (avoidPairsInput) avoidPairsInput.value = ap.map(p => `${p.s1},${p.s2}`).join('\n');
+      try { localStorage.setItem('exceptions', JSON.stringify({ avoidPairs: ap, frontRow: fr })); } catch (e) { console.warn(e); }
+      if (seatingExceptionsStatus) { seatingExceptionsStatus.textContent = 'Saved locally'; setTimeout(() => { if (seatingExceptionsStatus) seatingExceptionsStatus.textContent = ''; }, 1500); }
+      if (db && teacherUid) {
+        try {
+          const docRef = doc(db, teacherPath('config/main'));
+          await setDoc(docRef, { avoidPairs: ap, frontRow: fr, updatedAt: serverTimestamp() }, { merge: true });
+          if (seatingExceptionsStatus) { seatingExceptionsStatus.textContent = 'Saved to cloud'; setTimeout(() => { if (seatingExceptionsStatus) seatingExceptionsStatus.textContent = ''; }, 1500); }
+        } catch {
+          if (seatingExceptionsStatus) { seatingExceptionsStatus.textContent = 'Cloud save failed'; setTimeout(() => { if (seatingExceptionsStatus) seatingExceptionsStatus.textContent = ''; }, 2000); }
         }
       }
     }
@@ -1628,9 +2109,76 @@
     }
     function randomChoice(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
+    // Returns { group: number|null, overflow: boolean }
+    // group null = seating disabled; overflow true = all groups full
     function pickGroup(student) {
       const id = student ? String(student.StudentID) : null;
+      const period = periodSelect ? periodSelect.value : null;
+      const effectiveCfg = getEffectiveSeatingConfig(period);
 
+      // Seating disabled (global or per-period)
+      if (!effectiveCfg.enabled) return { group: null, overflow: false };
+
+      const numGroups = effectiveCfg.numGroups;
+      const avoid = id ? forbiddenGroupsFor(id) : new Set();
+      const needsFront = id ? isFront(id) : false;
+
+      // Count occupancy per group
+      const counts = {};
+      for (let g = 1; g <= numGroups; g++) counts[g] = 0;
+      periodAttendanceLog.forEach(l => {
+        if (typeof l.Group === 'number' && l.Group >= 1 && l.Group <= numGroups) {
+          counts[l.Group] = (counts[l.Group] || 0) + 1;
+        }
+      });
+
+      const cap = g => getGroupCap(g, effectiveCfg);
+
+      // Front groups = first ~15% of groups (configurable convention)
+      const frontGroups = new Set();
+      if (needsFront) {
+        const frontCount = Math.max(1, Math.ceil(numGroups * 0.15));
+        for (let g = 1; g <= frontCount; g++) frontGroups.add(g);
+      }
+
+      // Pool = groups with capacity, not in avoid set
+      let pool = [];
+      for (let g = 1; g <= numGroups; g++) {
+        if (counts[g] < cap(g) && !avoid.has(g)) pool.push(g);
+      }
+
+      // Front-row preference: narrow to front groups if available
+      if (needsFront && frontGroups.size > 0) {
+        const frontPool = pool.filter(g => frontGroups.has(g));
+        if (frontPool.length) pool = frontPool;
+      }
+
+      // Retry without avoid restriction if all blocked
+      if (pool.length === 0) {
+        let alt = [];
+        for (let g = 1; g <= numGroups; g++) {
+          if (counts[g] < cap(g)) alt.push(g);
+        }
+        if (needsFront && frontGroups.size > 0) {
+          const frontAlt = alt.filter(g => frontGroups.has(g));
+          pool = frontAlt.length ? frontAlt : alt;
+        } else {
+          pool = alt;
+        }
+      }
+
+      // All groups full → overflow
+      if (pool.length === 0) return { group: null, overflow: true };
+
+      // Pick from least-full groups for even distribution
+      const minOccupancy = Math.min(...pool.map(g => counts[g]));
+      const leastFull = pool.filter(g => counts[g] === minOccupancy);
+      return { group: randomChoice(leastFull), overflow: false };
+    }
+
+    // Legacy adapter used by runGroupTests() — returns just the group number
+    function pickGroupLegacy(student) {
+      const id = student ? String(student.StudentID) : null;
       const counts = new Array(MAX_GROUP + 1).fill(0);
       periodAttendanceLog.forEach(l => { if (typeof l.Group === 'number') counts[l.Group]++; });
 
@@ -1834,16 +2382,24 @@
 
           if (existingSnap.exists()) {
             const existing = existingSnap.data();
-            const g = typeof existing.Group === 'number' ? existing.Group : pickGroup(student);
-            showGroup(g, existing.Status || status, student.FirstName);
+            const g = typeof existing.Group === 'number' ? existing.Group : null;
+            const seat = existing.Seat != null ? existing.Seat : null;
+            showGroup(g, existing.Status || status, getDisplayName(student), seat);
             updateUI();
             if (wasSmartSwitched) restoreToGlobalPeriod();
             return;
           }
 
           // Assign group and build log entry
-          const g = pickGroup(student);
-          const log = buildLogEntry(student, p, status, g, true);
+          const { group: g, overflow } = pickGroup(student);
+          if (overflow) {
+            showMessage('error', 'All groups full', 'Check with your teacher for a seat.');
+            signInButton.disabled = false;
+            if (wasSmartSwitched) restoreToGlobalPeriod();
+            return;
+          }
+          const seat = g != null ? calcSeatNumber(g) : null;
+          const log = buildLogEntry(student, p, status, g, true, seat);
 
           try {
             // Write to Firebase FIRST — don't show success until confirmed
@@ -1857,7 +2413,7 @@
             });
 
             // THEN show success
-            showGroup(g, status, student.FirstName);
+            showGroup(g, status, getDisplayName(student), seat);
 
             // Check if this sign-in should trigger a global period switch
             maybeUpdateGlobalPeriod(p);
@@ -1874,17 +2430,24 @@
           const list = getLocalLogs(today, p);
           const existing = list.find(x => x.StudentID === student.StudentID);
           if (existing) {
-            showGroup(existing.Group, existing.Status, student.FirstName);
+            showGroup(existing.Group, existing.Status, getDisplayName(student), existing.Seat);
             updateUI();
             if (wasSmartSwitched) restoreToGlobalPeriod();
             return;
           }
-          const g = pickGroup(student);
-          const log = buildLogEntry(student, p, status, g, false);
+          const { group: g, overflow } = pickGroup(student);
+          if (overflow) {
+            showMessage('error', 'All groups full', 'Check with your teacher for a seat.');
+            signInButton.disabled = false;
+            if (wasSmartSwitched) restoreToGlobalPeriod();
+            return;
+          }
+          const seat = g != null ? calcSeatNumber(g) : null;
+          const log = buildLogEntry(student, p, status, g, false, seat);
           list.push(log);
           setLocalLogs(today, p, list);
           periodAttendanceLog = list;
-          showGroup(g, status, student.FirstName);
+          showGroup(g, status, getDisplayName(student), seat);
         }
         updateUI();
         if (wasSmartSwitched) restoreToGlobalPeriod();
@@ -1964,12 +2527,11 @@
       const delay = type === 'error' ? 5000 : 2500;
       dismissTimer = setTimeout(() => { dismissMessage(); }, delay);
     }
-    function showGroup(group, status, first) {
+    function showGroup(group, status, first, seat) {
       const red700 = '#b91c1c';
       const red500 = '#ef4444';
       const glow = '0 0 48px rgba(185,28,28,.55), 0 0 120px rgba(185,28,28,.35), inset 0 0 60px rgba(185,28,28,.25)';
 
-      // Build group display DOM safely — all dynamic values use textContent
       const outer = document.createElement('div');
       outer.className = 'fade-in p-8 rounded-2xl ring-4';
       outer.style.cssText = `background:#000; border-color:${red700}; box-shadow:${glow}`;
@@ -1977,28 +2539,53 @@
       const nameDiv = document.createElement('div');
       nameDiv.className = 'text-2xl font-semibold';
       nameDiv.style.color = '#ffffff';
-      nameDiv.textContent = `${first}, you are`;
 
-      const groupDiv = document.createElement('div');
-      groupDiv.className = 'mt-2 text-6xl md:text-7xl font-extrabold tracking-tight';
-      groupDiv.style.color = red500;
-      groupDiv.textContent = `GROUP ${group}`;
+      if (group == null) {
+        // Seating disabled — just show signed in
+        nameDiv.textContent = first + ', you are';
+        const signedInDiv = document.createElement('div');
+        signedInDiv.className = 'mt-2 text-5xl md:text-6xl font-extrabold tracking-tight';
+        signedInDiv.style.color = red500;
+        signedInDiv.textContent = 'Signed in!';
+        const statusDiv = document.createElement('div');
+        statusDiv.className = 'mt-2 text-lg';
+        statusDiv.style.color = '#ffffff';
+        const statusSpan = document.createElement('span');
+        statusSpan.className = 'font-bold';
+        statusSpan.style.color = red500;
+        statusSpan.textContent = status;
+        statusDiv.append('Status: ', statusSpan);
+        const helpDiv = document.createElement('div');
+        helpDiv.className = 'mt-4 text-sm';
+        helpDiv.style.color = '#ffffff';
+        helpDiv.textContent = 'Press Enter to continue';
+        outer.append(nameDiv, signedInDiv, statusDiv, helpDiv);
+      } else {
+        // Show group and seat
+        nameDiv.textContent = first + ', you are in';
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'mt-2 text-6xl md:text-7xl font-extrabold tracking-tight';
+        groupDiv.style.color = red500;
+        groupDiv.textContent = 'Group ' + group;
+        const seatDiv = document.createElement('div');
+        seatDiv.className = 'mt-1 text-3xl md:text-4xl font-bold';
+        seatDiv.style.color = '#ffffff';
+        seatDiv.textContent = seat != null ? 'Seat ' + seat : '';
+        const statusDiv = document.createElement('div');
+        statusDiv.className = 'mt-2 text-lg';
+        statusDiv.style.color = '#ffffff';
+        const statusSpan = document.createElement('span');
+        statusSpan.className = 'font-bold';
+        statusSpan.style.color = red500;
+        statusSpan.textContent = status;
+        statusDiv.append('Status: ', statusSpan);
+        const helpDiv = document.createElement('div');
+        helpDiv.className = 'mt-4 text-sm';
+        helpDiv.style.color = '#ffffff';
+        helpDiv.textContent = 'Press Enter to continue';
+        outer.append(nameDiv, groupDiv, seatDiv, statusDiv, helpDiv);
+      }
 
-      const statusDiv = document.createElement('div');
-      statusDiv.className = 'mt-2 text-lg';
-      statusDiv.style.color = '#ffffff';
-      const statusSpan = document.createElement('span');
-      statusSpan.className = 'font-bold';
-      statusSpan.style.color = red500;
-      statusSpan.textContent = status;
-      statusDiv.append('Status: ', statusSpan);
-
-      const helpDiv = document.createElement('div');
-      helpDiv.className = 'mt-4 text-sm';
-      helpDiv.style.color = '#ffffff';
-      helpDiv.textContent = 'Press Enter to continue';
-
-      outer.append(nameDiv, groupDiv, statusDiv, helpDiv);
       messageView.replaceChildren(outer);
       kioskView.classList.add('hidden'); messageView.classList.remove('hidden');
       if (dismissTimer) clearTimeout(dismissTimer);
@@ -2106,24 +2693,26 @@
       const status = statusForNow();
 
       // 3. Assign Group
-      const g = pickGroup(student);
+      const { group: g, overflow } = pickGroup(student);
+      if (overflow) return; // Can't assign if all full
 
-      // 4. Save (skip if already signed in)
+      // 4. Compute seat
+      const seat = g != null ? calcSeatNumber(g) : null;
+
+      // 5. Save (skip if already signed in)
       if (db && teacherUid) {
-        // Firestore logic
         const ref = doc(db, teacherPath(`attendance/${today}/periods/${p}/students/${studentId}`));
         try {
           const existingSnap = await getDoc(ref);
-          if (existingSnap.exists()) return; // Already signed in — don't overwrite
-          await setDoc(ref, buildLogEntry(student, p, status, g, true));
+          if (existingSnap.exists()) return;
+          await setDoc(ref, buildLogEntry(student, p, status, g, true, seat));
         } catch (err) {
           console.error("Manual check-in failed:", err);
         }
       } else {
-        // Local logic
         let list = getLocalLogs(today, p);
-        if (list.find(x => x.StudentID === studentId)) return; // Already signed in
-        list.push(buildLogEntry(student, p, status, g, false));
+        if (list.find(x => x.StudentID === studentId)) return;
+        list.push(buildLogEntry(student, p, status, g, false, seat));
         setLocalLogs(today, p, list);
         periodAttendanceLog = list;
         updateUI();
@@ -2142,73 +2731,94 @@
       summaryAbsent.textContent = Math.max(0, absent);
       summaryTotal.textContent = (currentRoster || []).length;
 
+      absentListEl.replaceChildren();
       if (!periodSelect.value) {
-        absentListEl.innerHTML = '<li class="text-gray-500">Select a period to see list.</li>';
+        const li = document.createElement('li');
+        li.className = 'text-gray-500';
+        li.textContent = 'Select a period to see list.';
+        absentListEl.appendChild(li);
       } else {
         const set = new Set(periodAttendanceLog.map(l => l.StudentID));
         const absentList = (currentRoster || []).filter(s => !set.has(s.StudentID));
         if (absentList.length === 0 && (currentRoster || []).length > 0) {
-          absentListEl.innerHTML = '<li class="text-green-600 font-semibold">All students are present!</li>';
+          const li = document.createElement('li');
+          li.className = 'text-green-600 font-semibold';
+          li.textContent = 'All students are present!';
+          absentListEl.appendChild(li);
         } else {
-          absentListEl.innerHTML = '';
           absentList.sort((a, b) => String(a.LastName || '').localeCompare(String(b.LastName || '')));
-
-          // UPDATED ABSENT LIST GENERATION
           absentList.forEach(s => {
             const li = document.createElement('li');
-            // Flex layout to hold name and arrow
-            li.className = "flex justify-between items-center hover:bg-gray-200 rounded px-2 py-1 group cursor-default";
-            li.innerHTML = `
-            <span>${escHtml(s.LastName || '')}, ${escHtml(s.FirstName || '')}</span>
-            <button onclick="manualCheckIn('${escHtml(s.StudentID)}')"
-                    class="text-green-600 hover:text-green-800 opacity-0 group-hover:opacity-100 transition-opacity font-bold px-2"
-                    title="Mark Present">
-                ➜
-            </button>
-        `;
+            li.className = 'flex justify-between items-center hover:bg-gray-200 rounded px-2 py-1 group cursor-default';
+            const nameSpan = document.createElement('span');
+            nameSpan.title = (s.FirstName || '') + ' ' + (s.LastName || '');
+            nameSpan.textContent = (s.LastName || '') + ', ' + (s.preferredName || s.FirstName || '');
+            const checkInBtn = document.createElement('button');
+            checkInBtn.className = 'text-green-600 hover:text-green-800 opacity-0 group-hover:opacity-100 transition-opacity font-bold px-2';
+            checkInBtn.title = 'Mark Present';
+            checkInBtn.textContent = '\u279C';
+            checkInBtn.addEventListener('click', () => manualCheckIn(s.StudentID));
+            li.append(nameSpan, checkInBtn);
             absentListEl.appendChild(li);
           });
         }
       }
 
-      // Updated Group Report Logic with Undo/Toggle
+      // Group Report — DOM-safe construction
+      groupReportEl.replaceChildren();
       if (!periodSelect.value) {
-        groupReportEl.innerHTML = '<p class="text-gray-500">Select a period to see groups.</p>';
+        const placeholder = document.createElement('p');
+        placeholder.className = 'text-gray-500';
+        placeholder.textContent = 'Select a period to see groups.';
+        groupReportEl.appendChild(placeholder);
       } else {
-        const map = new Map(); for (let g = 1; g <= MAX_GROUP; g++) map.set(g, []);
-        // Store whole object, not just name
+        const period = periodSelect.value;
+        const effectiveCfg = getEffectiveSeatingConfig(period);
+        const numGroups = effectiveCfg.enabled ? effectiveCfg.numGroups : MAX_GROUP;
+        const map = new Map();
+        for (let g = 1; g <= numGroups; g++) map.set(g, []);
         periodAttendanceLog.forEach(l => { if (l.Group && map.has(l.Group)) map.get(l.Group).push(l); });
 
-        groupReportEl.innerHTML = '';
-        if (periodAttendanceLog.length === 0) groupReportEl.innerHTML = '<p class="text-gray-500">Students will appear here as they sign in.</p>';
-        else {
+        if (periodAttendanceLog.length === 0) {
+          const placeholder = document.createElement('p');
+          placeholder.className = 'text-gray-500';
+          placeholder.textContent = 'Students will appear here as they sign in.';
+          groupReportEl.appendChild(placeholder);
+        } else {
           map.forEach((arr, grp) => {
             if (arr.length > 0) {
+              const cap = effectiveCfg.enabled ? getGroupCap(grp, effectiveCfg) : 3;
               const div = document.createElement('div');
-
-              const listItems = arr.map(s => {
+              const h4 = document.createElement('h4');
+              h4.className = 'font-bold text-md text-gray-700 mt-2';
+              h4.textContent = 'Group ' + grp + ' (' + arr.length + '/' + cap + ')';
+              const ul = document.createElement('ul');
+              ul.className = 'text-sm list-disc list-inside mb-2';
+              arr.forEach(s => {
                 let color = 'text-green-600';
                 if (s.Status === 'Late') color = 'text-yellow-600';
                 if (s.Status === 'Truant' || s.Status === 'Absent') color = 'text-red-600';
-
-                return `
-              <li class="flex justify-between items-center group pl-1 py-1 hover:bg-gray-200 rounded">
-                <span>${escHtml(s.Name)}</span>
-                <div class="flex items-center gap-2">
-                  <button onclick="toggleStatus('${escHtml(s.StudentID)}', '${escHtml(s.Status)}')"
-                          class="text-xs font-mono cursor-pointer ${color} hover:underline font-bold"
-                          title="Click to toggle status">
-                    ${escHtml(s.Status.toUpperCase().substring(0, 3))}
-                  </button>
-                  <button onclick="removeStudent('${escHtml(s.StudentID)}')"
-                          class="text-red-400 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold px-1" title="Delete">
-                    &times;
-                  </button>
-                </div>
-              </li>`;
-              }).join('');
-
-              div.innerHTML = `<h4 class="font-bold text-md text-gray-700 mt-2">Group ${grp} (${arr.length})</h4><ul class="text-sm list-disc list-inside mb-2">${listItems}</ul>`;
+                const li = document.createElement('li');
+                li.className = 'flex justify-between items-center group pl-1 py-1 hover:bg-gray-200 rounded';
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = s.Seat != null ? s.Name + ' (Seat ' + s.Seat + ')' : s.Name;
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'flex items-center gap-2';
+                const toggleBtn = document.createElement('button');
+                toggleBtn.className = 'text-xs font-mono cursor-pointer ' + color + ' hover:underline font-bold';
+                toggleBtn.title = 'Click to toggle status';
+                toggleBtn.textContent = (s.Status || '').toUpperCase().substring(0, 3);
+                toggleBtn.addEventListener('click', () => toggleStatus(s.StudentID, s.Status));
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'text-red-400 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold px-1';
+                removeBtn.title = 'Delete';
+                removeBtn.textContent = '\u00d7';
+                removeBtn.addEventListener('click', () => removeStudent(s.StudentID));
+                actionsDiv.append(toggleBtn, removeBtn);
+                li.append(nameSpan, actionsDiv);
+                ul.appendChild(li);
+              });
+              div.append(h4, ul);
               groupReportEl.appendChild(div);
             }
           });
@@ -2270,8 +2880,8 @@
       exceptions.frontRow = new Set(['S1']);
       periodAttendanceLog = [{ StudentID: 'B1', Group: 5 }, { StudentID: 'X', Group: 1 }];
 
-      const g1 = pickGroup({ StudentID: 'S1' }); console.assert([1, 2, 12, 13].includes(g1), 'front-row preference');
-      const g2 = pickGroup({ StudentID: 'A1' }); console.assert(g2 !== 5, 'avoid-pair enforce');
+      const g1 = pickGroupLegacy({ StudentID: 'S1' }); console.assert([1, 2, 12, 13].includes(g1), 'front-row preference');
+      const g2 = pickGroupLegacy({ StudentID: 'A1' }); console.assert(g2 !== 5, 'avoid-pair enforce');
 
       // Restore originals
       exceptions.avoidPairs = origAP;

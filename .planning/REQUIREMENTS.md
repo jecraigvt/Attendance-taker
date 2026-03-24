@@ -16,21 +16,21 @@
 
 ### Teacher Dashboard
 
-- [ ] **DASH-01**: Teacher sees sync status (last sync time, success/failure, error details)
-- [ ] **DASH-02**: Teacher onboarding flow guides first-time setup (enter Aeries creds, configure seating)
-- [ ] **DASH-03**: Teacher can update Aeries credentials through the web UI at any time
+- [x] **DASH-01**: Teacher sees sync status (last sync time, success/failure, error details)
+- [x] **DASH-02**: Teacher onboarding flow guides first-time setup (enter Aeries creds, configure seating)
+- [x] **DASH-03**: Teacher can update Aeries credentials through the web UI at any time
 
 ### Roster Management
 
-- [ ] **ROST-01**: Playwright auto-fetches class rosters from Aeries using teacher's credentials
-- [ ] **ROST-02**: Rosters refresh automatically on a schedule (e.g., weekly or on-demand)
+- [x] **ROST-01**: Playwright auto-fetches class rosters from Aeries using teacher's credentials
+- [x] **ROST-02**: Rosters refresh automatically on a schedule (e.g., weekly or on-demand)
 
 ### Seating Configuration
 
-- [ ] **SEAT-01**: Teacher can configure group-based seating (group names, sizes, front-row groups)
-- [ ] **SEAT-02**: Teacher can configure individual desk-based seating (desk names/numbers)
-- [ ] **SEAT-03**: Teacher can choose between group or individual desk mode during setup
-- [ ] **SEAT-04**: Teacher can turn off seat assignment entirely
+- [x] **SEAT-01**: Teacher can configure group-based seating (group names, sizes, front-row groups)
+- [x] **SEAT-02**: Teacher can configure individual desk-based seating (desk names/numbers)
+- [x] **SEAT-03**: Teacher can choose between group or individual desk mode during setup
+- [x] **SEAT-04**: Teacher can turn off seat assignment entirely
 
 ### Kiosk Integration
 
@@ -77,15 +77,15 @@
 | AUTH-06 | Phase 5 | Complete |
 | KIOSK-01 | Phase 5 | Complete |
 | KIOSK-02 | Phase 5 | Complete |
-| DASH-01 | Phase 6 | Pending |
-| DASH-02 | Phase 6 | Pending |
-| DASH-03 | Phase 6 | Pending |
-| SEAT-01 | Phase 6 | Pending |
-| SEAT-02 | Phase 6 | Pending |
-| SEAT-03 | Phase 6 | Pending |
-| SEAT-04 | Phase 6 | Pending |
-| ROST-01 | Phase 6 | Pending |
-| ROST-02 | Phase 6 | Pending |
+| DASH-01 | Phase 6 | Complete |
+| DASH-02 | Phase 6 | Complete |
+| DASH-03 | Phase 6 | Complete |
+| SEAT-01 | Phase 6 | Complete |
+| SEAT-02 | Phase 6 | Complete |
+| SEAT-03 | Phase 6 | Complete |
+| SEAT-04 | Phase 6 | Complete |
+| ROST-01 | Phase 6 | Complete |
+| ROST-02 | Phase 6 | Complete |
 | SYNC-01 | Phase 7 | Pending |
 | SYNC-02 | Phase 7 | Pending |
 | SYNC-03 | Phase 7 | Pending |

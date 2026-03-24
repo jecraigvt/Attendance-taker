@@ -108,10 +108,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — Dashboard shell and navigation: restructure admin panel into tabbed dashboard (Attendance, Roster, Seating, Settings)
-- [ ] 06-02-PLAN.md — Seating configuration: configurable groups/seats, per-period overrides, dynamic pickGroup(), "Group X, Seat Y" display
-- [ ] 06-03-PLAN.md — Roster management: HTTP-based Aeries roster fetch Cloud Function, roster viewer/editor, preferred names, manual add/remove
-- [ ] 06-04-PLAN.md — Onboarding wizard, sync status card, and Settings section (credential update, PIN change)
+- [x] 06-01-PLAN.md — Dashboard shell and navigation: restructure admin panel into tabbed dashboard (Attendance, Roster, Seating, Settings)
+- [x] 06-02-PLAN.md — Seating configuration: configurable groups/seats, per-period overrides, dynamic pickGroup(), "Group X, Seat Y" display
+- [x] 06-03-PLAN.md — Roster management: HTTP-based Aeries roster fetch Cloud Function, roster viewer/editor, preferred names, manual add/remove
+- [x] 06-04-PLAN.md — Onboarding wizard, sync status card, and Settings section (credential update, PIN change)
 
 ### Phase 7: Railway Cloud Sync
 **Goal**: Attendance sync runs automatically in the cloud on Railway every 20 minutes during school hours for every teacher — with no dependency on the developer's local machine
@@ -155,6 +155,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 3. Schedule Improvements | v1.0 | 1/1 | Complete | 2026-02-05 |
 | 4. Tardy Logic Review | v1.0 | 3/3 | Complete | 2026-02-05 |
 | 5. Auth Foundation and Data Migration | v2.0 | 3/3 | Complete | 2026-03-23 |
-| 6. Teacher Dashboard and Roster Management | v2.0 | 0/4 | Not started | - |
+| 6. Teacher Dashboard and Roster Management | v2.0 | 4/4 | Complete | 2026-03-24 |
 | 7. Railway Cloud Sync | v2.0 | 0/2 | Not started | - |
 | 8. Self-Healing LLM Layer | v2.0 | 0/2 | Not started | - |

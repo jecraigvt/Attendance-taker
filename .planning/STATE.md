@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-23)
 
 **Core value:** Every student who signs in must have their correct attendance status reflected in Aeries. The system must work reliably for multiple teachers without requiring technical support.
-**Current focus:** Phase 5 complete — ready to plan Phase 6
+**Current focus:** Phase 6 in progress — dashboard shell complete, plans 02-04 remaining
 
 ## Current Position
 
-Phase: 5 of 8 (Auth Foundation and Data Migration) — COMPLETE
-Plan: 3 of 3 in current phase
-Status: Phase 5 complete, verified, deployed
-Last activity: 2026-03-23 — Phase 5 executed and deployed to production
+Phase: 6 of 8 (Teacher Dashboard and Roster Management) — In progress
+Plan: 1 of 4 in current phase — COMPLETE
+Status: Plan 06-01 complete, ready for 06-02
+Last activity: 2026-03-24 — Completed 06-01-PLAN.md (dashboard shell and navigation)
 
-Progress: [██████░░░░░░░░░░░░░░] 55% (v1.0 complete; v2.0 phase 5 complete)
+Progress: [███████░░░░░░░░░░░░░] 59% (v1.0 complete; v2.0 phases 1-5 + 6-01 complete)
 
 ## Performance Metrics
 
@@ -32,7 +32,8 @@ Progress: [██████░░░░░░░░░░░░░░] 55% (v1
 | 3. Schedule Improvements | 1/1 | Complete |
 | 4. Tardy Logic Review | 3/3 | Complete |
 | 5. Auth Foundation | 3/3 | Complete |
-| 6-8. Remaining v2.0 | 0/8 | Not started |
+| 6. Teacher Dashboard | 1/4 | In progress |
+| 7-8. Remaining v2.0 | 0/4 | Not started |
 
 ## Accumulated Context
 
@@ -62,6 +63,13 @@ v2.0 confirmed:
 - kiosk-binding-storage: sessionStorage always; localStorage only if "remember me" checked
 - pin-storage: kioskPin stored in teachers/{uid}/config/main
 
+Phase 6 confirmed:
+
+- dashboard-layout: Fixed fullscreen panel (fixed inset-0) with tab navigation; Attendance tab default on open
+- dashboard-section-pattern: class=dashboard-section + id=dashboard-{name}; switchDashboardSection() shows/hides
+- dashboard-nav-pattern: class=dashboard-nav-btn; active state = border-red-700 + text-red-700
+- showAdminPanel-alias: showAdminPanel() is alias for showDashboard(); safe to call from anywhere
+
 ### Blockers/Concerns
 
 - [Phase 5] RESOLVED: All deployment issues (IAM, CORS, secrets, token signing) fixed
@@ -72,6 +80,6 @@ v2.0 confirmed:
 
 ## Session Continuity
 
-Last session: 2026-03-23
-Stopped at: Phase 5 complete — all plans executed, verified, deployed to production
-Resume file: None — ready to plan Phase 6
+Last session: 2026-03-24
+Stopped at: Completed 06-01-PLAN.md — dashboard shell with navigation
+Resume file: None — ready for 06-02

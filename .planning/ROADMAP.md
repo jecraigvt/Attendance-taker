@@ -91,9 +91,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Data migration script: copy existing records to per-teacher paths, verify counts, confirm kiosk still works
-- [ ] 05-02-PLAN.md — Auth infrastructure: Cloud Function for Aeries credential validation/encryption, Firestore security rules
-- [ ] 05-03-PLAN.md — Kiosk integration: login screen, PIN-based kiosk exit, per-teacher Firestore paths in HTML and sync script
+- [x] 05-01-PLAN.md — Data migration script: copy existing records to per-teacher paths, verify counts, confirm kiosk still works
+- [x] 05-02-PLAN.md — Auth infrastructure: Cloud Function for Aeries credential validation/encryption, Firestore security rules
+- [x] 05-03-PLAN.md — Kiosk integration: login screen, PIN-based kiosk exit, per-teacher Firestore paths in HTML and sync script
 
 ### Phase 6: Teacher Dashboard and Roster Management
 **Goal**: Teachers can self-serve their full account setup — entering credentials, configuring seating, and triggering roster fetches — without any developer involvement
@@ -154,7 +154,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 2. Audit & Verification | v1.0 | 2/2 | Complete | 2026-02-05 |
 | 3. Schedule Improvements | v1.0 | 1/1 | Complete | 2026-02-05 |
 | 4. Tardy Logic Review | v1.0 | 3/3 | Complete | 2026-02-05 |
-| 5. Auth Foundation and Data Migration | v2.0 | 0/3 | Planning complete | - |
+| 5. Auth Foundation and Data Migration | v2.0 | 3/3 | Complete | 2026-03-23 |
 | 6. Teacher Dashboard and Roster Management | v2.0 | 0/4 | Not started | - |
 | 7. Railway Cloud Sync | v2.0 | 0/2 | Not started | - |
 | 8. Self-Healing LLM Layer | v2.0 | 0/2 | Not started | - |

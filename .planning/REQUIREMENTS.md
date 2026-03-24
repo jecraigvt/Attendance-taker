@@ -7,12 +7,12 @@
 
 ### Authentication & Data Isolation
 
-- [ ] **AUTH-01**: Teacher can sign in with their Aeries username/password
-- [ ] **AUTH-02**: Teacher can easily update their Aeries password when it changes
-- [ ] **AUTH-03**: Aeries credentials are encrypted at rest (Fernet encryption, key in Railway env)
-- [ ] **AUTH-04**: Each teacher's rosters and attendance data are isolated under their UID in Firestore
-- [ ] **AUTH-05**: Firestore security rules prevent teachers from accessing each other's data
-- [ ] **AUTH-06**: Jeremy's existing data is migrated to the new per-teacher structure without data loss
+- [x] **AUTH-01**: Teacher can sign in with their Aeries username/password
+- [x] **AUTH-02**: Teacher can easily update their Aeries password when it changes
+- [x] **AUTH-03**: Aeries credentials are encrypted at rest (Fernet encryption, key in Railway env)
+- [x] **AUTH-04**: Each teacher's rosters and attendance data are isolated under their UID in Firestore
+- [x] **AUTH-05**: Firestore security rules prevent teachers from accessing each other's data
+- [x] **AUTH-06**: Jeremy's existing data is migrated to the new per-teacher structure without data loss
 
 ### Teacher Dashboard
 
@@ -34,8 +34,8 @@
 
 ### Kiosk Integration
 
-- [ ] **KIOSK-01**: Kiosk tablet links to a specific teacher after teacher logs in once
-- [ ] **KIOSK-02**: Student sign-ins write to the correct teacher's data path
+- [x] **KIOSK-01**: Kiosk tablet links to a specific teacher after teacher logs in once
+- [x] **KIOSK-02**: Student sign-ins write to the correct teacher's data path
 
 ### Cloud Sync
 
@@ -69,14 +69,14 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-01 | Phase 5 | Pending |
-| AUTH-02 | Phase 5 | Pending |
-| AUTH-03 | Phase 5 | Pending |
-| AUTH-04 | Phase 5 | Pending |
-| AUTH-05 | Phase 5 | Pending |
-| AUTH-06 | Phase 5 | Pending |
-| KIOSK-01 | Phase 5 | Pending |
-| KIOSK-02 | Phase 5 | Pending |
+| AUTH-01 | Phase 5 | Complete |
+| AUTH-02 | Phase 5 | Complete |
+| AUTH-03 | Phase 5 | Complete |
+| AUTH-04 | Phase 5 | Complete |
+| AUTH-05 | Phase 5 | Complete |
+| AUTH-06 | Phase 5 | Complete |
+| KIOSK-01 | Phase 5 | Complete |
+| KIOSK-02 | Phase 5 | Complete |
 | DASH-01 | Phase 6 | Pending |
 | DASH-02 | Phase 6 | Pending |
 | DASH-03 | Phase 6 | Pending |

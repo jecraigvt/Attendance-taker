@@ -146,7 +146,7 @@ function fernetEncrypt(plaintext) {
  * Aeries username.  Returns the UserRecord or null if not found.
  */
 async function findFirebaseUserByUsername(username) {
-  const email = `${username}@${AUTH_EMAIL_DOMAIN}`;
+  const email = username.includes("@") ? username : `${username}@${AUTH_EMAIL_DOMAIN}`;
   try {
     const user = await admin.auth().getUserByEmail(email);
     return user;
@@ -163,7 +163,7 @@ async function findFirebaseUserByUsername(username) {
  * The Firebase password is random — actual auth is via Aeries + custom token.
  */
 async function createFirebaseUser(username) {
-  const email = `${username}@${AUTH_EMAIL_DOMAIN}`;
+  const email = username.includes("@") ? username : `${username}@${AUTH_EMAIL_DOMAIN}`;
   // Random password for the Firebase Auth record.  Teachers never use this;
   // they always authenticate via the Aeries flow which returns a custom token.
   const randomPassword =
@@ -198,6 +198,7 @@ async function createFirebaseUser(username) {
 exports.authenticateTeacher = onCall(
     {
       region: "us-central1",
+      secrets: ["FERNET_KEY"],
     },
     async (request) => {
       const {username, password} = request.data || {};

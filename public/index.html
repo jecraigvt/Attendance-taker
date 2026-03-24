@@ -139,7 +139,7 @@
   <div id="pin-entry-screen" class="hidden fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
     <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center">
       <h2 class="text-2xl font-bold text-gray-900 mb-2">Enter PIN</h2>
-      <p class="text-sm text-gray-500 mb-4">Enter your 4-digit PIN to access the admin panel.</p>
+      <p class="text-sm text-gray-500 mb-4">Enter your 4-digit PIN to access the dashboard.</p>
 
       <div id="pin-entry-error" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700"></div>
 
@@ -154,24 +154,66 @@
     </div>
   </div>
 
-  <div class="w-full max-w-6xl mx-auto bg-white rounded-2xl shadow-lg overflow-hidden">
-    <div class="flex">
+  <!-- ================== DASHBOARD ================== -->
+  <div id="dashboard-panel" class="hidden fixed inset-0 bg-gray-50 flex flex-col overflow-hidden">
 
-      <!-- ================== ADMIN ================== -->
-      <div id="admin-panel" class="w-full bg-gray-50 p-6 border-r border-gray-200 hidden">
+    <!-- Dashboard Header -->
+    <header class="bg-white border-b border-gray-200 shadow-sm flex-shrink-0">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+        <!-- Left: branding + teacher info -->
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-8 h-8 bg-red-700 rounded-lg flex items-center justify-center flex-shrink-0">
+            <span class="text-white font-bold text-sm">A</span>
+          </div>
+          <div class="min-w-0">
+            <p id="teacher-name-display" class="text-sm font-semibold text-gray-900 hidden truncate"></p>
+            <p id="current-date" class="text-xs text-gray-500"></p>
+          </div>
+        </div>
+
+        <!-- Right: actions -->
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <button id="hide-admin-button"
+            class="text-sm text-gray-600 border border-gray-300 hover:bg-gray-100 px-3 py-1.5 rounded-lg transition-all">
+            Return to Kiosk
+          </button>
+          <button id="teacher-logout-btn"
+            class="text-sm text-red-600 border border-red-200 hover:bg-red-50 px-3 py-1.5 rounded-lg hidden transition-all">
+            Sign Out
+          </button>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav id="dashboard-nav" class="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1 overflow-x-auto" aria-label="Dashboard sections">
+        <button data-section="attendance"
+          class="dashboard-nav-btn active-nav-btn whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 border-red-700 text-red-700 transition-colors">
+          Attendance
+        </button>
+        <button data-section="roster"
+          class="dashboard-nav-btn whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors">
+          Roster
+        </button>
+        <button data-section="seating"
+          class="dashboard-nav-btn whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors">
+          Seating
+        </button>
+        <button data-section="settings"
+          class="dashboard-nav-btn whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors">
+          Settings
+        </button>
+      </nav>
+    </header>
+
+    <!-- Dashboard Content Area -->
+    <div class="flex-1 overflow-y-auto">
+
+      <!-- ===== ATTENDANCE SECTION (default) ===== -->
+      <section id="dashboard-attendance" class="dashboard-section max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 
           <!-- ===== LEFT COLUMN (PRIMARY CONTROLS) ===== -->
           <div class="md:col-span-1 flex flex-col space-y-6">
-
-            <div>
-              <div class="flex justify-between items-start">
-                <h2 class="text-2xl font-bold text-gray-900 mb-2">Teacher Admin</h2>
-                <button id="teacher-logout-btn" class="text-xs text-red-600 hover:underline hidden">Sign Out</button>
-              </div>
-              <p id="teacher-name-display" class="text-sm font-semibold text-red-700 mb-1 hidden"></p>
-              <p id="current-date" class="text-sm text-gray-500"></p>
-            </div>
 
             <!-- Period override (TOP PRIORITY) -->
             <div>
@@ -313,17 +355,56 @@
                 rosters</button>
             </div>
 
-
-            <!-- Kiosk Mode Button -->
-            <div class="pt-6 border-t">
-              <button id="hide-admin-button"
-                class="w-full bg-gray-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-700 transition-all">Return to Kiosk Mode</button>
-            </div>
-
           </div><!-- End Right Column -->
 
         </div><!-- grid -->
-      </div><!-- admin-panel -->
+      </section><!-- dashboard-attendance -->
+
+      <!-- ===== ROSTER SECTION ===== -->
+      <section id="dashboard-roster" class="dashboard-section hidden max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div class="bg-white rounded-xl border border-gray-200 p-8 text-center">
+          <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+            </svg>
+          </div>
+          <h2 class="text-xl font-semibold text-gray-800 mb-2">Roster Management</h2>
+          <p class="text-gray-500 text-sm">Roster management is coming soon. You'll be able to view and edit your class rosters, manage preferred names, and sync from Aeries here.</p>
+        </div>
+      </section><!-- dashboard-roster -->
+
+      <!-- ===== SEATING SECTION ===== -->
+      <section id="dashboard-seating" class="dashboard-section hidden max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div class="bg-white rounded-xl border border-gray-200 p-8 text-center">
+          <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
+            </svg>
+          </div>
+          <h2 class="text-xl font-semibold text-gray-800 mb-2">Seating Configuration</h2>
+          <p class="text-gray-500 text-sm">Seating configuration is coming soon. You'll be able to set up groups, seat counts, and per-period overrides here.</p>
+        </div>
+      </section><!-- dashboard-seating -->
+
+      <!-- ===== SETTINGS SECTION ===== -->
+      <section id="dashboard-settings" class="dashboard-section hidden max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div class="bg-white rounded-xl border border-gray-200 p-8 text-center">
+          <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+            </svg>
+          </div>
+          <h2 class="text-xl font-semibold text-gray-800 mb-2">Settings</h2>
+          <p class="text-gray-500 text-sm">Settings are coming soon. You'll be able to manage your account, Aeries credentials, and app preferences here.</p>
+        </div>
+      </section><!-- dashboard-settings -->
+
+    </div><!-- content area -->
+  </div><!-- dashboard-panel -->
+
+  <div class="w-full max-w-6xl mx-auto bg-white rounded-2xl shadow-lg overflow-hidden">
+    <div class="flex">
 
       <!-- ================== KIOSK ================== -->
       <div id="kiosk-panel"
@@ -599,7 +680,7 @@
 
     // ===== DOM =====
     const $ = sel => document.querySelector(sel);
-    const adminPanel = $('#admin-panel');
+    const adminPanel = $('#dashboard-panel');
     const hideAdminButton = $('#hide-admin-button');
     const kioskPanel = $('#kiosk-panel');
     const loginScreen = $('#login-screen');
@@ -720,6 +801,14 @@
           displayGroupsBtn.addEventListener('click', showGroupDisplay);
           closeGroupsBtn.addEventListener('click', hideGroupDisplay);
         }
+
+        // Dashboard navigation
+        document.querySelectorAll('.dashboard-nav-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const section = btn.getAttribute('data-section');
+            if (section) switchDashboardSection(section);
+          });
+        });
 
         document.addEventListener('keydown', (e) => {
           const fullscreenContainer = document.getElementById('group-display-fullscreen');
@@ -895,18 +984,45 @@
       studentIdInput.focus();
     }
 
-    function showAdminPanel() {
+    function showDashboard() {
       loginScreen.classList.add('hidden');
       pinSetupScreen.classList.add('hidden');
       pinEntryScreen.classList.add('hidden');
       adminPanel.classList.remove('hidden');
       kioskPanel.classList.add('hidden');
-      // Show teacher name and logout in admin panel
+      // Show teacher name and logout in dashboard header
       if (teacherNameDisplay && teacherName) {
         teacherNameDisplay.textContent = teacherName;
         teacherNameDisplay.classList.remove('hidden');
       }
       if (teacherLogoutBtn) teacherLogoutBtn.classList.remove('hidden');
+      // Default to Attendance section on open
+      switchDashboardSection('attendance');
+    }
+
+    // Keep showAdminPanel as an alias for backwards compatibility
+    function showAdminPanel() {
+      showDashboard();
+    }
+
+    // ===== Dashboard Navigation =====
+    function switchDashboardSection(sectionName) {
+      // Hide all sections
+      document.querySelectorAll('.dashboard-section').forEach(el => el.classList.add('hidden'));
+      // Deactivate all nav buttons
+      document.querySelectorAll('.dashboard-nav-btn').forEach(btn => {
+        btn.classList.remove('border-red-700', 'text-red-700', 'active-nav-btn');
+        btn.classList.add('border-transparent', 'text-gray-500');
+      });
+      // Show target section
+      const section = document.getElementById('dashboard-' + sectionName);
+      if (section) section.classList.remove('hidden');
+      // Activate target nav button
+      const navBtn = document.querySelector('[data-section="' + sectionName + '"]');
+      if (navBtn) {
+        navBtn.classList.remove('border-transparent', 'text-gray-500');
+        navBtn.classList.add('border-red-700', 'text-red-700', 'active-nav-btn');
+      }
     }
 
     function showPinEntry() {

@@ -96,12 +96,16 @@ class SyncEngineError(Exception):
         self.category = category
 
 
-def find_element_with_fallback(page, element_type: str, format_args: dict):
+def find_element_with_fallback(page, element_type: str, format_args: dict, teacher_uid=None):
     """
     Locate an element using SELECTOR_STRATEGIES with automatic fallback.
 
+    When all static selectors fail, attempts self-healing via Gemini LLM before
+    raising SyncEngineError.
+
     Returns (locator, strategy_index).
-    Raises SyncEngineError if all strategies fail.
+    strategy_index == len(strategies) signals the element was found via healing.
+    Raises SyncEngineError if all strategies AND self-healing fail.
     """
     if element_type not in SELECTOR_STRATEGIES:
         raise ValueError(f"Unknown element_type: {element_type}")
@@ -123,8 +127,27 @@ def find_element_with_fallback(page, element_type: str, format_args: dict):
             logger.debug(f"Selector strategy {index} failed for {element_type}: {exc}")
             continue
 
+    # All static selectors failed — attempt self-healing
+    logger.warning(f"All static selectors failed for {element_type} — attempting self-healing")
+    try:
+        from healer import attempt_heal
+        healed_selector = attempt_heal(
+            page=page,
+            element_type=element_type,
+            format_args=format_args,
+            original_selectors=[t.format(**format_args) for t in strategies],
+            teacher_uid=teacher_uid,
+        )
+        if healed_selector:
+            element = page.locator(healed_selector)
+            if element.count() > 0:
+                logger.info(f"Self-healing succeeded for {element_type}: {healed_selector}")
+                return element, len(strategies)  # index = len(strategies) signals "healed"
+    except Exception as heal_exc:
+        logger.error(f"Self-healing error for {element_type}: {heal_exc}")
+
     raise SyncEngineError(
-        f"All selector strategies failed for {element_type}",
+        f"All selector strategies and self-healing failed for {element_type}",
         category="selector_broken",
     )
 
@@ -163,7 +186,7 @@ def categorize_error(exception: Exception, context: str = "") -> Tuple[str, str]
             "Couldn't reach Aeries. We'll retry next cycle."
         ),
         "selector_broken": (
-            "Aeries page layout may have changed. The developer has been notified."
+            "Aeries page changed and auto-repair failed — developer notified"
         ),
         "unknown": (
             "Sync encountered an unexpected error. We'll retry next cycle."
@@ -446,7 +469,8 @@ def sync_teacher(uid: str) -> dict:
                         try:
                             # Find the student's cell
                             cell, _ = find_element_with_fallback(
-                                page, "student_cell", {"student_id": student_id}
+                                page, "student_cell", {"student_id": student_id},
+                                teacher_uid=uid,
                             )
                             if cell.count() == 0:
                                 logger.warning(f"[{uid}] Student {student_id} cell not found")
@@ -470,8 +494,12 @@ def sync_teacher(uid: str) -> dict:
                                 continue
 
                             # Find checkboxes within this row
-                            absent_box, _ = find_element_with_fallback(row, "absent_checkbox", {})
-                            tardy_box, _ = find_element_with_fallback(row, "tardy_checkbox", {})
+                            absent_box, _ = find_element_with_fallback(
+                                row, "absent_checkbox", {}, teacher_uid=uid
+                            )
+                            tardy_box, _ = find_element_with_fallback(
+                                row, "tardy_checkbox", {}, teacher_uid=uid
+                            )
 
                             if absent_box.count() == 0 or tardy_box.count() == 0:
                                 logger.warning(

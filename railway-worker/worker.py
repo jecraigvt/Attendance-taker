@@ -143,6 +143,14 @@ def main():
         )
         sys.exit(1)
 
+    # GEMINI_API_KEY is optional — warn but do not exit (self-healing degrades gracefully)
+    if not os.environ.get("GEMINI_API_KEY"):
+        logger.warning(
+            "GEMINI_API_KEY not set — self-healing disabled. "
+            "Selector failures will not be auto-repaired. "
+            "Set it in Railway Variables to enable LLM self-healing."
+        )
+
     # Initialize Firebase — fail fast if service account is malformed
     try:
         get_db()

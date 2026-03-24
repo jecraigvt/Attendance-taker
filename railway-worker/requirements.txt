@@ -13,3 +13,6 @@ apscheduler>=3.10.0,<4.0.0
 
 # pytz — Pacific Time timezone handling for school day schedule logic
 pytz>=2024.1
+
+# Google Gemini SDK — LLM self-healing for broken Aeries selectors (Flash + Pro)
+google-generativeai>=0.8.0,<1.0.0

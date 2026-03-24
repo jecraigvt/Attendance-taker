@@ -15,6 +15,9 @@ RUN playwright install chromium
 # Copy all Python source files
 COPY *.py .
 
+# Copy selectors.json (not matched by *.py glob — required by sync_engine.py at import)
+COPY selectors.json .
+
 # Unbuffered output so Railway logs appear in real time (no Python output buffering)
 ENV PYTHONUNBUFFERED=1
 

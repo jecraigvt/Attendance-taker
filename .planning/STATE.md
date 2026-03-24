@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 ## Current Position
 
 Phase: 6 of 8 (Teacher Dashboard and Roster Management) — In progress
-Plan: 1 of 4 in current phase — COMPLETE
-Status: Plan 06-01 complete, ready for 06-02
-Last activity: 2026-03-24 — Completed 06-01-PLAN.md (dashboard shell and navigation)
+Plan: 2 of 4 in current phase — COMPLETE
+Status: Plan 06-02 complete, ready for 06-03 and 06-04
+Last activity: 2026-03-24 — Completed 06-02-PLAN.md (seating config UI and kiosk wiring)
 
-Progress: [███████░░░░░░░░░░░░░] 59% (v1.0 complete; v2.0 phases 1-5 + 6-01 complete)
+Progress: [████████░░░░░░░░░░░░] 62% (v1.0 complete; v2.0 phases 1-5 + 6-01 + 6-02 complete)
 
 ## Performance Metrics
 
@@ -32,7 +32,7 @@ Progress: [███████░░░░░░░░░░░░░] 59% (v1
 | 3. Schedule Improvements | 1/1 | Complete |
 | 4. Tardy Logic Review | 3/3 | Complete |
 | 5. Auth Foundation | 3/3 | Complete |
-| 6. Teacher Dashboard | 1/4 | In progress |
+| 6. Teacher Dashboard | 2/4 | In progress |
 | 7-8. Remaining v2.0 | 0/4 | Not started |
 
 ## Accumulated Context
@@ -69,6 +69,10 @@ Phase 6 confirmed:
 - dashboard-section-pattern: class=dashboard-section + id=dashboard-{name}; switchDashboardSection() shows/hides
 - dashboard-nav-pattern: class=dashboard-nav-btn; active state = border-red-700 + text-red-700
 - showAdminPanel-alias: showAdminPanel() is alias for showDashboard(); safe to call from anywhere
+- seating-config-path: seatingConfig stored in teachers/{uid}/config/main (merge with kioskPin/avoidPairs/frontRow)
+- pickGroup-return-type: pickGroup() returns { group, overflow } — callers must destructure
+- seat-field-in-logs: attendance log entries now include Seat field (number or absent)
+- seating-front-groups: first 15% of numGroups are "front" groups for front-row preference logic
 
 ### Blockers/Concerns
 
@@ -81,5 +85,5 @@ Phase 6 confirmed:
 ## Session Continuity
 
 Last session: 2026-03-24
-Stopped at: Completed 06-01-PLAN.md — dashboard shell with navigation
-Resume file: None — ready for 06-02
+Stopped at: Completed 06-02-PLAN.md — seating config UI and kiosk wiring
+Resume file: None — ready for 06-03 and 06-04

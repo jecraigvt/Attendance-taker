@@ -36,7 +36,7 @@ DAILY_HEALING_CAP = 25  # Max Gemini API calls across all teachers per UTC day
 
 # Flash is fast and cheap; Pro is a fallback for harder cases.
 _GEMINI_FLASH_MODEL = "gemini-2.0-flash"
-_GEMINI_PRO_MODEL = "gemini-2.0-pro"
+_GEMINI_PRO_MODEL = "gemini-1.5-pro"
 
 # Maximum DOM size to send to Gemini (~30 KB)
 _MAX_DOM_BYTES = 30_000

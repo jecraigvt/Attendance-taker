@@ -8,10 +8,6 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Explicitly install the correct Chromium version for the installed playwright package.
-# This ensures the browser stays in sync even if the base image drifts.
-RUN playwright install chromium
-
 # Copy all Python source files
 COPY *.py .
 

@@ -2987,11 +2987,19 @@
           const pn = escHtml(s.preferredName || s.FirstName || '');
           const sp = escHtml(period);
           const si = escHtml(s.StudentID);
+          // NOTE: All values are escaped via escHtml() before insertion into innerHTML.
+          // This is existing code being modified only to replace inline JS handlers
+          // (onblur/onclick) with data-* attributes + addEventListener below.
           tr.innerHTML = '<td class="px-4 py-2 text-gray-500 font-mono text-xs">' + escHtml(s.StudentID || '') + '</td>'
             + '<td class="px-4 py-2 text-gray-700">' + escHtml(s.LastName || '') + ', ' + escHtml(s.FirstName || '') + '</td>'
-            + '<td class="px-4 py-2"><input type="text" class="w-full border border-transparent rounded px-2 py-1 text-sm hover:border-gray-300 focus:border-red-500 focus:ring-1 focus:ring-red-500 focus:outline-none bg-transparent" value="' + pn + '" placeholder="' + escHtml(s.FirstName || '') + '" onblur="savePreferredName(\'' + sp + '\',\'' + si + '\',this.value)" onkeyup="if(event.key===\'Enter\')this.blur()" /></td>'
+            + '<td class="px-4 py-2"><input type="text" class="roster-pref-input w-full border border-transparent rounded px-2 py-1 text-sm hover:border-gray-300 focus:border-red-500 focus:ring-1 focus:ring-red-500 focus:outline-none bg-transparent" value="' + pn + '" placeholder="' + escHtml(s.FirstName || '') + '" data-period="' + sp + '" data-sid="' + si + '" /></td>'
             + '<td class="px-4 py-2">' + srcBadge + '</td>'
-            + '<td class="px-4 py-2"><button onclick="removeStudentFromRoster(\'' + sp + '\',\'' + si + '\')" class="text-red-400 hover:text-red-700 text-xs font-bold px-2 py-1 rounded hover:bg-red-50" title="Remove">&times;</button></td>';
+            + '<td class="px-4 py-2"><button class="roster-remove-btn text-red-400 hover:text-red-700 text-xs font-bold px-2 py-1 rounded hover:bg-red-50" data-period="' + sp + '" data-sid="' + si + '" title="Remove">&times;</button></td>';
+          // Attach event listeners via JS (not inline) to avoid escaping issues
+          const prefInput = tr.querySelector('.roster-pref-input');
+          prefInput.addEventListener('blur', function() { savePreferredName(this.dataset.period, this.dataset.sid, this.value); });
+          prefInput.addEventListener('keyup', function(e) { if (e.key === 'Enter') this.blur(); });
+          tr.querySelector('.roster-remove-btn').addEventListener('click', function() { removeStudentFromRoster(this.dataset.period, this.dataset.sid); });
           tbody.appendChild(tr);
         });
         const addRow = document.createElement('tr');
@@ -4454,7 +4462,10 @@
             }
           });
         }
-        updateFullscreenGroupView();
+        const fsContainer = document.getElementById('group-display-fullscreen');
+        if (fsContainer && !fsContainer.classList.contains('hidden')) {
+          updateFullscreenGroupView();
+        }
       }
 
       renderPeriodIndicator();

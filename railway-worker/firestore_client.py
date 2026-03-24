@@ -444,18 +444,18 @@ def get_healing_call_count_today() -> int:
 
 def get_teacher_profile(uid: str) -> dict:
     """
-    Return the teacher's profile from teachers/{uid}/profile/main.
+    Return the teacher's profile from teachers/{uid}/profile/info.
 
     Falls back to a safe default dict if the document is missing.
     Callers can check profile.get('timezone', 'America/Los_Angeles').
     """
     db = get_db()
     try:
-        doc = db.document(f"teachers/{uid}/profile/main").get()
+        doc = db.document(f"teachers/{uid}/profile/info").get()
         if doc.exists:
             return doc.to_dict() or {}
-        logger.debug(f"[{uid}] No profile/main document — using defaults")
+        logger.debug(f"[{uid}] No profile/info document — using defaults")
         return {}
     except Exception as exc:
-        logger.error(f"[{uid}] Error reading profile/main: {exc}")
+        logger.error(f"[{uid}] Error reading profile/info: {exc}")
         return {}

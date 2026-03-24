@@ -41,6 +41,13 @@ service cloud.firestore {
     }
 
     // -----------------------------------------------------------------------
+    // Healing events: admin SDK (Railway worker) only.
+    // -----------------------------------------------------------------------
+    match /healing_events/{eventId} {
+      allow read, write: if false;
+    }
+
+    // -----------------------------------------------------------------------
     // LEGACY paths: migration complete.  Client code no longer uses this
     // path — only admin-SDK scripts (analyze_firebase.py) access it.
     // Deny all client access; admin SDK bypasses these rules.

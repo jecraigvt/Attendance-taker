@@ -49,29 +49,42 @@ const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15-minute window
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Create an AbortSignal that times out after `ms` milliseconds. */
+function fetchTimeout(ms = 15000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), ms);
+  return {signal: controller.signal, clear: () => clearTimeout(id)};
+}
+
 /**
  * Fetch the Aeries login page and extract ASP.NET form tokens.
  * Returns { viewstate, viewstateGenerator, eventValidation } or throws.
  */
 async function fetchAeriesFormTokens() {
-  const response = await fetch(AERIES_LOGIN_URL, {
-    method: "GET",
-    headers: {
-      "User-Agent": "Mozilla/5.0 (compatible; AttendanceTaker/2.0)",
-    },
-    redirect: "manual",
-  });
+  const timeout = fetchTimeout(15000);
+  try {
+    const response = await fetch(AERIES_LOGIN_URL, {
+      method: "GET",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; AttendanceTaker/2.0)",
+      },
+      redirect: "manual",
+      signal: timeout.signal,
+    });
 
-  const html = await response.text();
-  const $ = cheerio.load(html);
+    const html = await response.text();
+    const $ = cheerio.load(html);
 
-  const viewstate = $("input[name='__VIEWSTATE']").val() || "";
-  const viewstateGenerator =
-    $("input[name='__VIEWSTATEGENERATOR']").val() || "";
-  const eventValidation =
-    $("input[name='__EVENTVALIDATION']").val() || "";
+    const viewstate = $("input[name='__VIEWSTATE']").val() || "";
+    const viewstateGenerator =
+      $("input[name='__VIEWSTATEGENERATOR']").val() || "";
+    const eventValidation =
+      $("input[name='__EVENTVALIDATION']").val() || "";
 
-  return {viewstate, viewstateGenerator, eventValidation};
+    return {viewstate, viewstateGenerator, eventValidation};
+  } finally {
+    timeout.clear();
+  }
 }
 
 /**
@@ -95,30 +108,36 @@ async function validateAeriesCredentials(username, password) {
       "LoginButton": "Log In",
     });
 
-    const response = await fetch(AERIES_LOGIN_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": "Mozilla/5.0 (compatible; AttendanceTaker/2.0)",
-      },
-      body: body.toString(),
-      redirect: "manual",
-    });
+    const timeout = fetchTimeout(15000);
+    try {
+      const response = await fetch(AERIES_LOGIN_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": "Mozilla/5.0 (compatible; AttendanceTaker/2.0)",
+        },
+        body: body.toString(),
+        redirect: "manual",
+        signal: timeout.signal,
+      });
 
-    // ASP.NET redirects away from Login.aspx on success (status 302 or 301).
-    // If we stay on the same page (200), credentials were rejected.
-    const isRedirect = response.status === 302 || response.status === 301;
-    const location = response.headers.get("location") || "";
-    const redirectedAway =
-      location.length > 0 && !location.toLowerCase().includes("login");
+      // ASP.NET redirects away from Login.aspx on success (status 302 or 301).
+      // If we stay on the same page (200), credentials were rejected.
+      const isRedirect = response.status === 302 || response.status === 301;
+      const location = response.headers.get("location") || "";
+      const redirectedAway =
+        location.length > 0 && !location.toLowerCase().includes("login");
 
-    if (isRedirect && redirectedAway) {
-      return {valid: true, reason: "credentials_accepted"};
+      if (isRedirect && redirectedAway) {
+        return {valid: true, reason: "credentials_accepted"};
+      }
+
+      // Some Aeries deployments return 200 with redirect in meta or JS.
+      // Also check if the response URL (after following) differs from login.
+      return {valid: false, reason: "credentials_rejected"};
+    } finally {
+      timeout.clear();
     }
-
-    // Some Aeries deployments return 200 with redirect in meta or JS.
-    // Also check if the response URL (after following) differs from login.
-    return {valid: false, reason: "credentials_rejected"};
   } catch (err) {
     logger.warn("Aeries validation failed with error — proceeding without validation", {
       error: err.message,
@@ -300,34 +319,41 @@ async function loginToAeries(username, password) {
     "LoginButton": "Log In",
   });
 
-  const response = await fetch(AERIES_LOGIN_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "User-Agent": "Mozilla/5.0 (compatible; AttendanceTaker/2.0)",
-    },
-    body: body.toString(),
-    redirect: "manual",
-  });
+  const timeout = fetchTimeout(15000);
+  try {
+    const response = await fetch(AERIES_LOGIN_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": "Mozilla/5.0 (compatible; AttendanceTaker/2.0)",
+      },
+      body: body.toString(),
+      redirect: "manual",
+      signal: timeout.signal,
+    });
 
-  const isRedirect = response.status === 302 || response.status === 301;
-  const location = response.headers.get("location") || "";
-  const redirectedAway =
-    location.length > 0 && !location.toLowerCase().includes("login");
+    const isRedirect = response.status === 302 || response.status === 301;
+    const location = response.headers.get("location") || "";
+    const redirectedAway =
+      location.length > 0 && !location.toLowerCase().includes("login");
 
-  if (!isRedirect || !redirectedAway) {
-    throw new Error("login_failed");
+    if (!isRedirect || !redirectedAway) {
+      throw new Error("login_failed");
+    }
+
+    // Extract Set-Cookie headers (Node 20 built-in fetch uses getSetCookie)
+    const rawCookies = response.headers.getSetCookie
+        ? response.headers.getSetCookie()
+        : [];
+
+    const cookieString = rawCookies
+        .map((c) => c.split(";")[0])
+        .join("; ");
+
+    return {cookies: cookieString, location};
+  } finally {
+    timeout.clear();
   }
-
-  // Extract Set-Cookie headers to build session cookie string
-  const rawCookies = response.headers.raw?.()["set-cookie"] ||
-    (response.headers.getSetCookie ? response.headers.getSetCookie() : []);
-
-  const cookieString = rawCookies
-      .map(c => c.split(";")[0])
-      .join("; ");
-
-  return {cookies: cookieString, location};
 }
 
 /**
@@ -877,8 +903,9 @@ exports.fetchRoster = onCall(
             const prev = existingById.get(s.StudentID);
             return {
               ...s,
-              // Preserve teacher-customized preferred name; fall back to first word of FirstName
-              preferredName: (prev && prev.preferredName && prev.preferredName !== prev.FirstName && prev.preferredName !== (prev.FirstName || "").split(" ")[0])
+              // Preserve any existing preferredName (teacher may have customized it);
+              // fall back to first word of FirstName for new students
+              preferredName: (prev && prev.preferredName)
                 ? prev.preferredName
                 : (s.FirstName || "").split(" ")[0],
             };

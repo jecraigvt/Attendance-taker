@@ -13,6 +13,10 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
+
+import pytz
+
+PACIFIC_TZ = pytz.timezone("America/Los_Angeles")
 from typing import Optional, Tuple
 
 from playwright.sync_api import sync_playwright
@@ -274,7 +278,7 @@ def sync_teacher(uid: str) -> dict:
     Never raises — all exceptions are caught and reflected in the result dict
     and in the Firestore sync/status document.
     """
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(PACIFIC_TZ).strftime("%Y-%m-%d")
     logger.info(f"[{uid}] Starting sync for {today}")
 
     # ------------------------------------------------------------------

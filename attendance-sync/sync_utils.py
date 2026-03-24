@@ -23,18 +23,16 @@ FAILED_STUDENTS_FILE = "failed_students.json"
 SELECTOR_STRATEGIES = {
     'student_cell': [
         "td[data-studentid='{student_id}']",           # Primary: data attribute
-        "td:has-text('{student_id}')",                 # Fallback 1: text content
+        "td:text-is('{student_id}')",                  # Fallback 1: exact text match
         "xpath=.//td[contains(@id, '{student_id}')]",  # Fallback 2: XPath id contains (relative)
     ],
     'absent_checkbox': [
         "span[data-cd='A'] input",                     # Primary: data-cd attribute
         "input[type='checkbox'][name*='Absent']",      # Fallback 1: name contains
-        "span:has-text('A') input[type='checkbox']",   # Fallback 2: text label
     ],
     'tardy_checkbox': [
         "span[data-cd='T'] input",                     # Primary: data-cd attribute
         "input[type='checkbox'][name*='Tardy']",       # Fallback 1: name contains
-        "span:has-text('T') input[type='checkbox']",   # Fallback 2: text label
     ],
     'period_dropdown': [
         "select",                                      # Primary: any select

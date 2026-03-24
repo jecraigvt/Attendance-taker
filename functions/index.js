@@ -165,7 +165,7 @@ function fernetEncrypt(plaintext) {
   const secret = new fernet.Secret(keyString);
   const token = new fernet.Token({
     secret: secret,
-    time: Date.now(),
+    time: Math.floor(Date.now() / 1000),
     iv: null, // fernet will generate a random IV
   });
   return token.encode(plaintext);
@@ -173,44 +173,50 @@ function fernetEncrypt(plaintext) {
 
 /**
  * Check whether a username has exceeded the login attempt rate limit.
+ * Uses a Firestore transaction to prevent TOCTOU races.
  * Returns { blocked: boolean, retryAfterMs: number }.
  */
 async function checkRateLimit(username) {
   const docRef = db.collection("rateLimits").doc(username);
-  const snap = await docRef.get();
-  if (!snap.exists) return {blocked: false, retryAfterMs: 0};
 
-  const data = snap.data();
-  const now = Date.now();
-  const windowStart = now - RATE_LIMIT_WINDOW_MS;
+  return db.runTransaction(async (txn) => {
+    const snap = await txn.get(docRef);
+    if (!snap.exists) return {blocked: false, retryAfterMs: 0};
 
-  // Filter to attempts within the current window
-  const recentAttempts = (data.failedAttempts || [])
-      .filter((ts) => ts > windowStart);
+    const data = snap.data();
+    const now = Date.now();
+    const windowStart = now - RATE_LIMIT_WINDOW_MS;
 
-  if (recentAttempts.length >= RATE_LIMIT_MAX_ATTEMPTS) {
-    const oldestInWindow = Math.min(...recentAttempts);
-    const retryAfterMs = oldestInWindow + RATE_LIMIT_WINDOW_MS - now;
-    return {blocked: true, retryAfterMs};
-  }
-  return {blocked: false, retryAfterMs: 0};
+    const recentAttempts = (data.failedAttempts || [])
+        .filter((ts) => ts > windowStart);
+
+    if (recentAttempts.length >= RATE_LIMIT_MAX_ATTEMPTS) {
+      const oldestInWindow = Math.min(...recentAttempts);
+      const retryAfterMs = oldestInWindow + RATE_LIMIT_WINDOW_MS - now;
+      return {blocked: true, retryAfterMs};
+    }
+    return {blocked: false, retryAfterMs: 0};
+  });
 }
 
 /**
- * Record a failed login attempt for rate-limiting purposes.
+ * Record a failed login attempt atomically using a Firestore transaction.
+ * Prevents concurrent requests from bypassing the rate limit.
  */
 async function recordFailedAttempt(username) {
   const docRef = db.collection("rateLimits").doc(username);
-  const now = Date.now();
-  const windowStart = now - RATE_LIMIT_WINDOW_MS;
 
-  const snap = await docRef.get();
-  const existing = snap.exists ? (snap.data().failedAttempts || []) : [];
-  // Keep only attempts within the window, then append the new one
-  const recent = existing.filter((ts) => ts > windowStart);
-  recent.push(now);
+  await db.runTransaction(async (txn) => {
+    const snap = await txn.get(docRef);
+    const now = Date.now();
+    const windowStart = now - RATE_LIMIT_WINDOW_MS;
 
-  await docRef.set({failedAttempts: recent, updatedAt: now});
+    const existing = snap.exists ? (snap.data().failedAttempts || []) : [];
+    const recent = existing.filter((ts) => ts > windowStart);
+    recent.push(now);
+
+    txn.set(docRef, {failedAttempts: recent, updatedAt: now});
+  });
 }
 
 /**
@@ -544,8 +550,10 @@ exports.authenticateTeacher = onCall(
         // do NOT overwrite stored credentials — the previously validated
         // credentials remain intact.
 
-        // Clear rate-limit record on successful login
-        await clearRateLimit(cleanUsername);
+        // Clear rate-limit record on successful validated login
+        if (credentialsValidated) {
+          await clearRateLimit(cleanUsername);
+        }
 
         // ------------------------------------------------------------------
         // 6. Upsert teacher profile

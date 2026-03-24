@@ -164,10 +164,13 @@ RULES:
 SELECTOR:"""
 
 
-def _validate_selector(page, candidate: str, format_args: dict) -> bool:
+def _validate_selector(
+    page, candidate: str, format_args: dict, element_type: str = ""
+) -> bool:
     """
     Try to locate `candidate` on the page after formatting with format_args.
-    Returns True if at least one matching element is found.
+    For checkbox element types, requires exactly one match to prevent
+    selecting the wrong checkbox.  For other types, at least one match.
     """
     try:
         formatted = candidate.format(**format_args)
@@ -176,6 +179,8 @@ def _validate_selector(page, candidate: str, format_args: dict) -> bool:
 
     try:
         count = page.locator(formatted).count()
+        if element_type in ("absent_checkbox", "tardy_checkbox"):
+            return count == 1
         return count > 0
     except Exception as exc:
         logger.debug(f"Selector validation failed for '{formatted}': {exc}")
@@ -271,7 +276,7 @@ def attempt_heal(
     raw_flash = _call_gemini(genai, _GEMINI_FLASH_MODEL, prompt)
 
     if raw_flash and raw_flash.upper() != "NONE":
-        if _validate_selector(page, raw_flash, format_args):
+        if _validate_selector(page, raw_flash, format_args, element_type):
             logger.info(f"[healer] Gemini Flash found working selector: {raw_flash}")
             flash_result = raw_flash
             flash_success = True
@@ -303,7 +308,7 @@ def attempt_heal(
     raw_pro = _call_gemini(genai, _GEMINI_PRO_MODEL, prompt)
 
     if raw_pro and raw_pro.upper() != "NONE":
-        if _validate_selector(page, raw_pro, format_args):
+        if _validate_selector(page, raw_pro, format_args, element_type):
             logger.info(f"[healer] Gemini Pro found working selector: {raw_pro}")
             pro_result = raw_pro
             pro_success = True

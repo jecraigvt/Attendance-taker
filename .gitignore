@@ -30,3 +30,7 @@ attendance_corrections.csv
 nul
 diff.txt
 patch.txt
+node_modules/
+functions/node_modules/
+.firebase/
+.playwright-mcp/

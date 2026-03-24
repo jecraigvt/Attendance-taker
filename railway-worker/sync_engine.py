@@ -8,6 +8,7 @@ Main entry point: sync_teacher(uid) -> dict
 """
 
 import functools
+import json
 import logging
 import os
 import time
@@ -28,10 +29,11 @@ from firestore_client import (
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Selector strategies — exact copy from sync_utils.py for self-contained file
+# Selector strategies — loaded from selectors.json at module import time
 # ---------------------------------------------------------------------------
 
-SELECTOR_STRATEGIES = {
+# Safety net: hardcoded defaults if selectors.json is missing
+_DEFAULT_SELECTORS = {
     "student_cell": [
         "td[data-studentid='{student_id}']",           # Primary: data attribute
         "td:has-text('{student_id}')",                 # Fallback 1: text content
@@ -53,6 +55,30 @@ SELECTOR_STRATEGIES = {
         "xpath=.//select[contains(@name, 'Period')]",  # Fallback 2: XPath name contains (relative)
     ],
 }
+
+def _load_selectors() -> dict:
+    """Load selector strategies from selectors.json next to this file."""
+    selectors_path = os.path.join(os.path.dirname(__file__), "selectors.json")
+    try:
+        with open(selectors_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        logging.getLogger(__name__).debug(
+            f"Loaded {len(data)} selector types from {selectors_path}"
+        )
+        return data
+    except FileNotFoundError:
+        logging.getLogger(__name__).error(
+            f"selectors.json not found at {selectors_path} — using hardcoded defaults"
+        )
+        return _DEFAULT_SELECTORS
+    except json.JSONDecodeError as exc:
+        logging.getLogger(__name__).error(
+            f"selectors.json is invalid JSON: {exc} — using hardcoded defaults"
+        )
+        return _DEFAULT_SELECTORS
+
+
+SELECTOR_STRATEGIES = _load_selectors()
 
 # Aeries URLs
 LOGIN_URL = "https://adn.fjuhsd.org/Aeries.net/Login.aspx"

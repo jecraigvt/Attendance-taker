@@ -450,6 +450,10 @@
           class="dashboard-nav-btn whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors">
           Seating
         </button>
+        <button data-section="apps"
+          class="dashboard-nav-btn whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors">
+          Apps
+        </button>
         <button data-section="settings"
           class="dashboard-nav-btn whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors">
           Settings
@@ -507,26 +511,16 @@
               <span id="exceptions-status" class="hidden"></span>
             </div>
 
-            <!-- Target Timer -->
+            <!-- Quick launch -->
             <div class="pt-6 border-t">
-              <div class="flex justify-between items-center mb-2">
-                <h3 class="text-lg font-semibold text-gray-800">Target Timer</h3>
-                <button id="timer-fullscreen-btn"
-                  class="bg-red-600 text-white px-3 py-1 text-xs rounded-md hover:bg-red-700 transition-all">Fullscreen</button>
-              </div>
-              <div class="space-y-3">
-                <div>
-                  <label for="timer-target-input" class="block text-xs font-medium text-gray-700 mb-1">Set Target Time</label>
-                  <input type="time" id="timer-target-input"
-                    class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-lg font-mono" />
-                </div>
-                <div class="bg-gray-100 rounded-lg p-4 text-center border">
-                  <div id="timer-display" class="text-4xl font-bold font-mono text-gray-300 tabular-nums">00:00:00</div>
-                  <p id="timer-status" class="text-xs uppercase tracking-wider mt-2 text-gray-400 font-semibold h-4"></p>
-                </div>
-                <button type="button" id="timer-test-audio"
-                  class="w-full text-xs text-gray-500 border border-gray-300 rounded-md py-1 hover:bg-gray-100 transition-all">Test Alarm Tone</button>
-              </div>
+              <p class="text-xs text-gray-500 italic">Timer, Name Picker, and more tools are in the <button onclick="switchDashboardSection('apps')" class="text-red-600 underline hover:text-red-800">Apps tab</button>.</p>
+              <!-- Hidden timer elements kept for JS compatibility -->
+              <input type="time" id="timer-target-input" class="hidden" />
+              <input type="number" id="timer-minutes-input" class="hidden" />
+              <div id="timer-display" class="hidden">00:00:00</div>
+              <p id="timer-status" class="hidden"></p>
+              <button id="timer-test-audio" class="hidden"></button>
+              <button id="timer-fullscreen-btn" class="hidden"></button>
             </div>
 
           </div><!-- End Left Column -->
@@ -544,15 +538,11 @@
               </div>
 
               <div>
-                <div class="flex justify-between items-center mb-2">
-                  <h3 class="text-xl font-semibold text-gray-800">Group Assignments</h3>
-                  <button id="display-groups-btn"
-                    class="bg-blue-500 text-white px-3 py-1 text-xs rounded-md hover:bg-blue-600">Display
-                    Fullscreen</button>
-                </div>
+                <h3 class="text-xl font-semibold text-gray-800 mb-2">Group Assignments</h3>
                 <div id="group-report" class="space-y-3 h-96 overflow-y-auto bg-gray-100 p-3 rounded-md border">
                   <p class="text-gray-500">Students will appear here as they sign in.</p>
                 </div>
+                <button id="display-groups-btn" class="hidden"></button>
               </div>
             </div>
 
@@ -882,6 +872,49 @@
 
       </section><!-- dashboard-settings -->
 
+      <!-- ===== APPS SECTION ===== -->
+      <section id="dashboard-apps" class="dashboard-section hidden max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <h2 class="text-2xl font-bold text-gray-900 mb-6">Classroom Tools</h2>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+
+          <!-- Timer tile -->
+          <button id="app-timer" class="group bg-white rounded-xl border border-gray-200 p-6 text-center hover:border-red-300 hover:shadow-md transition-all">
+            <div class="text-3xl mb-2">&#9202;</div>
+            <h3 class="text-sm font-semibold text-gray-800 group-hover:text-red-700">Timer</h3>
+            <p class="text-xs text-gray-500 mt-1">Countdown to time or set minutes</p>
+          </button>
+
+          <!-- Seating Chart tile -->
+          <button id="app-seating" class="group bg-white rounded-xl border border-gray-200 p-6 text-center hover:border-red-300 hover:shadow-md transition-all">
+            <div class="text-3xl mb-2">&#128186;</div>
+            <h3 class="text-sm font-semibold text-gray-800 group-hover:text-red-700">Seating Chart</h3>
+            <p class="text-xs text-gray-500 mt-1">Display group assignments</p>
+          </button>
+
+          <!-- Name Picker tile -->
+          <button id="app-picker" class="group bg-white rounded-xl border border-gray-200 p-6 text-center hover:border-red-300 hover:shadow-md transition-all">
+            <div class="text-3xl mb-2">&#127922;</div>
+            <h3 class="text-sm font-semibold text-gray-800 group-hover:text-red-700">Name Picker</h3>
+            <p class="text-xs text-gray-500 mt-1">Random student selector</p>
+          </button>
+
+          <!-- QR Code tile -->
+          <button id="app-qr" class="group bg-white rounded-xl border border-gray-200 p-6 text-center hover:border-red-300 hover:shadow-md transition-all">
+            <div class="text-3xl mb-2">&#9641;</div>
+            <h3 class="text-sm font-semibold text-gray-800 group-hover:text-red-700">QR Code</h3>
+            <p class="text-xs text-gray-500 mt-1">Share a link with the class</p>
+          </button>
+
+          <!-- Group Maker tile -->
+          <button id="app-groups" class="group bg-white rounded-xl border border-gray-200 p-6 text-center hover:border-red-300 hover:shadow-md transition-all">
+            <div class="text-3xl mb-2">&#128101;</div>
+            <h3 class="text-sm font-semibold text-gray-800 group-hover:text-red-700">Group Maker</h3>
+            <p class="text-xs text-gray-500 mt-1">Split students into random groups</p>
+          </button>
+
+        </div>
+      </section><!-- dashboard-apps -->
+
       <!-- ===== SYNC SECTION (hidden until secret code or syncEnabled) ===== -->
       <section id="dashboard-sync" class="dashboard-section hidden max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
 
@@ -972,14 +1005,126 @@
       class="absolute top-4 right-6 text-5xl font-bold text-gray-500 hover:text-white transition-colors z-10">&times;</button>
 
     <div class="relative z-10 flex flex-col items-center justify-center h-full">
-      <div class="timer-fs-ring rounded-3xl px-16 py-12 text-center" style="backdrop-filter:blur(20px);background:rgba(0,0,0,0.4);">
-        <p class="text-sm uppercase tracking-[0.25em] text-gray-400 font-semibold mb-6">Target Timer</p>
-        <div id="timer-fs-display" class="text-8xl md:text-9xl font-bold font-mono tabular-nums text-gray-500 timer-fs-glow select-none">
-          00:00:00
+      <!-- Timer mode selector -->
+      <div id="timer-fs-setup" class="text-center">
+        <div class="flex gap-3 justify-center mb-8">
+          <button id="timer-mode-target" class="px-5 py-2 text-sm font-semibold rounded-full bg-white/10 border border-white/20 text-white transition-all">Count down to time</button>
+          <button id="timer-mode-minutes" class="px-5 py-2 text-sm font-semibold rounded-full text-gray-400 hover:text-white transition-all">Set minutes</button>
         </div>
-        <p id="timer-fs-status" class="text-sm uppercase tracking-[0.2em] mt-6 font-semibold h-5 text-gray-500"></p>
+        <div id="timer-input-target" class="mb-6">
+          <input type="time" id="timer-target-input-fs"
+            class="bg-transparent border border-white/20 rounded-xl px-6 py-3 text-2xl font-mono text-white text-center focus:outline-none focus:border-red-500" />
+        </div>
+        <div id="timer-input-minutes" class="hidden mb-6">
+          <div class="flex items-center justify-center gap-3">
+            <input type="number" id="timer-minutes-input-fs" min="1" max="120" value="5"
+              class="bg-transparent border border-white/20 rounded-xl px-6 py-3 text-2xl font-mono text-white text-center w-28 focus:outline-none focus:border-red-500" />
+            <span class="text-gray-400 text-lg">minutes</span>
+          </div>
+        </div>
+        <button id="timer-fs-start"
+          class="px-10 py-3 bg-red-700 hover:bg-red-600 text-white text-lg font-bold rounded-2xl transition-all shadow-lg shadow-red-900/40">
+          Start
+        </button>
+      </div>
+      <!-- Timer display (hidden until started) -->
+      <div id="timer-fs-running" class="hidden">
+        <div class="timer-fs-ring rounded-3xl px-16 py-12 text-center" style="backdrop-filter:blur(20px);background:rgba(0,0,0,0.4);">
+          <p id="timer-fs-label" class="text-sm uppercase tracking-[0.25em] text-gray-400 font-semibold mb-6">Timer</p>
+          <div id="timer-fs-display" class="text-8xl md:text-9xl font-bold font-mono tabular-nums text-gray-500 timer-fs-glow select-none">
+            00:00:00
+          </div>
+          <p id="timer-fs-status" class="text-sm uppercase tracking-[0.2em] mt-6 font-semibold h-5 text-gray-500"></p>
+        </div>
+        <div class="flex justify-center gap-4 mt-8">
+          <button id="timer-fs-reset"
+            class="px-6 py-2 text-sm text-gray-400 border border-white/10 rounded-xl hover:text-white hover:border-white/30 transition-all">
+            Reset
+          </button>
+        </div>
       </div>
       <p class="mt-8 text-xs text-gray-600 tracking-wider">Press Escape to close</p>
+    </div>
+  </div>
+
+  <!-- Fullscreen QR Code Overlay -->
+  <div id="qr-fullscreen" class="hidden fixed inset-0 timer-fs-bg text-white z-50 overflow-hidden">
+    <div class="timer-fs-orb" style="width:500px;height:500px;background:#1c5c3a;top:-150px;left:-100px;"></div>
+    <div class="timer-fs-orb" style="width:600px;height:600px;background:#1c3a5c;bottom:-200px;right:-150px;"></div>
+
+    <button id="qr-fs-close"
+      class="absolute top-4 right-6 text-5xl font-bold text-gray-500 hover:text-white transition-colors z-10">&times;</button>
+
+    <div class="relative z-10 flex flex-col items-center justify-center h-full">
+      <!-- QR input -->
+      <div id="qr-setup" class="text-center">
+        <p class="text-sm uppercase tracking-[0.25em] text-gray-400 font-semibold mb-6">Share a Link</p>
+        <input type="url" id="qr-url-input" placeholder="Paste a URL..."
+          class="bg-transparent border border-white/20 rounded-xl px-6 py-3 text-lg text-white text-center w-96 max-w-[90vw] focus:outline-none focus:border-red-500 placeholder-gray-600 mb-6" />
+        <br>
+        <button id="qr-generate-btn"
+          class="px-10 py-3 bg-red-700 hover:bg-red-600 text-white text-lg font-bold rounded-2xl transition-all shadow-lg shadow-red-900/40">
+          Show QR Code
+        </button>
+      </div>
+      <!-- QR display -->
+      <div id="qr-display" class="hidden text-center">
+        <div class="timer-fs-ring rounded-3xl p-10 inline-block" style="backdrop-filter:blur(20px);background:rgba(0,0,0,0.4);">
+          <div id="qr-canvas" class="bg-white rounded-2xl p-4 inline-block mb-4"></div>
+          <p id="qr-url-label" class="text-sm text-gray-400 mt-4 max-w-md break-all"></p>
+        </div>
+        <div class="flex justify-center gap-4 mt-6">
+          <button id="qr-change-btn"
+            class="px-6 py-2 text-sm text-gray-400 border border-white/10 rounded-xl hover:text-white hover:border-white/30 transition-all">
+            Change URL
+          </button>
+        </div>
+      </div>
+      <p class="mt-8 text-xs text-gray-600 tracking-wider">Press Escape to close</p>
+    </div>
+  </div>
+
+  <!-- Fullscreen Group Maker Overlay -->
+  <div id="groupmaker-fullscreen" class="hidden fixed inset-0 seat-fs-bg text-white z-50 overflow-hidden">
+    <div class="timer-fs-orb" style="width:500px;height:500px;background:#5c1c5c;top:-150px;right:-100px;"></div>
+    <div class="timer-fs-orb" style="width:600px;height:600px;background:#1c3a5c;bottom:-200px;left:-150px;"></div>
+
+    <button id="gm-fs-close"
+      class="absolute top-4 right-6 text-5xl font-bold text-gray-500 hover:text-white transition-colors z-10">&times;</button>
+
+    <div class="relative z-10 flex flex-col items-center justify-center h-full">
+      <!-- Setup -->
+      <div id="gm-setup" class="text-center">
+        <p class="text-sm uppercase tracking-[0.25em] text-gray-400 font-semibold mb-6">Random Groups</p>
+        <div class="flex gap-3 justify-center mb-6">
+          <button id="gm-mode-numgroups" class="px-5 py-2 text-sm font-semibold rounded-full bg-white/10 border border-white/20 text-white transition-all">Number of groups</button>
+          <button id="gm-mode-pergroup" class="px-5 py-2 text-sm font-semibold rounded-full text-gray-400 hover:text-white transition-all">People per group</button>
+        </div>
+        <div class="flex items-center justify-center gap-3 mb-6">
+          <input type="number" id="gm-count-input" min="2" max="20" value="4"
+            class="bg-transparent border border-white/20 rounded-xl px-6 py-3 text-2xl font-mono text-white text-center w-28 focus:outline-none focus:border-red-500" />
+          <span id="gm-count-label" class="text-gray-400 text-lg">groups</span>
+        </div>
+        <p id="gm-student-count" class="text-xs text-gray-500 mb-6"></p>
+        <button id="gm-go-btn"
+          class="px-10 py-3 bg-red-700 hover:bg-red-600 text-white text-lg font-bold rounded-2xl transition-all shadow-lg shadow-red-900/40">
+          Make Groups
+        </button>
+      </div>
+      <!-- Result -->
+      <div id="gm-result" class="hidden w-full max-w-6xl overflow-y-auto px-8" style="max-height: calc(100vh - 140px);">
+        <div id="gm-group-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5"></div>
+        <div class="flex justify-center gap-4 mt-8 pb-8">
+          <button id="gm-reshuffle-btn"
+            class="px-6 py-2 text-sm text-gray-400 border border-white/10 rounded-xl hover:text-white hover:border-white/30 transition-all">
+            Reshuffle
+          </button>
+          <button id="gm-back-btn"
+            class="px-6 py-2 text-sm text-gray-400 border border-white/10 rounded-xl hover:text-white hover:border-white/30 transition-all">
+            Change Settings
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -4712,24 +4857,81 @@
       periodAttendanceLog = origLogs;
     }
 
-    // ==================== TARGET TIMER ====================
+    // ==================== APPS TAB LAUNCHERS ====================
     (() => {
-      // Inline (admin panel) elements
-      const tInput = document.getElementById('timer-target-input');
-      const tDisplay = document.getElementById('timer-display');
-      const tStatus = document.getElementById('timer-status');
-      const tTestBtn = document.getElementById('timer-test-audio');
+      const appTimer = document.getElementById('app-timer');
+      const appSeating = document.getElementById('app-seating');
+      const appPicker = document.getElementById('app-picker');
+      const appQr = document.getElementById('app-qr');
+      const appGroups = document.getElementById('app-groups');
 
-      // Fullscreen elements
+      if (appTimer) appTimer.addEventListener('click', () => {
+        document.getElementById('timer-fullscreen').classList.remove('hidden');
+      });
+      if (appSeating) appSeating.addEventListener('click', () => {
+        showGroupDisplay();
+        // Switch to groups tab
+        document.getElementById('seat-tab-groups').click();
+      });
+      if (appPicker) appPicker.addEventListener('click', () => {
+        showGroupDisplay();
+        // Switch to picker tab
+        document.getElementById('seat-tab-picker').click();
+      });
+      if (appQr) appQr.addEventListener('click', () => {
+        document.getElementById('qr-fullscreen').classList.remove('hidden');
+      });
+      if (appGroups) appGroups.addEventListener('click', () => {
+        const gm = document.getElementById('groupmaker-fullscreen');
+        gm.classList.remove('hidden');
+        // Update student count
+        const count = getPresentStudents().length;
+        document.getElementById('gm-student-count').textContent = count + ' student' + (count !== 1 ? 's' : '') + ' present';
+      });
+    })();
+
+    // ==================== TARGET TIMER (fullscreen-first) ====================
+    (() => {
       const tFsOverlay = document.getElementById('timer-fullscreen');
       const tFsDisplay = document.getElementById('timer-fs-display');
       const tFsStatus = document.getElementById('timer-fs-status');
-      const tFsOpenBtn = document.getElementById('timer-fullscreen-btn');
+      const tFsLabel = document.getElementById('timer-fs-label');
       const tFsCloseBtn = document.getElementById('timer-fs-close');
-      const mainApp = document.querySelector('.w-full.max-w-6xl');
+      const tFsSetup = document.getElementById('timer-fs-setup');
+      const tFsRunning = document.getElementById('timer-fs-running');
+      const tFsStartBtn = document.getElementById('timer-fs-start');
+      const tFsResetBtn = document.getElementById('timer-fs-reset');
+      const tModeTarget = document.getElementById('timer-mode-target');
+      const tModeMinutes = document.getElementById('timer-mode-minutes');
+      const tInputTarget = document.getElementById('timer-input-target');
+      const tInputMinutes = document.getElementById('timer-input-minutes');
+      const tTargetFs = document.getElementById('timer-target-input-fs');
+      const tMinutesFs = document.getElementById('timer-minutes-input-fs');
+      // Hidden inline elements for backward compat
+      const tDisplay = document.getElementById('timer-display');
+      const tStatus = document.getElementById('timer-status');
 
+      let tMode = 'target'; // 'target' or 'minutes'
       let tInterval = null;
       let tFinished = false;
+      let tEndTime = null;
+
+      // Mode switching
+      function setMode(mode) {
+        tMode = mode;
+        [tModeTarget, tModeMinutes].forEach(b => {
+          b.classList.remove('bg-white/10', 'border', 'border-white/20', 'text-white');
+          b.classList.add('text-gray-400');
+        });
+        const active = mode === 'target' ? tModeTarget : tModeMinutes;
+        active.classList.add('bg-white/10', 'border', 'border-white/20', 'text-white');
+        active.classList.remove('text-gray-400');
+        tInputTarget.classList.toggle('hidden', mode !== 'target');
+        tInputMinutes.classList.toggle('hidden', mode !== 'minutes');
+      }
+      tModeTarget.addEventListener('click', () => setMode('target'));
+      tModeMinutes.addEventListener('click', () => setMode('minutes'));
+
       function tPlayAlarm() {
         const ctx = getSharedAudioCtx();
         if (!ctx) return;
@@ -4758,95 +4960,234 @@
           .map(v => String(v).padStart(2, '0')).join(':');
       }
 
-      function tCalcDist(val) {
-        const [h, m] = val.split(':').map(Number);
-        const target = new Date(); target.setHours(h, m, 0, 0);
-        let diff = target - new Date();
-        if (diff < -60000) { target.setDate(target.getDate() + 1); diff = target - new Date(); }
-        return diff;
-      }
-
-      // Sync both inline and fullscreen displays
-      function tSetDisplay(text, inlineClass, fsClass) {
-        tDisplay.textContent = text;
-        tDisplay.className = inlineClass;
-        tFsDisplay.textContent = text;
-        tFsDisplay.className = fsClass;
-      }
-
-      function tSetStatus(text, inlineClass, fsClass) {
-        tStatus.textContent = text;
-        tStatus.className = inlineClass;
-        tFsStatus.textContent = text;
-        tFsStatus.className = fsClass;
-      }
-
-      function tReset() {
-        if (tInterval) clearInterval(tInterval);
-        tSetDisplay('00:00:00',
-          'text-4xl font-bold font-mono text-gray-300 tabular-nums',
-          'text-8xl md:text-9xl font-bold font-mono tabular-nums text-gray-500 timer-fs-glow select-none');
-        tSetStatus('',
-          'text-xs uppercase tracking-wider mt-2 font-semibold h-4 text-gray-400',
-          'text-sm uppercase tracking-[0.2em] mt-6 font-semibold h-5 text-gray-500');
-        tFinished = false;
-      }
-
       function tComplete() {
         if (tFinished) return;
         if (tInterval) clearInterval(tInterval);
         tFinished = true;
-        tSetDisplay('00:00:00',
-          'text-4xl font-bold font-mono text-red-500 tabular-nums animate-pulse',
-          'text-8xl md:text-9xl font-bold font-mono tabular-nums text-red-500 timer-fs-glow-finished select-none');
+        tFsDisplay.textContent = '00:00:00';
+        tFsDisplay.className = 'text-8xl md:text-9xl font-bold font-mono tabular-nums text-red-500 timer-fs-glow-finished select-none';
         tFsDisplay.style.animation = 'timerPulse 1.5s ease-in-out infinite';
-        tSetStatus("Time's up!",
-          'text-xs uppercase tracking-wider mt-2 font-semibold h-4 text-red-500',
-          'text-sm uppercase tracking-[0.2em] mt-6 font-semibold h-5 text-red-400');
+        tFsStatus.textContent = "Time's up!";
+        tFsStatus.className = 'text-sm uppercase tracking-[0.2em] mt-6 font-semibold h-5 text-red-400';
+        if (tDisplay) tDisplay.textContent = '00:00:00';
+        if (tStatus) tStatus.textContent = "Time's up!";
         tPlayAlarm();
       }
 
-      function tStart() {
-        tReset(); getSharedAudioCtx();
-        tFsDisplay.style.animation = '';
-        const val = tInput.value;
-        if (!val) return;
-        const init = tCalcDist(val);
-        if (init <= 0) { tComplete(); return; }
-        tSetDisplay(tFormat(init),
-          'text-4xl font-bold font-mono text-gray-800 tabular-nums',
-          'text-8xl md:text-9xl font-bold font-mono tabular-nums text-white timer-fs-glow select-none');
-        tSetStatus('Counting down...',
-          'text-xs uppercase tracking-wider mt-2 font-semibold h-4 text-blue-500',
-          'text-sm uppercase tracking-[0.2em] mt-6 font-semibold h-5 text-red-400');
-        tInterval = setInterval(() => {
-          const d = tCalcDist(val);
-          if (d <= 100) tComplete();
-          else {
-            const text = tFormat(d);
-            tDisplay.textContent = text;
-            tFsDisplay.textContent = text;
-          }
-        }, 500);
+      function tTick() {
+        const diff = tEndTime - Date.now();
+        if (diff <= 100) { tComplete(); return; }
+        const text = tFormat(diff);
+        tFsDisplay.textContent = text;
+        if (tDisplay) tDisplay.textContent = text;
       }
 
-      // Fullscreen show/hide
-      function tShowFs() {
-        mainApp.classList.add('hidden');
-        tFsOverlay.classList.remove('hidden');
+      function tStart() {
+        getSharedAudioCtx();
+        if (tInterval) clearInterval(tInterval);
+        tFinished = false;
+        tFsDisplay.style.animation = '';
+
+        if (tMode === 'target') {
+          const val = tTargetFs.value;
+          if (!val) return;
+          const [h, m] = val.split(':').map(Number);
+          const target = new Date(); target.setHours(h, m, 0, 0);
+          if (target - Date.now() < -60000) target.setDate(target.getDate() + 1);
+          tEndTime = target.getTime();
+          tFsLabel.textContent = 'Countdown to ' + val;
+        } else {
+          const mins = parseInt(tMinutesFs.value);
+          if (!mins || mins <= 0) return;
+          tEndTime = Date.now() + mins * 60000;
+          tFsLabel.textContent = mins + ' minute' + (mins !== 1 ? 's' : '');
+        }
+
+        const diff = tEndTime - Date.now();
+        if (diff <= 0) { tComplete(); return; }
+
+        tFsDisplay.textContent = tFormat(diff);
+        tFsDisplay.className = 'text-8xl md:text-9xl font-bold font-mono tabular-nums text-white timer-fs-glow select-none';
+        tFsStatus.textContent = 'Counting down...';
+        tFsStatus.className = 'text-sm uppercase tracking-[0.2em] mt-6 font-semibold h-5 text-red-400';
+        tFsSetup.classList.add('hidden');
+        tFsRunning.classList.remove('hidden');
+        tInterval = setInterval(tTick, 500);
       }
+
+      function tReset() {
+        if (tInterval) clearInterval(tInterval);
+        tFinished = false;
+        tFsDisplay.style.animation = '';
+        tFsDisplay.textContent = '00:00:00';
+        tFsDisplay.className = 'text-8xl md:text-9xl font-bold font-mono tabular-nums text-gray-500 timer-fs-glow select-none';
+        tFsStatus.textContent = '';
+        tFsRunning.classList.add('hidden');
+        tFsSetup.classList.remove('hidden');
+        if (tDisplay) tDisplay.textContent = '00:00:00';
+        if (tStatus) tStatus.textContent = '';
+      }
+
       function tHideFs() {
         tFsOverlay.classList.add('hidden');
-        mainApp.classList.remove('hidden');
       }
 
-      tInput.addEventListener('change', tStart);
-      tInput.addEventListener('input', tStart);
-      tTestBtn.addEventListener('click', tPlayAlarm);
-      tFsOpenBtn.addEventListener('click', tShowFs);
+      tFsStartBtn.addEventListener('click', tStart);
+      tFsResetBtn.addEventListener('click', tReset);
       tFsCloseBtn.addEventListener('click', tHideFs);
+      // Enter key starts timer from inputs
+      tTargetFs.addEventListener('keydown', e => { if (e.key === 'Enter') tStart(); });
+      tMinutesFs.addEventListener('keydown', e => { if (e.key === 'Enter') tStart(); });
       document.addEventListener('keydown', e => {
         if (e.key === 'Escape' && !tFsOverlay.classList.contains('hidden')) tHideFs();
+      });
+      // Legacy: keep hidden inline timer-test-audio working
+      const tTestBtn = document.getElementById('timer-test-audio');
+      if (tTestBtn) tTestBtn.addEventListener('click', tPlayAlarm);
+      // Legacy: open from hidden button
+      const tFsOpenBtn = document.getElementById('timer-fullscreen-btn');
+      if (tFsOpenBtn) tFsOpenBtn.addEventListener('click', () => tFsOverlay.classList.remove('hidden'));
+    })();
+
+    // ==================== QR CODE ====================
+    (() => {
+      const overlay = document.getElementById('qr-fullscreen');
+      const closeBtn = document.getElementById('qr-fs-close');
+      const urlInput = document.getElementById('qr-url-input');
+      const genBtn = document.getElementById('qr-generate-btn');
+      const setup = document.getElementById('qr-setup');
+      const display = document.getElementById('qr-display');
+      const canvas = document.getElementById('qr-canvas');
+      const urlLabel = document.getElementById('qr-url-label');
+      const changeBtn = document.getElementById('qr-change-btn');
+
+      // Simple QR code generator using an img from a public API
+      // (school has internet since we use Firebase)
+      function showQR(url) {
+        canvas.replaceChildren();
+        const img = document.createElement('img');
+        img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(url);
+        img.alt = 'QR Code';
+        img.width = 300; img.height = 300;
+        img.className = 'rounded-lg';
+        canvas.appendChild(img);
+        urlLabel.textContent = url;
+        setup.classList.add('hidden');
+        display.classList.remove('hidden');
+      }
+
+      genBtn.addEventListener('click', () => {
+        const url = urlInput.value.trim();
+        if (!url) return;
+        showQR(url);
+      });
+      urlInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); genBtn.click(); }
+      });
+      changeBtn.addEventListener('click', () => {
+        display.classList.add('hidden');
+        setup.classList.remove('hidden');
+        urlInput.focus();
+      });
+      closeBtn.addEventListener('click', () => overlay.classList.add('hidden'));
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && !overlay.classList.contains('hidden')) overlay.classList.add('hidden');
+      });
+    })();
+
+    // ==================== GROUP MAKER ====================
+    (() => {
+      const overlay = document.getElementById('groupmaker-fullscreen');
+      const closeBtn = document.getElementById('gm-fs-close');
+      const goBtn = document.getElementById('gm-go-btn');
+      const reshuffleBtn = document.getElementById('gm-reshuffle-btn');
+      const backBtn = document.getElementById('gm-back-btn');
+      const setupEl = document.getElementById('gm-setup');
+      const resultEl = document.getElementById('gm-result');
+      const grid = document.getElementById('gm-group-grid');
+      const countInput = document.getElementById('gm-count-input');
+      const countLabel = document.getElementById('gm-count-label');
+      const modeNumGroups = document.getElementById('gm-mode-numgroups');
+      const modePerGroup = document.getElementById('gm-mode-pergroup');
+
+      let gmMode = 'numgroups'; // 'numgroups' or 'pergroup'
+
+      function setGmMode(mode) {
+        gmMode = mode;
+        [modeNumGroups, modePerGroup].forEach(b => {
+          b.classList.remove('bg-white/10', 'border', 'border-white/20', 'text-white');
+          b.classList.add('text-gray-400');
+        });
+        const active = mode === 'numgroups' ? modeNumGroups : modePerGroup;
+        active.classList.add('bg-white/10', 'border', 'border-white/20', 'text-white');
+        active.classList.remove('text-gray-400');
+        countLabel.textContent = mode === 'numgroups' ? 'groups' : 'per group';
+      }
+      modeNumGroups.addEventListener('click', () => setGmMode('numgroups'));
+      modePerGroup.addEventListener('click', () => setGmMode('pergroup'));
+
+      function makeGroups() {
+        const students = getPresentStudents();
+        if (students.length === 0) return;
+        const n = parseInt(countInput.value) || 4;
+        const names = shuffleArr(students.map(s => s.Name));
+
+        let numGroups;
+        if (gmMode === 'numgroups') {
+          numGroups = Math.min(n, names.length);
+        } else {
+          numGroups = Math.max(1, Math.ceil(names.length / n));
+        }
+
+        // Distribute evenly
+        const groups = Array.from({ length: numGroups }, () => []);
+        names.forEach((name, i) => groups[i % numGroups].push(name));
+
+        // Render
+        grid.replaceChildren();
+        groups.forEach((members, i) => {
+          const card = document.createElement('div');
+          card.className = 'seat-fs-card rounded-2xl p-5';
+          const h4 = document.createElement('h4');
+          h4.className = 'font-bold text-xl text-red-500 mb-3 seat-fs-card-header';
+          h4.textContent = 'Group ' + (i + 1);
+          const badge = document.createElement('span');
+          badge.className = 'text-sm font-normal text-gray-500 ml-2';
+          badge.textContent = members.length + ' students';
+          h4.appendChild(badge);
+          const ul = document.createElement('ul');
+          ul.className = 'space-y-1.5';
+          members.forEach(name => {
+            const li = document.createElement('li');
+            li.className = 'text-gray-300 text-base';
+            li.textContent = name;
+            ul.appendChild(li);
+          });
+          card.append(h4, ul);
+          grid.appendChild(card);
+        });
+
+        setupEl.classList.add('hidden');
+        resultEl.classList.remove('hidden');
+      }
+
+      goBtn.addEventListener('click', makeGroups);
+      reshuffleBtn.addEventListener('click', makeGroups);
+      backBtn.addEventListener('click', () => {
+        resultEl.classList.add('hidden');
+        setupEl.classList.remove('hidden');
+      });
+      closeBtn.addEventListener('click', () => {
+        overlay.classList.add('hidden');
+        resultEl.classList.add('hidden');
+        setupEl.classList.remove('hidden');
+      });
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && !overlay.classList.contains('hidden')) {
+          overlay.classList.add('hidden');
+          resultEl.classList.add('hidden');
+          setupEl.classList.remove('hidden');
+        }
       });
     })();
     // ======================================================

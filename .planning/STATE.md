@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 
 ## Current Position
 
-Phase: 8 of 8 (Self-Healing) — In progress
-Plan: 1 of 2 in current phase — COMPLETE
-Status: Phase 8 plan 1 complete — selector config + healer module built
-Last activity: 2026-03-24 — Completed 08-01-PLAN.md (selectors.json, healer.py, Firestore helpers)
+Phase: 8 of 8 (Self-Healing) — COMPLETE
+Plan: 2 of 2 in current phase — COMPLETE
+Status: Phase 8 complete — full self-healing pipeline integrated into live sync
+Last activity: 2026-03-24 — Completed 08-02-PLAN.md (healer wired into sync_engine, deps added)
 
-Progress: [████████████████░░░] 89% (v1.0 complete; v2.0 phases 5-8.1 complete)
+Progress: [████████████████████] 100% (all phases complete)
 
 ## Performance Metrics
 
@@ -34,7 +34,7 @@ Progress: [████████████████░░░] 89% (v1.0 
 | 5. Auth Foundation | 3/3 | Complete |
 | 6. Teacher Dashboard | 4/4 | Complete |
 | 7. Railway Cloud Sync | 2/2 | Complete |
-| 8. Self-Healing | 1/2 | In progress |
+| 8. Self-Healing | 2/2 | Complete |
 
 ## Accumulated Context
 
@@ -99,6 +99,14 @@ Phase 6 confirmed:
 - sync-status-path: sync status read from teachers/{uid}/sync/status (onSnapshot); doc written by Phase 7 Railway sync worker
 - settings-section: credential update calls authenticateTeacher CF; PIN change saves to config/main and updates kiosk binding
 
+Phase 8 plan 2 confirmed:
+
+- healing-lazy-import: attempt_heal imported inside find_element_with_fallback() body to avoid circular imports at module load
+- healing-index-sentinel: strategy_index == len(strategies) returned when element found via healing (one past last static index)
+- gemini-key-non-fatal: GEMINI_API_KEY missing is a WARNING not an exit — self-healing degrades gracefully, sync continues
+- selector-broken-message: "Aeries page changed and auto-repair failed — developer notified"
+- dockerfile-explicit-json: non-glob data files like selectors.json must be explicitly COPY'd in Dockerfile alongside *.py
+
 Phase 8 plan 1 confirmed:
 
 - selectors-config-file: SELECTOR_STRATEGIES loaded from railway-worker/selectors.json at module import; _DEFAULT_SELECTORS hardcoded fallback if file missing
@@ -122,6 +130,6 @@ Phase 8 plan 1 confirmed:
 
 ## Session Continuity
 
-Last session: 2026-03-24T19:47Z
-Stopped at: Phase 8 plan 1 complete — selectors.json, healer.py, Firestore helpers
-Resume file: None — ready to execute 08-02-PLAN.md (wire healing into live sync flow)
+Last session: 2026-03-24T19:52Z
+Stopped at: Phase 8 plan 2 complete — healer integrated into sync_engine.py, deps added
+Resume file: None — all phases complete. Next: push to GitHub and deploy to Railway.

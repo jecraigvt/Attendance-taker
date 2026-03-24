@@ -28,17 +28,25 @@ service cloud.firestore {
     // logged-in teacher can bind a kiosk to their account).
     // -----------------------------------------------------------------------
     match /kiosks/{kioskId} {
-      allow read: if true;              // Kiosk reads its own binding on startup
+      allow get: if true;               // Kiosk reads its own binding on startup
+      allow list: if false;             // Prevent enumeration of all kiosk bindings
       allow write: if request.auth != null;  // Only authenticated teachers bind
     }
 
     // -----------------------------------------------------------------------
-    // LEGACY paths: kept open during migration (Phase 5-03 and 05-04).
-    // The current kiosk still writes to the old artifacts path structure.
-    // Tighten these rules after Phase 5 migration is complete.
+    // Rate-limit records: admin SDK (Cloud Functions) only.
+    // -----------------------------------------------------------------------
+    match /rateLimits/{username} {
+      allow read, write: if false;
+    }
+
+    // -----------------------------------------------------------------------
+    // LEGACY paths: migration complete.  Client code no longer uses this
+    // path — only admin-SDK scripts (analyze_firebase.py) access it.
+    // Deny all client access; admin SDK bypasses these rules.
     // -----------------------------------------------------------------------
     match /artifacts/{appId}/public/{document=**} {
-      allow read, write: if true;  // Permissive during transition
+      allow read, write: if false;
     }
 
     // -----------------------------------------------------------------------

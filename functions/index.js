@@ -25,6 +25,7 @@ const {logger} = require("firebase-functions/v2");
 const admin = require("firebase-admin");
 const fernet = require("fernet");
 const cheerio = require("cheerio");
+const crypto = require("crypto");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -39,6 +40,10 @@ const AERIES_LOGIN_URL = `${AERIES_BASE_URL}/Login.aspx`;
 // Fake email domain used to create Firebase Auth accounts for teachers.
 // Aeries usernames are not real email addresses, so we manufacture one.
 const AUTH_EMAIL_DOMAIN = "aeries.attendance.local";
+
+// Rate-limit settings for authenticateTeacher
+const RATE_LIMIT_MAX_ATTEMPTS = 5; // max failed attempts per window
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15-minute window
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -167,6 +172,56 @@ function fernetEncrypt(plaintext) {
 }
 
 /**
+ * Check whether a username has exceeded the login attempt rate limit.
+ * Returns { blocked: boolean, retryAfterMs: number }.
+ */
+async function checkRateLimit(username) {
+  const docRef = db.collection("rateLimits").doc(username);
+  const snap = await docRef.get();
+  if (!snap.exists) return {blocked: false, retryAfterMs: 0};
+
+  const data = snap.data();
+  const now = Date.now();
+  const windowStart = now - RATE_LIMIT_WINDOW_MS;
+
+  // Filter to attempts within the current window
+  const recentAttempts = (data.failedAttempts || [])
+      .filter((ts) => ts > windowStart);
+
+  if (recentAttempts.length >= RATE_LIMIT_MAX_ATTEMPTS) {
+    const oldestInWindow = Math.min(...recentAttempts);
+    const retryAfterMs = oldestInWindow + RATE_LIMIT_WINDOW_MS - now;
+    return {blocked: true, retryAfterMs};
+  }
+  return {blocked: false, retryAfterMs: 0};
+}
+
+/**
+ * Record a failed login attempt for rate-limiting purposes.
+ */
+async function recordFailedAttempt(username) {
+  const docRef = db.collection("rateLimits").doc(username);
+  const now = Date.now();
+  const windowStart = now - RATE_LIMIT_WINDOW_MS;
+
+  const snap = await docRef.get();
+  const existing = snap.exists ? (snap.data().failedAttempts || []) : [];
+  // Keep only attempts within the window, then append the new one
+  const recent = existing.filter((ts) => ts > windowStart);
+  recent.push(now);
+
+  await docRef.set({failedAttempts: recent, updatedAt: now});
+}
+
+/**
+ * Clear rate-limit records after a successful login.
+ */
+async function clearRateLimit(username) {
+  const docRef = db.collection("rateLimits").doc(username);
+  await docRef.delete();
+}
+
+/**
  * Look up a Firebase Auth user by the synthetic email for a given
  * Aeries username.  Returns the UserRecord or null if not found.
  */
@@ -191,11 +246,7 @@ async function createFirebaseUser(username) {
   const email = username.includes("@") ? username : `${username}@${AUTH_EMAIL_DOMAIN}`;
   // Random password for the Firebase Auth record.  Teachers never use this;
   // they always authenticate via the Aeries flow which returns a custom token.
-  const randomPassword =
-    admin.auth().createCustomToken // guard just to use admin reference
-      ? Math.random().toString(36).slice(2) +
-        Math.random().toString(36).slice(2)
-      : "not-used";
+  const randomPassword = crypto.randomBytes(32).toString("hex");
 
   const user = await admin.auth().createUser({
     email: email,
@@ -396,7 +447,20 @@ exports.authenticateTeacher = onCall(
 
       try {
         // ------------------------------------------------------------------
-        // 2. Validate Aeries credentials (graceful degradation on failure)
+        // 2. Rate-limit check (per-username)
+        // ------------------------------------------------------------------
+        const rateCheck = await checkRateLimit(cleanUsername);
+        if (rateCheck.blocked) {
+          const retryMinutes = Math.ceil(rateCheck.retryAfterMs / 60000);
+          logger.warn("Rate limit exceeded", {username: cleanUsername});
+          throw new HttpsError(
+              "resource-exhausted",
+              `Too many login attempts. Please try again in ${retryMinutes} minute(s).`,
+          );
+        }
+
+        // ------------------------------------------------------------------
+        // 3. Validate Aeries credentials (graceful degradation on failure)
         // ------------------------------------------------------------------
         logger.info("Validating Aeries credentials", {username: cleanUsername});
         const validation = await validateAeriesCredentials(
@@ -411,21 +475,32 @@ exports.authenticateTeacher = onCall(
             username: cleanUsername,
             reason: validation.reason,
           });
+          await recordFailedAttempt(cleanUsername);
           return {success: false, error: "Invalid Aeries credentials"};
         }
 
-        if (!credentialsValidated && validation.reason === "aeries_unreachable") {
-          // Proceed anyway — credentials will be validated when cloud sync runs
-          logger.warn("Aeries unreachable — proceeding without real-time validation", {
-            username: cleanUsername,
-          });
-        }
-
         // ------------------------------------------------------------------
-        // 3. Resolve Firebase Auth user (create if first login)
+        // 4. Resolve Firebase Auth user (create if first login)
         // ------------------------------------------------------------------
         let firebaseUser = await findFirebaseUserByUsername(cleanUsername);
         const isNewUser = firebaseUser === null;
+
+        if (!credentialsValidated && validation.reason === "aeries_unreachable") {
+          if (isNewUser) {
+            // New user + can't validate = reject (don't store unverified creds)
+            logger.warn("Aeries unreachable — rejecting new user signup", {
+              username: cleanUsername,
+            });
+            return {
+              success: false,
+              error: "Aeries is currently unreachable. Please try again later.",
+            };
+          }
+          // Existing user + can't validate = proceed with existing credentials
+          logger.warn("Aeries unreachable — using existing credentials for returning user", {
+            username: cleanUsername,
+          });
+        }
 
         if (isNewUser) {
           logger.info("Creating new Firebase Auth user", {
@@ -437,21 +512,7 @@ exports.authenticateTeacher = onCall(
         const uid = firebaseUser.uid;
 
         // ------------------------------------------------------------------
-        // 4. Encrypt Aeries password with Fernet
-        // ------------------------------------------------------------------
-        let encryptedPassword;
-        try {
-          encryptedPassword = fernetEncrypt(password);
-        } catch (err) {
-          logger.error("Fernet encryption failed", {error: err.message});
-          throw new HttpsError(
-              "internal",
-              "Credential encryption failed. Ensure FERNET_KEY is configured.",
-          );
-        }
-
-        // ------------------------------------------------------------------
-        // 5. Store encrypted credentials in Firestore (admin SDK — bypasses rules)
+        // 5. Encrypt & store credentials (skip overwrite when unvalidated)
         // ------------------------------------------------------------------
         const credentialsRef = db
             .collection("teachers")
@@ -459,12 +520,32 @@ exports.authenticateTeacher = onCall(
             .collection("credentials")
             .doc("aeries");
 
-        await credentialsRef.set({
-          aeriesUsername: cleanUsername,
-          encryptedPassword: encryptedPassword,
-          validated: credentialsValidated,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
+        if (credentialsValidated) {
+          // Validated credentials — safe to overwrite
+          let encryptedPassword;
+          try {
+            encryptedPassword = fernetEncrypt(password);
+          } catch (err) {
+            logger.error("Fernet encryption failed", {error: err.message});
+            throw new HttpsError(
+                "internal",
+                "Credential encryption failed. Ensure FERNET_KEY is configured.",
+            );
+          }
+
+          await credentialsRef.set({
+            aeriesUsername: cleanUsername,
+            encryptedPassword: encryptedPassword,
+            validated: true,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+        // When Aeries is unreachable for an existing user, we intentionally
+        // do NOT overwrite stored credentials — the previously validated
+        // credentials remain intact.
+
+        // Clear rate-limit record on successful login
+        await clearRateLimit(cleanUsername);
 
         // ------------------------------------------------------------------
         // 6. Upsert teacher profile

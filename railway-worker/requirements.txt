@@ -1,0 +1,15 @@
+# Firebase Admin SDK — Firestore reads/writes for attendance data and teacher credentials
+firebase-admin>=6.0.0,<7.0.0
+
+# Playwright — headless Chromium for Aeries web automation
+playwright>=1.49.0,<2.0.0
+
+# cryptography.fernet — Fernet symmetric encryption, cross-compatible with Node fernet npm package
+# NOTE: Use `cryptography` (not `python-fernet`) for compatibility with the same Fernet spec
+cryptography>=41.0.0,<44.0.0
+
+# APScheduler — cron-like scheduler for 20-minute sync intervals during school hours
+apscheduler>=3.10.0,<4.0.0
+
+# pytz — Pacific Time timezone handling for school day schedule logic
+pytz>=2024.1

@@ -72,7 +72,7 @@ Plans:
 
 ---
 
-### 🚧 v2.0 Multi-Tenant SaaS (In Progress)
+### v2.0 Multi-Tenant SaaS (In Progress)
 
 **Milestone Goal:** Transform from single-teacher tool to multi-tenant platform where any teacher can sign up, manage rosters, and have attendance automatically synced to Aeries via cloud automation — without requiring developer support.
 
@@ -135,11 +135,11 @@ Plans:
   1. When all static selector fallbacks are exhausted, Gemini Flash is automatically invoked to identify a replacement selector
   2. If Flash fails, Gemini Pro is tried as a fallback before the sync is marked failed
   3. Healed selectors are stored in a config file (not hardcoded) and the healing event appears in the teacher dashboard
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 08-01: Selector config file and healer scaffold — extract selectors to config, wrap find_element_with_fallback(), dry-run validation
-- [ ] 08-02: Gemini Flash/Pro integration — prompt, selector validation, Firestore caching, Flash-to-Pro escalation logic
+- [ ] 08-01-PLAN.md — Selector config extraction and healer module: extract selectors to JSON, create healer.py with Gemini Flash/Pro escalation, Firestore healing event logging
+- [ ] 08-02-PLAN.md — Integration: wire healer into find_element_with_fallback(), add google-generativeai dependency, GEMINI_API_KEY startup validation, Dockerfile update
 
 ---
 

@@ -45,9 +45,9 @@
 
 ### Self-Healing Automation
 
-- [ ] **HEAL-01**: When Aeries UI changes break selectors, Gemini Flash identifies replacement selectors
-- [ ] **HEAL-02**: If Flash fails to repair, escalate to Gemini Pro
-- [ ] **HEAL-03**: Selectors stored in a config file (not hardcoded), so LLM patches are trackable and git-versioned
+- [x] **HEAL-01**: When Aeries UI changes break selectors, Gemini Flash identifies replacement selectors
+- [x] **HEAL-02**: If Flash fails to repair, escalate to Gemini Pro
+- [x] **HEAL-03**: Selectors stored in a config file (not hardcoded), so LLM patches are trackable and git-versioned
 
 ## Future Requirements
 
@@ -89,9 +89,9 @@
 | SYNC-01 | Phase 7 | Complete |
 | SYNC-02 | Phase 7 | Complete |
 | SYNC-03 | Phase 7 | Complete |
-| HEAL-01 | Phase 8 | Pending |
-| HEAL-02 | Phase 8 | Pending |
-| HEAL-03 | Phase 8 | Pending |
+| HEAL-01 | Phase 8 | Complete |
+| HEAL-02 | Phase 8 | Complete |
+| HEAL-03 | Phase 8 | Complete |
 
 **Coverage:**
 - v2.0 requirements: 23 total
@@ -100,4 +100,4 @@
 
 ---
 *Requirements defined: 2026-03-23*
-*Traceability updated: 2026-03-23*
+*Traceability updated: 2026-03-24*

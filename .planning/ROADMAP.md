@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 Attendance Sync Reliability** - Phases 1-4 (shipped 2026-02-05)
-- 🚧 **v2.0 Multi-Tenant SaaS** - Phases 5-8 (in progress)
+- ✅ **v2.0 Multi-Tenant SaaS** - Phases 5-8 (shipped 2026-03-24)
 
 ## Phases
 
@@ -72,7 +72,7 @@ Plans:
 
 ---
 
-### v2.0 Multi-Tenant SaaS (In Progress)
+### v2.0 Multi-Tenant SaaS (SHIPPED 2026-03-24)
 
 **Milestone Goal:** Transform from single-teacher tool to multi-tenant platform where any teacher can sign up, manage rosters, and have attendance automatically synced to Aeries via cloud automation — without requiring developer support.
 
@@ -138,8 +138,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 08-01-PLAN.md — Selector config extraction and healer module: extract selectors to JSON, create healer.py with Gemini Flash/Pro escalation, Firestore healing event logging
-- [ ] 08-02-PLAN.md — Integration: wire healer into find_element_with_fallback(), add google-generativeai dependency, GEMINI_API_KEY startup validation, Dockerfile update
+- [x] 08-01-PLAN.md — Selector config extraction and healer module: extract selectors to JSON, create healer.py with Gemini Flash/Pro escalation, Firestore healing event logging
+- [x] 08-02-PLAN.md — Integration: wire healer into find_element_with_fallback(), add google-generativeai dependency, GEMINI_API_KEY startup validation, Dockerfile update
 
 ---
 
@@ -157,4 +157,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 5. Auth Foundation and Data Migration | v2.0 | 3/3 | Complete | 2026-03-23 |
 | 6. Teacher Dashboard and Roster Management | v2.0 | 4/4 | Complete | 2026-03-24 |
 | 7. Railway Cloud Sync | v2.0 | 2/2 | Complete | 2026-03-24 |
-| 8. Self-Healing LLM Layer | v2.0 | 0/2 | Not started | - |
+| 8. Self-Healing LLM Layer | v2.0 | 2/2 | Complete | 2026-03-24 |

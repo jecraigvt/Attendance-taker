@@ -305,9 +305,9 @@
 
       <div id="pin-setup-error" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700"></div>
 
-      <input type="tel" id="pin-setup-input" maxlength="4" inputmode="numeric" pattern="[0-9]{4}" autocomplete="off"
+      <input type="text" id="pin-setup-input" maxlength="10" autocomplete="off"
         class="w-full text-center text-4xl font-mono p-4 border-4 border-gray-300 rounded-lg focus:ring-4 focus:ring-red-500 focus:border-red-500 mb-4"
-        placeholder="_ _ _ _" />
+        placeholder="e.g. ++++  or  ab12" />
       <button id="pin-setup-submit"
         class="w-full bg-red-700 text-white font-bold py-3 rounded-lg hover:bg-red-800 transition-all disabled:opacity-50">
         Set PIN &amp; Start Kiosk
@@ -319,13 +319,13 @@
   <div id="pin-entry-screen" class="hidden fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
     <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center">
       <h2 class="text-2xl font-bold text-gray-900 mb-2">Enter PIN</h2>
-      <p class="text-sm text-gray-500 mb-4">Enter your 4-digit PIN to access the dashboard.</p>
+      <p class="text-sm text-gray-500 mb-4">Enter your PIN to access the dashboard.</p>
 
       <div id="pin-entry-error" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700"></div>
 
-      <input type="tel" id="pin-entry-input" maxlength="4" inputmode="numeric" pattern="[0-9]{4}" autocomplete="off"
+      <input type="text" id="pin-entry-input" maxlength="10" autocomplete="off"
         class="w-full text-center text-4xl font-mono p-4 border-4 border-gray-300 rounded-lg focus:ring-4 focus:ring-red-500 focus:border-red-500 mb-4"
-        placeholder="_ _ _ _" />
+        placeholder="PIN" />
       <button id="pin-entry-submit"
         class="w-full bg-red-700 text-white font-bold py-3 rounded-lg hover:bg-red-800 transition-all mb-3">
         Unlock
@@ -637,7 +637,7 @@
             </div>
 
             <!-- Per-period overrides (collapsible) -->
-            <div id="seating-period-card" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div id="seating-period-card" class="bg-white rounded-xl border border-gray-200">
               <button id="seating-period-toggle-btn"
                 class="w-full flex items-center justify-between p-6 text-left hover:bg-gray-50 transition-colors">
                 <div>
@@ -757,10 +757,10 @@
 
           <div id="settings-change-pin-form" class="hidden mt-4 space-y-3 border-t border-gray-100 pt-4">
             <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">New 4-digit PIN</label>
-              <input type="tel" id="settings-new-pin" maxlength="4" inputmode="numeric" pattern="[0-9]{4}"
-                class="w-32 text-center text-2xl font-mono p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                placeholder="_ _ _ _" autocomplete="off" />
+              <label class="block text-xs font-medium text-gray-700 mb-1">New PIN (use non-numeric to avoid student ID conflicts)</label>
+              <input type="text" id="settings-new-pin" maxlength="10" autocomplete="off"
+                class="w-40 text-center text-2xl font-mono p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                placeholder="e.g. ++++" />
             </div>
             <div id="settings-pin-error" class="hidden text-xs text-red-600"></div>
             <div id="settings-pin-success" class="hidden text-xs text-green-600 font-medium"></div>
@@ -824,10 +824,10 @@
         <div id="kiosk-view" class="w-full max-w-sm text-center">
           <h1 class="text-4xl font-bold mb-2">Welcome Warriors!</h1>
           <p id="kiosk-teacher-name" class="text-sm text-red-400 font-semibold mb-1 hidden"></p>
-          <p class="text-lg text-gray-400">Enter your 4-digit ID or teacher PIN.</p>
+          <p class="text-lg text-gray-400">Enter your student ID or teacher PIN.</p>
           <p id="period-indicator" class="mt-2 text-sm text-white/90"></p>
 
-          <input type="text" id="student-id-input" maxlength="4"
+          <input type="text" id="student-id-input" maxlength="10"
             class="w-full mt-6 text-center text-5xl font-mono p-4 rounded-lg border-4 border-gray-600 bg-white text-gray-900 focus:outline-none focus:ring-4 focus:ring-red-500"
             placeholder="_ _ _ _" />
           <button id="sign-in-button"
@@ -1287,7 +1287,7 @@
         exportCsvButton.addEventListener('click', exportCSV);
         hideAdminButton.addEventListener('click', showKioskMode);
         saveExceptionsBtn.addEventListener('click', saveExceptions);
-        studentIdInput.addEventListener('input', () => { signInButton.disabled = studentIdInput.value.length < 4; });
+        studentIdInput.addEventListener('input', () => { signInButton.disabled = studentIdInput.value.trim().length < 4; });
         studentIdInput.addEventListener('keyup', e => { if (e.key === 'Enter' && !signInButton.disabled) signInButton.click(); });
         signInButton.addEventListener('click', handleSignIn);
         document.addEventListener('keydown', e => { if (!messageView.classList.contains('hidden') && (e.key === 'Enter' || e.key === 'Escape')) dismissMessage(); });
@@ -1966,8 +1966,8 @@
       const errEl = document.getElementById('pin-setup-error');
 
       const pin = pinInput.value.trim();
-      if (!/^\d{4}$/.test(pin)) {
-        errEl.textContent = 'PIN must be exactly 4 digits.';
+      if (pin.length < 4) {
+        errEl.textContent = 'PIN must be at least 4 characters. Use non-numeric characters to avoid conflicts with student IDs.';
         errEl.classList.remove('hidden');
         return;
       }
@@ -3143,10 +3143,10 @@
       try {
         const code = studentIdInput.value.trim();
 
-        // 1. Check for Teacher PIN to exit kiosk
+        // 1. Check for Teacher PIN to exit kiosk — go straight to dashboard
         if (teacherPin && code === teacherPin) {
           studentIdInput.value = '';
-          showPinEntry();
+          showDashboard();
           return;
         }
 
@@ -3868,8 +3868,8 @@
       if (savePinBtn && newPinInput) {
         savePinBtn.addEventListener('click', async () => {
           const newPin = newPinInput.value.trim();
-          if (!/^\d{4}$/.test(newPin)) {
-            if (pinError) { pinError.textContent = 'PIN must be exactly 4 digits.'; pinError.classList.remove('hidden'); }
+          if (newPin.length < 4) {
+            if (pinError) { pinError.textContent = 'PIN must be at least 4 characters.'; pinError.classList.remove('hidden'); }
             return;
           }
           if (pinError) pinError.classList.add('hidden');
@@ -3902,10 +3902,6 @@
       }
       if (newPinInput) {
         newPinInput.addEventListener('keyup', e => { if (e.key === 'Enter' && savePinBtn) savePinBtn.click(); });
-        newPinInput.addEventListener('input', () => {
-          // Auto-filter non-digits
-          newPinInput.value = newPinInput.value.replace(/\D/g, '');
-        });
       }
 
       // Sign out button

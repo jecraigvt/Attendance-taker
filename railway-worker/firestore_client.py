@@ -282,6 +282,7 @@ def write_sync_status(
     uid: str,
     status: str,
     error: str = None,
+    error_category: str = None,
     periods_processed: int = None,
     unsyncable: list = None,
 ) -> None:
@@ -310,6 +311,11 @@ def write_sync_status(
             # Explicitly delete the error field if it existed from a prior failure
             doc_data["error"] = firestore.DELETE_FIELD
 
+        if error_category is not None:
+            doc_data["errorCategory"] = error_category
+        else:
+            doc_data["errorCategory"] = firestore.DELETE_FIELD
+
         if periods_processed is not None:
             doc_data["periodsProcessed"] = periods_processed
 
@@ -320,6 +326,25 @@ def write_sync_status(
         logger.info(f"[{uid}] Wrote sync status: {status}")
     except Exception as exc:
         logger.error(f"[{uid}] Failed to write sync status: {exc}")
+
+
+def is_sync_blocked(uid: str) -> bool:
+    """
+    Return True if the teacher's sync is blocked due to credentials_invalid.
+
+    Once credentials are re-entered (Settings page calls authenticateTeacher CF
+    which clears the errorCategory), the block lifts automatically.
+    """
+    db = get_db()
+    try:
+        doc = db.document(f"teachers/{uid}/sync/status").get()
+        if not doc.exists:
+            return False
+        data = doc.to_dict()
+        return data.get("errorCategory") == "credentials_invalid"
+    except Exception as exc:
+        logger.error(f"[{uid}] Error checking sync block status: {exc}")
+        return False
 
 
 def get_teacher_profile(uid: str) -> dict:

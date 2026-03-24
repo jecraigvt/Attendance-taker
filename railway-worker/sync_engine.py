@@ -21,6 +21,7 @@ from firestore_client import (
     get_teacher_credentials,
     get_last_sync_time,
     get_latest_attendance_timestamp,
+    is_sync_blocked,
     write_sync_status,
 )
 
@@ -227,6 +228,16 @@ def sync_teacher(uid: str) -> dict:
     logger.info(f"[{uid}] Starting sync for {today}")
 
     # ------------------------------------------------------------------
+    # Step 0: Check if sync is blocked (e.g. invalid credentials)
+    # ------------------------------------------------------------------
+    if is_sync_blocked(uid):
+        logger.info(
+            f"[{uid}] Sync blocked — credentials_invalid. "
+            "Skipping until teacher updates credentials in Settings."
+        )
+        return {"status": "skipped", "reason": "credentials_blocked"}
+
+    # ------------------------------------------------------------------
     # Step 1: Check for new data
     # ------------------------------------------------------------------
     try:
@@ -260,7 +271,7 @@ def sync_teacher(uid: str) -> dict:
     if creds is None:
         msg = "No Aeries credentials configured. Please add your credentials in Settings."
         logger.warning(f"[{uid}] {msg}")
-        write_sync_status(uid, "failed", error=msg)
+        write_sync_status(uid, "failed", error=msg, error_category="credentials_invalid")
         return {"status": "failed", "error": msg}
 
     try:
@@ -279,7 +290,7 @@ def sync_teacher(uid: str) -> dict:
     except (ImportError, InvalidToken, Exception) as exc:
         msg = "Credential decryption failed. Please re-enter your password in Settings."
         logger.error(f"[{uid}] {msg} — {exc}")
-        write_sync_status(uid, "failed", error=msg)
+        write_sync_status(uid, "failed", error=msg, error_category="credentials_invalid")
         return {"status": "failed", "error": msg}
 
     # ------------------------------------------------------------------
@@ -327,7 +338,7 @@ def sync_teacher(uid: str) -> dict:
                     else:
                         category, friendly = categorize_error(login_exc, context="login")
                     logger.error(f"[{uid}] Login failed ({category}): {login_exc}")
-                    write_sync_status(uid, "failed", error=friendly)
+                    write_sync_status(uid, "failed", error=friendly, error_category=category)
                     return {"status": "failed", "error": friendly, "category": category}
 
                 # --- NAVIGATE TO ATTENDANCE ---
@@ -550,12 +561,12 @@ def sync_teacher(uid: str) -> dict:
     except SyncEngineError as exc:
         category, friendly = categorize_error(exc, context="playwright_upload")
         logger.error(f"[{uid}] Sync failed ({category}): {exc}")
-        write_sync_status(uid, "failed", error=friendly)
+        write_sync_status(uid, "failed", error=friendly, error_category=category)
         return {"status": "failed", "error": friendly, "category": category}
     except Exception as exc:
         category, friendly = categorize_error(exc, context="playwright_upload")
         logger.error(f"[{uid}] Unexpected sync error ({category}): {exc}")
-        write_sync_status(uid, "failed", error=friendly)
+        write_sync_status(uid, "failed", error=friendly, error_category=category)
         return {"status": "failed", "error": friendly, "category": category}
 
     # ------------------------------------------------------------------

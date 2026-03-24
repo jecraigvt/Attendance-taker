@@ -2269,7 +2269,7 @@
       if (!studentId || !firstName) { alert('Student ID and first name are required.'); return; }
       const roster = allRosters[period] || [];
       if (roster.find(s => s.StudentID === studentId)) { alert('Student ID ' + studentId + ' is already in Period ' + period + '.'); return; }
-      const newStudent = { StudentID: studentId, FirstName: firstName, LastName: lastName, preferredName: firstName, source: 'manual' };
+      const newStudent = { StudentID: studentId, FirstName: firstName, LastName: lastName, preferredName: firstName.split(' ')[0], source: 'manual' };
       allRosters[period] = [...roster, newStudent];
       try { localStorage.setItem('allRosters', JSON.stringify(allRosters)); } catch (e) { console.warn('localStorage full:', e); }
       if (db && teacherUid) {
@@ -2858,8 +2858,8 @@
           const last = comma >= 0 ? studentName.slice(0, comma).trim() : '';
           const first = comma >= 0 ? studentName.slice(comma + 1).trim() : studentName.trim();
 
-          // preferredName defaults to FirstName; teachers can customize in Roster tab
-          rosters[curPeriod].push({ StudentID: studentId, LastName: last, FirstName: first, preferredName: first, source: 'csv' });
+          // preferredName defaults to first word of FirstName; teachers can customize in Roster tab
+          rosters[curPeriod].push({ StudentID: studentId, LastName: last, FirstName: first, preferredName: first.split(' ')[0], source: 'csv' });
         }
       }
 

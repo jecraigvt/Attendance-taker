@@ -727,10 +727,10 @@ exports.fetchRoster = onCall(
             const students = parseAeriesRosterPage($);
 
             if (students.length > 0) {
-              // Add preferredName field defaulting to FirstName
+              // Add preferredName field defaulting to first word of FirstName
               const studentsWithPreferred = students.map(s => ({
                 ...s,
-                preferredName: s.FirstName,
+                preferredName: (s.FirstName || "").split(" ")[0],
                 source: "aeries",
               }));
               rostersByPeriod[cls.period] = studentsWithPreferred;
@@ -788,10 +788,10 @@ exports.fetchRoster = onCall(
             const prev = existingById.get(s.StudentID);
             return {
               ...s,
-              // Preserve teacher-customized preferred name; fall back to FirstName
-              preferredName: (prev && prev.preferredName && prev.preferredName !== prev.FirstName)
+              // Preserve teacher-customized preferred name; fall back to first word of FirstName
+              preferredName: (prev && prev.preferredName && prev.preferredName !== prev.FirstName && prev.preferredName !== (prev.FirstName || "").split(" ")[0])
                 ? prev.preferredName
-                : s.FirstName,
+                : (s.FirstName || "").split(" ")[0],
             };
           });
 

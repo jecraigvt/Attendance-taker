@@ -537,7 +537,7 @@
     }
     // ===== Import modern Firebase SDK =====
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getAuth, signInWithCustomToken, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getAuth, signInWithCustomToken, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
     import { getFirestore, initializeFirestore, persistentLocalCache, collection, doc, onSnapshot, setDoc, serverTimestamp, getDoc, addDoc, where, query, getDocs, deleteDoc, documentId } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
 
@@ -780,10 +780,32 @@
           teacherName = binding.name;
           teacherPin = binding.pin;
 
-          // Re-authenticate with Firebase using stored UID
-          // (The custom token is short-lived; re-auth happens on next login; for kiosk
-          //  continuity we rely on the stored binding and the persistent Firestore cache)
-          // If auth is available, try to restore session; otherwise load local data
+          // Wait for Firebase Auth to restore the persisted session.
+          // Firebase keeps a refresh token in IndexedDB that auto-renews
+          // indefinitely — no re-login needed even after days.
+          if (auth) {
+            try {
+              await new Promise((resolve, reject) => {
+                const unsub = onAuthStateChanged(auth, (user) => {
+                  unsub();
+                  if (user && user.uid === teacherUid) {
+                    console.log('[init] Auth session restored for', user.uid);
+                    resolve();
+                  } else if (user) {
+                    console.warn('[init] Auth UID mismatch, re-signing in');
+                    resolve(); // proceed anyway — binding has the right UID
+                  } else {
+                    console.warn('[init] No auth session found, kiosk will use offline cache');
+                    resolve(); // still show kiosk — offline cache works for reads
+                  }
+                });
+                // Timeout after 5s so the kiosk isn't stuck on a blank screen
+                setTimeout(() => { unsub(); resolve(); }, 5000);
+              });
+            } catch (e) {
+              console.warn('[init] Auth state check failed:', e.message);
+            }
+          }
           await onTeacherAuthenticated(false);
           showKioskMode();
         } else if (!FB_CONFIG) {

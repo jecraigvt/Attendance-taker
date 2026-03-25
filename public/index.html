@@ -1276,7 +1276,7 @@
       const map = new Map();
       for (let g = 1; g <= numGroups; g++) map.set(g, []);
       periodAttendanceLog.forEach(l => {
-        if (l.Group && map.has(l.Group)) map.get(l.Group).push({ name: l.Name, seat: l.Seat });
+        if (l.Group && map.has(l.Group)) map.get(l.Group).push({ name: l.Name, seat: l.Seat, sid: l.StudentID });
       });
 
       fullscreenListEl.replaceChildren();
@@ -1301,9 +1301,21 @@
             const ul = document.createElement('ul');
             ul.className = 'space-y-1.5';
             arr.forEach(entry => {
+              const streak = absenceStreaks.get(entry.sid) || 0;
               const li = document.createElement('li');
-              li.className = 'text-gray-300 text-base';
-              li.textContent = entry.seat != null ? entry.name + ' \u2014 Seat ' + entry.seat : entry.name;
+              let liClass = 'text-gray-300 text-base';
+              if (streak === 1) liClass += ' text-amber-300';
+              else if (streak >= 2) liClass += ' text-red-400';
+              li.className = liClass;
+              let text = entry.seat != null ? entry.name + ' \u2014 Seat ' + entry.seat : entry.name;
+              li.textContent = text;
+              if (streak > 0) {
+                const dot = document.createElement('span');
+                dot.className = streak >= 2 ? 'ml-1.5 text-red-400 text-xs' : 'ml-1.5 text-amber-300 text-xs';
+                dot.title = streak === 1 ? 'Absent last class' : 'Absent ' + streak + ' classes in a row';
+                dot.textContent = streak === 1 ? '\u25CF' : '\u25CF' + streak;
+                li.appendChild(dot);
+              }
               ul.appendChild(li);
             });
             card.append(h4, ul);
@@ -2154,6 +2166,7 @@
     let allRosters = {};      // { period -> [{StudentID,LastName,FirstName}, ...] }
     let currentRoster = [];   // active period roster array
     let periodAttendanceLog = []; // sign-ins for current period
+    let absenceStreaks = new Map();   // StudentID -> consecutive days absent (for current period)
     let globalPeriod = null;          // current period from Firebase (shared across kiosks)
     let unsubCurrentPeriod = null;    // listener for currentPeriod doc
     let isOverride = false;
@@ -3858,6 +3871,61 @@
       }
     }
 
+    // ===== Absence streak calculation =====
+    // Returns past N school day date strings (YYYY-MM-DD), most recent first
+    function getPastSchoolDays(n) {
+      const days = [];
+      const d = new Date();
+      while (days.length < n) {
+        d.setDate(d.getDate() - 1);
+        const dow = d.getDay();
+        if (dow !== 0 && dow !== 6) { // skip weekends
+          days.push(d.toISOString().slice(0, 10));
+        }
+      }
+      return days;
+    }
+
+    // Load absence streaks for the given period (async, updates absenceStreaks map)
+    async function loadAbsenceStreaks(period) {
+      absenceStreaks = new Map();
+      if (!db || !teacherUid || !period) return;
+
+      const roster = currentRoster;
+      if (!roster || roster.length === 0) return;
+
+      const pastDays = getPastSchoolDays(5); // check last 5 school days
+      const rosterIds = new Set(roster.map(s => s.StudentID));
+
+      // Fetch attendance for each past day (most recent first)
+      // Stop checking once a student was present
+      const presentOnDay = []; // array of Sets, index 0 = most recent
+      for (const dateStr of pastDays) {
+        try {
+          const colRef = collection(db, teacherPath(`attendance/${dateStr}/periods/${period}/students`));
+          const snap = await getDocs(colRef);
+          const ids = new Set();
+          snap.docs.forEach(d => ids.add(d.id));
+          presentOnDay.push(ids);
+        } catch {
+          presentOnDay.push(new Set());
+        }
+      }
+
+      // For each roster student, count consecutive recent absences
+      for (const sid of rosterIds) {
+        let streak = 0;
+        for (const dayPresent of presentOnDay) {
+          if (dayPresent.has(sid)) break; // they were present this day, streak ends
+          streak++;
+        }
+        if (streak > 0) absenceStreaks.set(sid, streak);
+      }
+
+      // Trigger re-render with streak data
+      updateUI();
+    }
+
     // ===== Period change & attendance stream =====
     function onPeriodChange() {
       const p = periodSelect.value;
@@ -3866,6 +3934,7 @@
       const resolved = resolveRosterKey(p);
       currentRoster = resolved ? (allRosters[resolved] || []) : [];
       periodAttendanceLog = [];
+      absenceStreaks = new Map();
       const today = nowISODate();
 
       if (db && p && teacherUid) {
@@ -3876,6 +3945,8 @@
         }, err => {
           console.error('[onSnapshot] attendance listener error:', err);
         });
+        // Load absence streaks in background (doesn't block UI)
+        loadAbsenceStreaks(p).catch(e => console.warn('[absenceStreaks]', e));
       } else {
         periodAttendanceLog = getLocalLogs(today, p);
         updateUI(); renderRosterDebug();
@@ -4699,10 +4770,22 @@
                 let color = 'text-green-600';
                 if (s.Status === 'Late') color = 'text-yellow-600';
                 if (s.Status === 'Truant' || s.Status === 'Absent') color = 'text-red-600';
+                const streak = absenceStreaks.get(s.StudentID) || 0;
                 const li = document.createElement('li');
-                li.className = 'flex justify-between items-center group pl-1 py-1 hover:bg-gray-200 rounded';
+                let bgTint = '';
+                if (streak === 1) bgTint = 'bg-amber-50 border-l-2 border-amber-400';
+                else if (streak >= 2) bgTint = 'bg-red-50 border-l-2 border-red-400';
+                li.className = 'flex justify-between items-center group pl-1 py-1 hover:bg-gray-200 rounded ' + bgTint;
                 const nameSpan = document.createElement('span');
-                nameSpan.textContent = s.Seat != null ? s.Name + ' (Seat ' + s.Seat + ')' : s.Name;
+                let nameText = s.Seat != null ? s.Name + ' (Seat ' + s.Seat + ')' : s.Name;
+                nameSpan.textContent = nameText;
+                if (streak > 0) {
+                  const badge = document.createElement('span');
+                  badge.className = streak >= 2 ? 'text-xs ml-1.5 text-red-500' : 'text-xs ml-1.5 text-amber-500';
+                  badge.title = streak === 1 ? 'Absent last class' : 'Absent ' + streak + ' classes in a row';
+                  badge.textContent = streak === 1 ? '\u25CF' : '\u25CF' + streak;
+                  nameSpan.appendChild(badge);
+                }
                 const actionsDiv = document.createElement('div');
                 actionsDiv.className = 'flex items-center gap-2';
                 const toggleBtn = document.createElement('button');

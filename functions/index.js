@@ -5,8 +5,12 @@
  * with Fernet, stores credentials in Firestore, and issues a Firebase
  * custom auth token so the teacher can sign in to the app.
  *
- * fetchRoster: Fetches the teacher's class rosters from Aeries via HTTP
- * scraping (form-based ASP.NET session), then writes them to Firestore.
+ * fetchRoster: Fetches the teacher's class rosters from Aeries using
+ * Puppeteer (headless Chrome), then writes them to Firestore.
+ *
+ * syncAttendance: Scheduled function (every 20 min, Mon-Fri 8am-3:40pm).
+ * Reads attendance from Firestore, logs into Aeries via Puppeteer, and
+ * updates attendance checkboxes (Absent/Tardy/Present) for each period.
  *
  * Security boundaries:
  *   - The Fernet key exists ONLY in process.env.FERNET_KEY (set via
@@ -21,6 +25,7 @@
 "use strict";
 
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
+const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {logger} = require("firebase-functions/v2");
 const admin = require("firebase-admin");
 const fernet = require("fernet");
@@ -34,7 +39,7 @@ const db = admin.firestore();
 // Constants
 // ---------------------------------------------------------------------------
 
-const AERIES_BASE_URL = "https://adn.fjuhsd.org/Aeries.net";
+const AERIES_BASE_URL = "https://fullertonjuhsd.aeries.net/teacher";
 const AERIES_LOGIN_URL = `${AERIES_BASE_URL}/Login.aspx`;
 
 // Fake email domain used to create Firebase Auth accounts for teachers.
@@ -103,9 +108,9 @@ async function validateAeriesCredentials(username, password) {
       "__VIEWSTATE": tokens.viewstate,
       "__VIEWSTATEGENERATOR": tokens.viewstateGenerator,
       "__EVENTVALIDATION": tokens.eventValidation,
-      "portalAccountUsername": username,
-      "portalAccountPassword": password,
-      "LoginButton": "Log In",
+      "Username_Aeries": username,
+      "Password_Aeries": password,
+      "btnSignIn_Aeries": "Log In",
     });
 
     const timeout = fetchTimeout(15000);
@@ -314,9 +319,9 @@ async function loginToAeries(username, password) {
     "__VIEWSTATE": tokens.viewstate,
     "__VIEWSTATEGENERATOR": tokens.viewstateGenerator,
     "__EVENTVALIDATION": tokens.eventValidation,
-    "portalAccountUsername": username,
-    "portalAccountPassword": password,
-    "LoginButton": "Log In",
+    "Username_Aeries": username,
+    "Password_Aeries": password,
+    "btnSignIn_Aeries": "Log In",
   });
 
   const timeout = fetchTimeout(15000);
@@ -593,6 +598,12 @@ exports.authenticateTeacher = onCall(
         // ------------------------------------------------------------------
         // 6. Upsert teacher profile
         // ------------------------------------------------------------------
+        // Ensure parent doc exists so syncAttendance can discover teachers
+        await db.collection("teachers").doc(uid).set({
+          aeriesUsername: cleanUsername,
+          lastLogin: admin.firestore.FieldValue.serverTimestamp(),
+        }, {merge: true});
+
         const profileRef = db
             .collection("teachers")
             .doc(uid)
@@ -679,7 +690,8 @@ exports.fetchRoster = onCall(
     {
       region: "us-central1",
       secrets: ["FERNET_KEY"],
-      timeoutSeconds: 120, // Roster scraping can be slow
+      memory: "1GiB",
+      timeoutSeconds: 300, // Puppeteer + multiple page navigations
     },
     async (request) => {
       // ----------------------------------------------------------------
@@ -736,141 +748,217 @@ exports.fetchRoster = onCall(
         }
 
         // ----------------------------------------------------------------
-        // 3. Log in to Aeries via HTTP
+        // 3. Scrape Aeries rosters using Puppeteer (headless Chrome)
         // ----------------------------------------------------------------
-        logger.info("Logging in to Aeries", {uid, username: aeriesUsername});
-        let session;
+        const puppeteer = require("puppeteer");
+        logger.info("Launching Puppeteer browser", {uid});
+        const browser = await puppeteer.launch({
+          args: [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+            "--no-first-run",
+            "--disable-blink-features=AutomationControlled",
+          ],
+        });
+
+        const rostersByPeriod = {};
         try {
-          session = await loginToAeries(aeriesUsername, plaintextPassword);
-        } catch (err) {
-          if (err.message === "login_failed") {
+          const page = await browser.newPage();
+          await page.setViewport({width: 1600, height: 900});
+          // Mask headless Chrome (Aeries blocks unsupported browsers)
+          await page.setUserAgent(
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+              "AppleWebKit/537.36 (KHTML, like Gecko) " +
+              "Chrome/131.0.0.0 Safari/537.36",
+          );
+          // Remove webdriver flag that headless Chrome sets
+          await page.evaluateOnNewDocument(() => {
+            Object.defineProperty(navigator, "webdriver", {
+              get: () => false,
+            });
+          });
+
+          // 3a. Login to Aeries via browser
+          // Navigate directly to the teacher login page
+          const TEACHER_LOGIN = "https://fullertonjuhsd.aeries.net/teacher/Login.aspx";
+          logger.info("Navigating to Aeries teacher login", {uid});
+          await page.goto(TEACHER_LOGIN, {
+            waitUntil: "networkidle2",
+            timeout: 30000,
+          });
+          logger.info("On login page", {uid, url: page.url()});
+
+          // Wait for the username field to be ready
+          await page.waitForSelector('#Username_Aeries', {
+            visible: true,
+            timeout: 15000,
+          });
+
+          // Click and type into each field (simulates real user input)
+          await page.click('#Username_Aeries');
+          await page.type('#Username_Aeries', aeriesUsername, {delay: 30});
+          await page.click('#Password_Aeries');
+          await page.type('#Password_Aeries', plaintextPassword, {delay: 30});
+
+          // Debug: log what values are actually in the fields
+          const debugInfo = await page.evaluate(() => ({
+            ua: navigator.userAgent,
+            webdriver: navigator.webdriver,
+            username: document.getElementById("Username_Aeries")?.value,
+            passLen: document.getElementById("Password_Aeries")?.value?.length,
+          }));
+          logger.info("Credentials typed", {uid, ...debugInfo});
+
+          // Submit and wait for navigation
+          await Promise.all([
+            page.waitForNavigation({
+              waitUntil: "networkidle2",
+              timeout: 40000,
+            }),
+            page.click('#btnSignIn_Aeries'),
+          ]);
+
+          // Check if login succeeded (should redirect away from login)
+          const postLoginUrl = page.url().toLowerCase();
+          if (postLoginUrl.includes("login")) {
+            // Capture error details from the page
+            const pageError = await page.evaluate(() => {
+              const el = document.querySelector(
+                  '[class*="error"], .text-danger, [id*="Error"]',
+              );
+              return el ? el.textContent.trim().substring(0, 300) : "none";
+            });
+            const pageTitle = await page.title();
+            logger.warn("Aeries login failed — still on login page", {
+              uid, url: page.url(), pageError, pageTitle,
+            });
             return {
               success: false,
               error: "login_failed",
-              message: "Aeries login failed. Your credentials may have changed.",
+              message: `Aeries login failed: ${pageError}`,
             };
           }
-          // Aeries unreachable
-          return {
-            success: false,
-            error: "aeries_unreachable",
-            message: "Could not connect to Aeries. Please try again later.",
-          };
-        }
+          logger.info("Aeries login successful via Puppeteer", {
+            uid, url: page.url(),
+          });
 
-        const {cookies} = session;
-        logger.info("Aeries login successful", {uid, hasCookies: cookies.length > 0});
+          // 3b. Navigate to Teacher Attendance page (has student grid per period)
+          const currentOrigin = new URL(page.url()).origin;
+          const pathPrefix = page.url().includes("/teacher/")
+            ? "/teacher" : "/Aeries.net";
+          const attendanceUrl =
+            `${currentOrigin}${pathPrefix}/TeacherAttendance.aspx`;
+          logger.info("Navigating to attendance page", {uid, attendanceUrl});
 
-        // ----------------------------------------------------------------
-        // 4. Navigate to the Aeries class/roster listing page
-        //
-        // Aeries.net (FJUHSD) typically uses:
-        //   /Aeries.net/Classes.aspx  — teacher's class list
-        //   /Aeries.net/Student/StudentRoster.aspx?ClassNumber=XXX — per-class roster
-        //
-        // We try several known paths and look for roster content.
-        // ----------------------------------------------------------------
-        const candidatePaths = [
-          "/Classes.aspx",
-          "/Schedule/TeacherClasses.aspx",
-          "/TeacherClasses.aspx",
-        ];
+          await page.goto(attendanceUrl, {
+            waitUntil: "networkidle2",
+            timeout: 60000,
+          });
 
-        let classListHtml = null;
-        let classListPath = null;
+          // Wait for the period dropdown to appear
+          const periodSel = '[id*="PeriodList"]';
+          await page.waitForSelector(periodSel, {
+            visible: true,
+            timeout: 15000,
+          });
 
-        for (const path of candidatePaths) {
-          try {
-            const html = await aeriesGet(path, cookies);
-            const $ = cheerio.load(html);
+          // 3c. Get list of periods from the dropdown
+          const periods = await page.evaluate((sel) => {
+            const dd = document.querySelector(sel);
+            if (!dd) return [];
+            return Array.from(dd.options).map((o) => ({
+              value: o.value,
+              text: o.text.trim(),
+            }));
+          }, periodSel);
 
-            // Check if we got something useful (not a login redirect)
-            const pageTitle = $("title").text().toLowerCase();
-            const isLoginPage = pageTitle.includes("login") ||
-              html.toLowerCase().includes("portalaccountusername");
-
-            if (!isLoginPage && html.length > 1000) {
-              // Check for class/roster content indicators
-              const hasClassContent =
-                html.toLowerCase().includes("period") &&
-                (
-                  html.toLowerCase().includes("class") ||
-                  html.toLowerCase().includes("roster") ||
-                  html.toLowerCase().includes("student")
-                );
-
-              if (hasClassContent) {
-                classListHtml = html;
-                classListPath = path;
-                logger.info("Found class list page", {uid, path});
-                break;
-              }
-            }
-          } catch (err) {
-            logger.warn("Failed to fetch Aeries path", {uid, path, error: err.message});
+          if (periods.length === 0) {
+            return {
+              success: false,
+              error: "roster_requires_browser",
+              fallback: "csv_upload",
+              message: "No periods found in Aeries attendance page.",
+            };
           }
-        }
+          logger.info("Found periods", {uid, count: periods.length});
 
-        if (!classListHtml) {
-          logger.warn("Could not find Aeries class list — returning browser fallback", {uid});
-          return {
-            success: false,
-            error: "roster_requires_browser",
-            fallback: "csv_upload",
-            message: "Automatic roster fetch is not available for your school's Aeries setup. Please upload a roster CSV instead.",
-          };
-        }
+          // 3d. Extract student roster from each period's attendance grid
+          for (const period of periods) {
+            try {
+              // Select the period in the dropdown
+              await page.select(periodSel, period.value);
+              // Wait for the grid to update after period switch
+              await new Promise((r) => setTimeout(r, 3000));
+              await page.waitForSelector(
+                  "td[data-studentid]", {timeout: 15000},
+              );
 
-        // ----------------------------------------------------------------
-        // 5. Parse the class list to find individual roster pages
-        // ----------------------------------------------------------------
-        let $ = cheerio.load(classListHtml);
-        const classList = parseAeriesClassList($);
+              // Extract students from rows with data-studentid cells
+              const students = await page.evaluate(() => {
+                const result = [];
+                const cells = document.querySelectorAll(
+                    "td[data-studentid]",
+                );
+                cells.forEach((cell) => {
+                  const studentId = cell.getAttribute("data-studentid");
+                  const row = cell.closest("tr");
+                  if (!row) return;
 
-        if (classList.length === 0) {
-          logger.warn("No classes found in Aeries class list — returning browser fallback", {uid});
-          return {
-            success: false,
-            error: "roster_requires_browser",
-            fallback: "csv_upload",
-            message: "Could not parse class list from Aeries. Please upload a roster CSV instead.",
-          };
-        }
+                  // Find name cell (Last, First format with optional parens)
+                  let fullName = "";
+                  row.querySelectorAll("td").forEach((td) => {
+                    const t = td.textContent.trim();
+                    if (/^[A-Za-z\-']+,\s+[A-Za-z]/.test(t)) {
+                      fullName = t;
+                    }
+                  });
 
-        logger.info("Found classes in Aeries", {uid, count: classList.length});
+                  if (studentId && fullName) {
+                    // Parse "Last, First M. (Preferred Preferred Last)"
+                    // or "Last, First M."
+                    const comma = fullName.indexOf(",");
+                    const lastName = comma >= 0
+                      ? fullName.slice(0, comma).trim() : fullName;
+                    let rest = comma >= 0
+                      ? fullName.slice(comma + 1).trim() : "";
 
-        // ----------------------------------------------------------------
-        // 6. Fetch each class roster and parse student data
-        // ----------------------------------------------------------------
-        const rostersByPeriod = {};
+                    // Strip parenthesized preferred-name portion
+                    const parenIdx = rest.indexOf("(");
+                    const firstName = parenIdx >= 0
+                      ? rest.slice(0, parenIdx).trim() : rest;
 
-        for (const cls of classList) {
-          try {
-            const rosterHtml = await aeriesGet(cls.url, cookies);
-            $ = cheerio.load(rosterHtml);
-            const students = parseAeriesRosterPage($);
+                    result.push({
+                      StudentID: studentId,
+                      LastName: lastName,
+                      FirstName: firstName,
+                    });
+                  }
+                });
+                return result;
+              });
 
-            if (students.length > 0) {
-              // Add preferredName field defaulting to first word of FirstName
-              const studentsWithPreferred = students.map(s => ({
-                ...s,
-                preferredName: (s.FirstName || "").split(" ")[0],
-                source: "aeries",
-              }));
-              rostersByPeriod[cls.period] = studentsWithPreferred;
-              logger.info("Parsed roster for period", {
-                uid,
-                period: cls.period,
-                count: students.length,
+              if (students.length > 0) {
+                const studentsWithPreferred = students.map((s) => ({
+                  ...s,
+                  preferredName: (s.FirstName || "").split(" ")[0],
+                  source: "aeries",
+                }));
+                rostersByPeriod[period.value] = studentsWithPreferred;
+                logger.info("Parsed roster for period", {
+                  uid, period: period.value, count: students.length,
+                });
+              }
+            } catch (err) {
+              logger.warn("Failed to parse roster for period", {
+                uid, period: period.value, error: err.message,
               });
             }
-          } catch (err) {
-            logger.warn("Failed to parse roster for period", {
-              uid,
-              period: cls.period,
-              error: err.message,
-            });
           }
+        } finally {
+          await browser.close();
+          logger.info("Puppeteer browser closed", {uid});
         }
 
         if (Object.keys(rostersByPeriod).length === 0) {
@@ -878,7 +966,8 @@ exports.fetchRoster = onCall(
             success: false,
             error: "roster_requires_browser",
             fallback: "csv_upload",
-            message: "Could not extract student data from Aeries. Please upload a roster CSV instead.",
+            message: "Could not extract student data from Aeries. " +
+              "Please upload a roster CSV instead.",
           };
         }
 
@@ -964,3 +1053,510 @@ exports.fetchRoster = onCall(
       }
     },
 );
+
+// ---------------------------------------------------------------------------
+// Cloud Function: syncAttendance
+// ---------------------------------------------------------------------------
+
+/**
+ * Scheduled: syncAttendance
+ *
+ * Runs every 10 minutes during school hours (Mon-Fri 7:40am-4:30pm).
+ * Each teacher syncs roughly every 30 minutes on a staggered schedule
+ * (daily random offset per teacher) to avoid overloading Aeries.
+ *
+ * For each teacher whose turn it is:
+ *   1. Reads attendance data from Firestore
+ *   2. Applies settle logic (skip periods with <5 sign-ins or <15 min elapsed)
+ *   3. Logs into Aeries via Puppeteer
+ *   4. Updates attendance checkboxes (Absent/Tardy/Present)
+ *   5. Saves and logs results to Firestore
+ */
+
+// Settle thresholds (must match app's TARDY_AFTER_NTH)
+const MIN_STUDENTS_BEFORE_SYNC = 5;
+const PERIOD_SETTLE_MINUTES = 15;
+
+// Sync window: 7:45 AM - 4:20 PM (Pacific)
+const SYNC_START_MINUTE = 7 * 60 + 45; // 7:45 AM = minute 465
+const SYNC_END_MINUTE = 16 * 60 + 20; // 4:20 PM = minute 980
+const SYNC_INTERVAL = 30; // target interval per teacher (minutes)
+
+/**
+ * Determine if a teacher should sync on this invocation.
+ * Uses a daily hash of uid+date to create a staggered offset (0–29 min)
+ * so different teachers sync at different times, ~30 min apart.
+ */
+function shouldSyncNow(uid, now) {
+  const dateStr = now.toLocaleDateString("en-CA");
+  const hash = crypto.createHash("md5").update(uid + dateStr).digest();
+  const offset = hash.readUInt16BE(0) % SYNC_INTERVAL;
+
+  const minuteOfDay = now.getHours() * 60 + now.getMinutes();
+  if (minuteOfDay < SYNC_START_MINUTE || minuteOfDay > SYNC_END_MINUTE) {
+    return {sync: false, reason: "outside_window"};
+  }
+
+  const elapsed = minuteOfDay - SYNC_START_MINUTE;
+  // Sync if we're within 10 min of this teacher's 30-min boundary
+  const inWindow = ((elapsed - offset + SYNC_INTERVAL) % SYNC_INTERVAL) < 10;
+  return {sync: inWindow, offset, minuteOfDay};
+}
+
+// Status normalization: app statuses → Aeries checkbox actions
+function normalizeStatus(raw) {
+  if (["Late", "Truant", "Cut", "Late > 20"].includes(raw)) return "Tardy";
+  if (["On Time", "Present"].includes(raw)) return "Present";
+  if (raw === "Absent") return "Absent";
+  return raw;
+}
+
+exports.syncAttendance = onSchedule(
+    {
+      schedule: "*/10 7-16 * * 1-5",
+      timeZone: "America/Los_Angeles",
+      region: "us-central1",
+      secrets: ["FERNET_KEY"],
+      memory: "2GiB",
+      timeoutSeconds: 540,
+    },
+    async () => {
+      const now = new Date();
+      const dateStr = now.toLocaleDateString("en-CA"); // YYYY-MM-DD
+
+      // 1. Get all teacher UIDs
+      const teachersSnap = await db.collection("teachers").get();
+      const teacherUids = teachersSnap.docs.map((d) => d.id);
+
+      if (teacherUids.length === 0) {
+        logger.info("No teachers found — skipping sync");
+        return;
+      }
+
+      // 2. Check which teachers are due for sync this invocation
+      const dueTeachers = [];
+      for (const uid of teacherUids) {
+        const check = shouldSyncNow(uid, now);
+        if (check.sync) {
+          dueTeachers.push(uid);
+        }
+      }
+
+      if (dueTeachers.length === 0) {
+        logger.info("No teachers due for sync this cycle", {
+          dateStr, totalTeachers: teacherUids.length,
+        });
+        return;
+      }
+
+      logger.info("syncAttendance starting", {
+        dateStr,
+        dueTeachers: dueTeachers.length,
+        totalTeachers: teacherUids.length,
+      });
+
+      // 3. Process each due teacher
+      for (const uid of dueTeachers) {
+        try {
+          await syncTeacher(uid, dateStr);
+        } catch (err) {
+          logger.error("syncAttendance failed for teacher", {
+            uid, error: err.message,
+          });
+        }
+      }
+
+      logger.info("syncAttendance complete", {
+        dateStr, synced: dueTeachers.length,
+      });
+    },
+);
+
+/**
+ * Sync attendance for a single teacher.
+ * Reads Firestore data, launches Puppeteer, updates Aeries.
+ */
+async function syncTeacher(uid, dateStr) {
+  logger.info("Syncing teacher", {uid, dateStr});
+
+  // --- Load & decrypt Aeries credentials ---
+  const credSnap = await db
+      .collection("teachers").doc(uid)
+      .collection("credentials").doc("aeries").get();
+
+  if (!credSnap.exists) {
+    logger.warn("No Aeries credentials for teacher — skipping", {uid});
+    return;
+  }
+
+  const {aeriesUsername, encryptedPassword} = credSnap.data();
+  if (!aeriesUsername || !encryptedPassword) {
+    logger.warn("Incomplete Aeries credentials — skipping", {uid});
+    return;
+  }
+
+  let plaintextPassword;
+  try {
+    plaintextPassword = fernetDecrypt(encryptedPassword);
+  } catch (err) {
+    logger.error("Fernet decryption failed — skipping teacher", {
+      uid, error: err.message,
+    });
+    return;
+  }
+
+  // --- Read attendance data from Firestore ---
+  const periods = ["0", "1", "2", "2A", "2B", "3", "4", "5", "6", "7"];
+  const settledPeriods = []; // { period, students: [{StudentID, status}] }
+
+  for (const period of periods) {
+    const basePath =
+      `teachers/${uid}/attendance/${dateStr}/periods/${period}`;
+
+    const periodDoc = await db.doc(basePath).get();
+    if (!periodDoc.exists) continue;
+
+    const roster = (periodDoc.data().roster_snapshot || []);
+    if (roster.length === 0) continue;
+
+    // Get signed-in students
+    const studentsSnap = await db.collection(`${basePath}/students`).get();
+    const signedIn = {};
+    studentsSnap.forEach((doc) => {
+      signedIn[doc.id] = doc.data();
+    });
+
+    // --- Settle logic ---
+    const timestamps = [];
+    for (const data of Object.values(signedIn)) {
+      const ts = data.Timestamp;
+      if (ts && ts.toDate) {
+        timestamps.push(ts.toDate());
+      }
+    }
+
+    if (timestamps.length < MIN_STUDENTS_BEFORE_SYNC) {
+      logger.info("Period not settled — too few sign-ins", {
+        uid, period, count: timestamps.length,
+      });
+      continue;
+    }
+
+    timestamps.sort((a, b) => a - b);
+    const nthTimestamp = timestamps[MIN_STUDENTS_BEFORE_SYNC - 1];
+    const minutesElapsed = (Date.now() - nthTimestamp.getTime()) / 60000;
+
+    if (minutesElapsed < PERIOD_SETTLE_MINUTES) {
+      logger.info("Period not settled — too recent", {
+        uid, period, minutesElapsed: Math.round(minutesElapsed),
+      });
+      continue;
+    }
+
+    // --- Build student list for this period ---
+    const students = [];
+    for (const student of roster) {
+      const sid = student.StudentID;
+      if (!sid) continue;
+
+      if (signedIn[sid]) {
+        const rawStatus = signedIn[sid].Status || "On Time";
+        students.push({
+          StudentID: sid,
+          status: normalizeStatus(rawStatus),
+          rawStatus,
+        });
+      } else {
+        students.push({
+          StudentID: sid,
+          status: "Absent",
+          rawStatus: "Absent",
+        });
+      }
+    }
+
+    settledPeriods.push({period, students});
+  }
+
+  if (settledPeriods.length === 0) {
+    logger.info("No settled periods to sync", {uid});
+    return;
+  }
+
+  logger.info("Settled periods ready for sync", {
+    uid, periods: settledPeriods.map((p) => p.period),
+  });
+
+  // --- Launch Puppeteer and update Aeries ---
+  const puppeteer = require("puppeteer");
+  const browser = await puppeteer.launch({
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--no-first-run",
+      "--disable-blink-features=AutomationControlled",
+    ],
+  });
+
+  const syncResults = {};
+
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({width: 1600, height: 900});
+    await page.setUserAgent(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+        "AppleWebKit/537.36 (KHTML, like Gecko) " +
+        "Chrome/131.0.0.0 Safari/537.36",
+    );
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, "webdriver", {get: () => false});
+    });
+
+    // Login to Aeries
+    const TEACHER_LOGIN =
+      "https://fullertonjuhsd.aeries.net/teacher/Login.aspx";
+    await page.goto(TEACHER_LOGIN, {
+      waitUntil: "networkidle2", timeout: 30000,
+    });
+    await page.waitForSelector('#Username_Aeries', {
+      visible: true, timeout: 15000,
+    });
+    await page.click('#Username_Aeries');
+    await page.type('#Username_Aeries', aeriesUsername, {delay: 30});
+    await page.click('#Password_Aeries');
+    await page.type('#Password_Aeries', plaintextPassword, {delay: 30});
+    await Promise.all([
+      page.waitForNavigation({waitUntil: "networkidle2", timeout: 40000}),
+      page.click('#btnSignIn_Aeries'),
+    ]);
+
+    if (page.url().toLowerCase().includes("login")) {
+      logger.error("Aeries login failed for sync", {uid});
+      syncResults.error = "login_failed";
+      return;
+    }
+    logger.info("Aeries login successful for sync", {uid});
+
+    // Navigate to Teacher Attendance page
+    const currentOrigin = new URL(page.url()).origin;
+    const attendanceUrl =
+      `${currentOrigin}/teacher/TeacherAttendance.aspx`;
+    await page.goto(attendanceUrl, {
+      waitUntil: "networkidle2", timeout: 60000,
+    });
+    await page.waitForSelector('[id*="PeriodList"]', {
+      visible: true, timeout: 15000,
+    });
+
+    const periodSel = '[id*="PeriodList"]';
+
+    // Process each settled period
+    for (const {period, students} of settledPeriods) {
+      try {
+        // Select period in dropdown
+        const optionExists = await page.evaluate((sel, p) => {
+          const dd = document.querySelector(sel);
+          return dd && Array.from(dd.options).some((o) => o.value === p);
+        }, periodSel, period);
+
+        if (!optionExists) {
+          logger.warn("Period not in dropdown — skipping", {uid, period});
+          syncResults[period] = {status: "skipped", reason: "not_in_dropdown"};
+          continue;
+        }
+
+        await page.select(periodSel, period);
+        await new Promise((r) => setTimeout(r, 3000));
+        await page.waitForSelector("td[data-studentid]", {timeout: 15000});
+
+        // Click "All Remaining Students Are Present" if visible
+        try {
+          const allPresentBtn = await page.evaluate(() => {
+            const els = [
+              ...document.querySelectorAll("a, input, button"),
+            ];
+            const btn = els.find((el) =>
+              el.textContent.includes("All Remaining Students Are Present") &&
+              el.offsetParent !== null,
+            );
+            if (btn) {
+              btn.click();
+              return true;
+            }
+            return false;
+          });
+          if (allPresentBtn) {
+            logger.info("Clicked 'All Remaining Students Are Present'", {
+              uid, period,
+            });
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+        } catch {
+          // Button not found — fine, we'll set each student individually
+        }
+
+        // Process each student
+        let updates = 0;
+        let skipped = 0;
+        let failed = 0;
+
+        for (const {StudentID, status} of students) {
+          try {
+            // Find student row by data-studentid
+            const cellExists = await page.evaluate((sid) => {
+              return document.querySelector(
+                  `td[data-studentid="${sid}"]`,
+              ) !== null;
+            }, StudentID);
+
+            if (!cellExists) {
+              skipped++;
+              continue;
+            }
+
+            // Check if locked
+            const isLocked = await page.evaluate((sid) => {
+              const cell = document.querySelector(
+                  `td[data-studentid="${sid}"]`,
+              );
+              const row = cell?.closest("tr");
+              if (!row) return false;
+              const lock = row.querySelector("span[id$='lblLocked']");
+              return lock && lock.offsetParent !== null;
+            }, StudentID);
+
+            if (isLocked) {
+              skipped++;
+              continue;
+            }
+
+            // Get current checkbox state and set as needed
+            const result = await page.evaluate((sid, targetStatus) => {
+              const cell = document.querySelector(
+                  `td[data-studentid="${sid}"]`,
+              );
+              const row = cell?.closest("tr");
+              if (!row) return {ok: false, reason: "no_row"};
+
+              // Find checkboxes
+              const absentBox =
+                row.querySelector("span[data-cd='A'] input") ||
+                row.querySelector("input[type='checkbox'][name*='Absent']");
+              const tardyBox =
+                row.querySelector("span[data-cd='T'] input") ||
+                row.querySelector("input[type='checkbox'][name*='Tardy']");
+
+              if (!absentBox || !tardyBox) {
+                return {ok: false, reason: "no_checkboxes"};
+              }
+
+              const wasAbsent = absentBox.checked;
+              const wasTardy = tardyBox.checked;
+              let changed = false;
+
+              if (targetStatus === "Absent") {
+                if (!wasAbsent) {
+                  absentBox.click();
+                  changed = true;
+                }
+                if (wasTardy) {
+                  tardyBox.click();
+                  changed = true;
+                }
+              } else if (targetStatus === "Tardy") {
+                if (!wasTardy) {
+                  tardyBox.click();
+                  changed = true;
+                }
+                if (wasAbsent) {
+                  absentBox.click();
+                  changed = true;
+                }
+              } else {
+                // Present — uncheck both
+                if (wasAbsent) {
+                  absentBox.click();
+                  changed = true;
+                }
+                if (wasTardy) {
+                  tardyBox.click();
+                  changed = true;
+                }
+              }
+
+              return {ok: true, changed};
+            }, StudentID, status);
+
+            if (result.ok && result.changed) {
+              updates++;
+              // Small delay between students for UI stability
+              await new Promise((r) => setTimeout(r, 200));
+            }
+          } catch (err) {
+            failed++;
+            logger.warn("Failed to process student", {
+              uid, period, StudentID, error: err.message,
+            });
+          }
+        }
+
+        // Save if we made changes
+        if (updates > 0) {
+          try {
+            await page.evaluate(() => {
+              const btn =
+                document.querySelector("input[value='Save']") ||
+                document.querySelector("button[id*='Save']");
+              if (btn) {
+                btn.scrollIntoView();
+                btn.click();
+              }
+            });
+            await new Promise((r) => setTimeout(r, 2000));
+            logger.info("Saved period", {uid, period});
+          } catch (err) {
+            logger.error("Failed to save period", {
+              uid, period, error: err.message,
+            });
+          }
+        }
+
+        syncResults[period] = {
+          status: "synced",
+          total: students.length,
+          updates,
+          skipped,
+          failed,
+        };
+        logger.info("Period sync complete", {
+          uid, period, updates, skipped, failed,
+        });
+      } catch (err) {
+        syncResults[period] = {status: "error", error: err.message};
+        logger.error("Period sync failed", {
+          uid, period, error: err.message,
+        });
+      }
+    }
+  } finally {
+    await browser.close();
+    logger.info("Puppeteer browser closed (sync)", {uid});
+  }
+
+  // --- Write sync log to Firestore ---
+  const logRef = db
+      .collection("teachers").doc(uid)
+      .collection("syncLogs")
+      .doc(new Date().toISOString());
+
+  await logRef.set({
+    date: dateStr,
+    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+    results: syncResults,
+    settledPeriods: settledPeriods.map((p) => p.period),
+  });
+
+  logger.info("Sync log written", {uid, results: syncResults});
+}

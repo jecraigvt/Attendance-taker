@@ -3241,10 +3241,27 @@
       if (!container) return;
       const periods = Object.keys(allRosters).sort(periodSort);
       if (periods.length === 0) {
-        container.innerHTML = '<div class="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500"><p class="font-medium">No rosters loaded yet.</p><p class="text-sm mt-1">Fetch from Aeries or upload a roster CSV to get started.</p></div>';
+        container.replaceChildren();
+        const empty = document.createElement('div');
+        empty.className = 'bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500';
+        const p1 = document.createElement('p');
+        p1.className = 'font-medium';
+        p1.textContent = 'No rosters loaded yet.';
+        const p2 = document.createElement('p');
+        p2.className = 'text-sm mt-1';
+        p2.textContent = 'Fetch from Aeries or upload a roster CSV to get started.';
+        empty.append(p1, p2);
+        container.appendChild(empty);
         return;
       }
-      container.innerHTML = '';
+      // Preserve expanded state and scroll before re-render
+      const expandedPeriods = new Set();
+      container.querySelectorAll('.roster-period-body').forEach(el => {
+        if (!el.classList.contains('hidden')) expandedPeriods.add(el.id);
+      });
+      const scrollParent = container.closest('.overflow-y-auto');
+      const savedScroll = scrollParent ? scrollParent.scrollTop : window.scrollY;
+      container.replaceChildren();
       periods.forEach((period, idx) => {
         const students = allRosters[period] || [];
         const sectionId = 'roster-period-' + period;
@@ -3253,10 +3270,32 @@
         section.className = 'bg-white rounded-xl border border-gray-200 mb-4 overflow-hidden';
         const header = document.createElement('div');
         header.className = 'flex items-center justify-between px-5 py-3.5 cursor-pointer hover:bg-gray-50 select-none';
-        header.innerHTML = '<div class="flex items-center gap-3"><span class="font-semibold text-gray-900">Period ' + escHtml(period) + '</span><span class="text-xs bg-gray-100 text-gray-600 font-medium px-2 py-0.5 rounded-full">' + students.length + ' students</span></div><svg class="roster-chevron w-5 h-5 text-gray-400 transition-transform' + (idx === 0 ? ' rotate-180' : '') + '" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>';
+        const headerLeft = document.createElement('div');
+        headerLeft.className = 'flex items-center gap-3';
+        const periodLabel = document.createElement('span');
+        periodLabel.className = 'font-semibold text-gray-900';
+        periodLabel.textContent = 'Period ' + period;
+        const countBadge = document.createElement('span');
+        countBadge.className = 'text-xs bg-gray-100 text-gray-600 font-medium px-2 py-0.5 rounded-full';
+        countBadge.textContent = students.length + ' students';
+        headerLeft.append(periodLabel, countBadge);
+        const chevronSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        chevronSvg.setAttribute('class', 'roster-chevron w-5 h-5 text-gray-400 transition-transform' + (wasExpanded ? ' rotate-180' : ''));
+        chevronSvg.setAttribute('fill', 'none');
+        chevronSvg.setAttribute('stroke', 'currentColor');
+        chevronSvg.setAttribute('viewBox', '0 0 24 24');
+        const chevronPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        chevronPath.setAttribute('stroke-linecap', 'round');
+        chevronPath.setAttribute('stroke-linejoin', 'round');
+        chevronPath.setAttribute('stroke-width', '2');
+        chevronPath.setAttribute('d', 'M19 9l-7 7-7-7');
+        chevronSvg.appendChild(chevronPath);
+        header.append(headerLeft, chevronSvg);
         const body = document.createElement('div');
         body.id = sectionId;
-        body.className = 'roster-period-body border-t border-gray-100' + (idx !== 0 ? ' hidden' : '');
+        // Restore expanded state, or default to first period open
+        const wasExpanded = expandedPeriods.size > 0 ? expandedPeriods.has(sectionId) : idx === 0;
+        body.className = 'roster-period-body border-t border-gray-100' + (wasExpanded ? '' : ' hidden');
         const tableWrap = document.createElement('div');
         tableWrap.className = 'overflow-x-auto';
         const table = document.createElement('table');
@@ -3307,6 +3346,11 @@
         section.appendChild(header);
         section.appendChild(body);
         container.appendChild(section);
+      });
+      // Restore scroll position after re-render
+      requestAnimationFrame(() => {
+        if (scrollParent) scrollParent.scrollTop = savedScroll;
+        else window.scrollTo(0, savedScroll);
       });
     }
 

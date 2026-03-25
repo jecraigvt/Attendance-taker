@@ -35,3 +35,13 @@ functions/node_modules/
 .firebase/
 .playwright-mcp/
 attendance v *.html
+
+# Test artifacts
+test-screenshots/
+test_roster_fetch.py
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Standalone scripts not part of the app
+parse_emails.py

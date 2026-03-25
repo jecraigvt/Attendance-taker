@@ -906,7 +906,7 @@ exports.fetchRoster = onCall(
                   let fullName = "";
                   row.querySelectorAll("td").forEach((td) => {
                     const t = td.textContent.trim();
-                    if (/^[A-Za-z\-']+,\s+[A-Za-z]/.test(t)) {
+                    if (/^[A-Za-z][A-Za-z \-']*,\s+[A-Za-z]/.test(t)) {
                       fullName = t;
                     }
                   });

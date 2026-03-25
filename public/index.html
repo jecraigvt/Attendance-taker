@@ -3546,6 +3546,7 @@
         renderGroupOverrideInputs();
         renderSeatingPreview();
         renderPeriodOverrideRows();
+        saveSeatingConfig();
       });
       if (seatingNumGroups) seatingNumGroups.addEventListener('input', renderSeatingPreview);
       if (seatingDefaultSeats) seatingDefaultSeats.addEventListener('input', renderSeatingPreview);
@@ -4018,8 +4019,7 @@
 
               // Assign group and build log entry (reads local state — acceptable
               // since group assignment is best-effort, not financial)
-              const { group: g, overflow } = pickGroup(student);
-              if (overflow) return { overflow: true };
+              const { group: g } = pickGroup(student);
 
               const seat = g != null ? calcSeatNumber(g) : null;
               const log = buildLogEntry(student, p, status, g, true, seat);
@@ -4033,13 +4033,6 @@
               const seat = existing.Seat != null ? existing.Seat : null;
               showGroup(g, existing.Status || status, getDisplayName(student), seat);
               updateUI();
-              if (wasSmartSwitched) restoreToGlobalPeriod();
-              return;
-            }
-
-            if (txResult.overflow) {
-              showMessage('error', 'All groups full', 'Check with your teacher for a seat.');
-              signInButton.disabled = false;
               if (wasSmartSwitched) restoreToGlobalPeriod();
               return;
             }
@@ -4074,13 +4067,7 @@
             if (wasSmartSwitched) restoreToGlobalPeriod();
             return;
           }
-          const { group: g, overflow } = pickGroup(student);
-          if (overflow) {
-            showMessage('error', 'All groups full', 'Check with your teacher for a seat.');
-            signInButton.disabled = false;
-            if (wasSmartSwitched) restoreToGlobalPeriod();
-            return;
-          }
+          const { group: g } = pickGroup(student);
           const seat = g != null ? calcSeatNumber(g) : null;
           const log = buildLogEntry(student, p, status, g, false, seat);
           list.push(log);
@@ -4331,9 +4318,8 @@
       const p = periodSelect.value;
       const status = statusForNow();
 
-      // 3. Assign Group
-      const { group: g, overflow } = pickGroup(student);
-      if (overflow) return; // Can't assign if all full
+      // 3. Assign Group (still record attendance even if groups are full)
+      const { group: g } = pickGroup(student);
 
       // 4. Compute seat
       const seat = g != null ? calcSeatNumber(g) : null;

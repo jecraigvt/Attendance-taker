@@ -362,16 +362,25 @@ async function loginToAeries(username, password) {
  */
 async function aeriesGet(path, cookies) {
   const url = path.startsWith("http") ? path : `${AERIES_BASE_URL}${path}`;
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "Cookie": cookies,
-      "User-Agent": "Mozilla/5.0 (compatible; AttendanceTaker/2.0)",
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    },
-    redirect: "follow",
-  });
-  return response.text();
+  const timeout = fetchTimeout(15000);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Cookie": cookies,
+        "User-Agent": "Mozilla/5.0 (compatible; AttendanceTaker/2.0)",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+      redirect: "follow",
+      signal: timeout.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`Aeries returned HTTP ${response.status} for ${url}`);
+    }
+    return response.text();
+  } finally {
+    timeout.clear();
+  }
 }
 
 /**

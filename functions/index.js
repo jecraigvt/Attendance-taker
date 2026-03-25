@@ -62,8 +62,8 @@ function fetchTimeout(ms = 15000) {
 }
 
 /**
- * Fetch the Aeries login page and extract ASP.NET form tokens.
- * Returns { viewstate, viewstateGenerator, eventValidation } or throws.
+ * Fetch the Aeries login page and extract all hidden ASP.NET form fields.
+ * Returns an object mapping field names to values.
  */
 async function fetchAeriesFormTokens() {
   const timeout = fetchTimeout(15000);
@@ -80,13 +80,15 @@ async function fetchAeriesFormTokens() {
     const html = await response.text();
     const $ = cheerio.load(html);
 
-    const viewstate = $("input[name='__VIEWSTATE']").val() || "";
-    const viewstateGenerator =
-      $("input[name='__VIEWSTATEGENERATOR']").val() || "";
-    const eventValidation =
-      $("input[name='__EVENTVALIDATION']").val() || "";
+    // Extract ALL hidden form fields (handles both old and new Aeries)
+    const hiddenFields = {};
+    $("input[type='hidden']").each((_, el) => {
+      const name = $(el).attr("name");
+      const val = $(el).val() || "";
+      if (name) hiddenFields[name] = val;
+    });
 
-    return {viewstate, viewstateGenerator, eventValidation};
+    return hiddenFields;
   } finally {
     timeout.clear();
   }
@@ -102,12 +104,10 @@ async function fetchAeriesFormTokens() {
  */
 async function validateAeriesCredentials(username, password) {
   try {
-    const tokens = await fetchAeriesFormTokens();
+    const hiddenFields = await fetchAeriesFormTokens();
 
     const body = new URLSearchParams({
-      "__VIEWSTATE": tokens.viewstate,
-      "__VIEWSTATEGENERATOR": tokens.viewstateGenerator,
-      "__EVENTVALIDATION": tokens.eventValidation,
+      ...hiddenFields,
       "Username_Aeries": username,
       "Password_Aeries": password,
       "btnSignIn_Aeries": "Log In",
@@ -137,8 +137,6 @@ async function validateAeriesCredentials(username, password) {
         return {valid: true, reason: "credentials_accepted"};
       }
 
-      // Some Aeries deployments return 200 with redirect in meta or JS.
-      // Also check if the response URL (after following) differs from login.
       return {valid: false, reason: "credentials_rejected"};
     } finally {
       timeout.clear();
@@ -313,12 +311,10 @@ async function createFirebaseUser(username) {
  * so subsequent requests can make authenticated calls.
  */
 async function loginToAeries(username, password) {
-  const tokens = await fetchAeriesFormTokens();
+  const hiddenFields = await fetchAeriesFormTokens();
 
   const body = new URLSearchParams({
-    "__VIEWSTATE": tokens.viewstate,
-    "__VIEWSTATEGENERATOR": tokens.viewstateGenerator,
-    "__EVENTVALIDATION": tokens.eventValidation,
+    ...hiddenFields,
     "Username_Aeries": username,
     "Password_Aeries": password,
     "btnSignIn_Aeries": "Log In",
@@ -1111,6 +1107,35 @@ function normalizeStatus(raw) {
   return raw;
 }
 
+/**
+ * HTTPS Callable: triggerSync
+ * Manually triggers an attendance sync for the calling teacher.
+ */
+exports.triggerSync = onCall(
+    {
+      region: "us-central1",
+      secrets: ["FERNET_KEY"],
+      memory: "2GiB",
+      timeoutSeconds: 540,
+    },
+    async (request) => {
+      if (!request.auth) {
+        throw new HttpsError("unauthenticated", "Must be signed in.");
+      }
+      const uid = request.auth.uid;
+      const dateStr = new Date().toLocaleDateString("en-CA");
+      logger.info("triggerSync called", {uid, dateStr});
+
+      try {
+        await syncTeacher(uid, dateStr);
+        return {success: true, message: "Sync complete"};
+      } catch (err) {
+        logger.error("triggerSync failed", {uid, error: err.message});
+        return {success: false, error: err.message};
+      }
+    },
+);
+
 exports.syncAttendance = onSchedule(
     {
       schedule: "*/10 7-16 * * 1-5",
@@ -1545,7 +1570,7 @@ async function syncTeacher(uid, dateStr) {
     logger.info("Puppeteer browser closed (sync)", {uid});
   }
 
-  // --- Write sync log to Firestore ---
+  // --- Write sync log + status to Firestore ---
   const logRef = db
       .collection("teachers").doc(uid)
       .collection("syncLogs")
@@ -1557,6 +1582,31 @@ async function syncTeacher(uid, dateStr) {
     results: syncResults,
     settledPeriods: settledPeriods.map((p) => p.period),
   });
+
+  // Update sync/status doc (read by the dashboard Sync tab)
+  const hasError = syncResults.error ||
+    Object.values(syncResults).some((r) => r.status === "error");
+  const periodsProcessed = Object.values(syncResults)
+      .filter((r) => r.status === "synced").length;
+
+  const statusDoc = {
+    status: hasError ? "failed" : "success",
+    lastSyncTime: admin.firestore.FieldValue.serverTimestamp(),
+    periodsProcessed,
+    results: syncResults,
+  };
+  if (syncResults.error === "login_failed") {
+    statusDoc.errorCategory = "credentials_invalid";
+    statusDoc.error = "Aeries login failed — check your password in Settings.";
+  } else if (hasError) {
+    const errPeriod = Object.entries(syncResults)
+        .find(([, r]) => r.status === "error");
+    statusDoc.error = errPeriod ? errPeriod[1].error : "Unknown error";
+  }
+
+  await db.collection("teachers").doc(uid)
+      .collection("sync").doc("status")
+      .set(statusDoc);
 
   logger.info("Sync log written", {uid, results: syncResults});
 }

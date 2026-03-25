@@ -172,9 +172,22 @@
         </div>
         <div>
           <label for="login-password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
-          <input type="password" id="login-password" autocomplete="current-password"
-            class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-            placeholder="password" />
+          <div class="relative">
+            <input type="password" id="login-password" autocomplete="current-password"
+              class="w-full p-3 pr-11 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+              placeholder="password" />
+            <button type="button" id="login-toggle-password"
+              class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+              tabindex="-1" aria-label="Toggle password visibility">
+              <svg id="login-eye-open" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+              </svg>
+              <svg id="login-eye-closed" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a9.97 9.97 0 014.306-5.394M6.228 6.228A9.96 9.96 0 0112 5c4.478 0 8.268 2.943 9.542 7a10.05 10.05 0 01-4.132 5.411M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/>
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="flex items-center gap-2">
           <input type="checkbox" id="login-remember" class="rounded" />
@@ -786,9 +799,22 @@
           <div id="settings-update-password-form" class="hidden mt-4 space-y-3 border-t border-gray-100 pt-4">
             <div>
               <label class="block text-xs font-medium text-gray-700 mb-1">New Password</label>
-              <input type="password" id="settings-new-password" autocomplete="new-password"
-                class="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                placeholder="Enter new Aeries password" />
+              <div class="relative">
+                <input type="password" id="settings-new-password" autocomplete="new-password"
+                  class="w-full p-2.5 pr-10 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  placeholder="Enter new Aeries password" />
+                <button type="button" id="settings-toggle-password"
+                  class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+                  tabindex="-1" aria-label="Toggle password visibility">
+                  <svg id="settings-eye-open" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                  </svg>
+                  <svg id="settings-eye-closed" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a9.97 9.97 0 014.306-5.394M6.228 6.228A9.96 9.96 0 0112 5c4.478 0 8.268 2.943 9.542 7a10.05 10.05 0 01-4.132 5.411M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/>
+                  </svg>
+                </button>
+              </div>
             </div>
             <div id="settings-password-error" class="hidden text-xs text-red-600"></div>
             <div id="settings-password-success" class="hidden text-xs text-green-600 font-medium"></div>
@@ -936,6 +962,24 @@
             </label>
           </div>
           <div id="sync-toggle-status" class="mt-3 text-xs text-gray-400"></div>
+        </div>
+
+        <!-- Sync Now Button -->
+        <div id="sync-now-section" class="hidden">
+          <div class="bg-white rounded-xl border border-gray-200 p-6 flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-900">Manual Sync</h2>
+              <p class="text-sm text-gray-500 mt-1">Push attendance to Aeries right now.</p>
+            </div>
+            <button id="sync-now-btn"
+              class="bg-red-700 text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-red-800 transition-all disabled:opacity-50 flex items-center gap-2">
+              <svg id="sync-now-spinner" class="hidden animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+              </svg>
+              Sync Now
+            </button>
+          </div>
         </div>
 
         <!-- Sync Status Card (moved from Attendance tab) -->
@@ -1367,32 +1411,58 @@
       requestAnimationFrame(frame);
     }
 
-    // 2. Spotlight — all names visible, circle of light shrinks to winner
+    // 2. Spotlight — names scattered randomly, light sweeps around then finds winner
     function animSpotlight(stage, names, winner, done) {
-      const tiles = [];
       const w = stage.clientWidth, h = stage.clientHeight;
-      // Place winner near center
-      const winX = w / 2 - 60, winY = h / 2 - 15;
+      const margin = 80;
+      // Place ALL names randomly (winner too — not centered)
+      const positions = [];
       names.forEach(n => {
         const el = document.createElement('div');
         el.className = 'picker-tile';
         el.textContent = n;
-        const isWin = n === winner.Name;
-        el.style.left = (isWin ? winX : 40 + Math.random() * (w - 160)) + 'px';
-        el.style.top = (isWin ? winY : 40 + Math.random() * (h - 100)) + 'px';
+        const x = margin + Math.random() * (w - margin * 2 - 100);
+        const y = margin + Math.random() * (h - margin * 2 - 40);
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
         stage.appendChild(el);
-        tiles.push({ el, isWin, x: parseFloat(el.style.left), y: parseFloat(el.style.top) });
+        if (n === winner.Name) positions.winX = x + 50;
+        if (n === winner.Name) positions.winY = y + 15;
       });
-      // Overlay with radial gradient mask
+      // Overlay mask
       const mask = document.createElement('div');
-      mask.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:5;transition:background 0.1s;';
+      mask.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:5;';
       stage.appendChild(mask);
-      const cx = winX + 60, cy = winY + 15;
+      const cx = positions.winX, cy = positions.winY;
+      // Sweep: spotlight wanders then homes in on winner
       const start = performance.now();
+      const sweepDur = ANIM_DURATION * 0.6;
+      const focusDur = ANIM_DURATION * 0.4;
+      // Random sweep waypoints
+      const waypoints = [{x: w * 0.2, y: h * 0.3}, {x: w * 0.7, y: h * 0.6}, {x: w * 0.4, y: h * 0.8}];
       function frame(t) {
-        const p = Math.min((t - start) / ANIM_DURATION, 1);
-        const radius = Math.max(800 * (1 - p * p), 60);
-        mask.style.background = 'radial-gradient(circle ' + radius + 'px at ' + cx + 'px ' + cy + 'px, transparent 0%, rgba(0,0,0,0.92) 100%)';
+        const elapsed = t - start;
+        const p = Math.min(elapsed / ANIM_DURATION, 1);
+        let spotX, spotY, radius;
+        if (elapsed < sweepDur) {
+          // Sweep phase: light wanders through waypoints
+          const sp = elapsed / sweepDur;
+          const idx = Math.min(Math.floor(sp * waypoints.length), waypoints.length - 1);
+          const next = Math.min(idx + 1, waypoints.length - 1);
+          const lp = (sp * waypoints.length) - idx;
+          spotX = waypoints[idx].x + (waypoints[next].x - waypoints[idx].x) * lp;
+          spotY = waypoints[idx].y + (waypoints[next].y - waypoints[idx].y) * lp;
+          radius = 120 + 40 * Math.sin(sp * Math.PI * 3);
+        } else {
+          // Focus phase: converge on winner and shrink
+          const fp = (elapsed - sweepDur) / focusDur;
+          const ease = fp * fp;
+          const lastWp = waypoints[waypoints.length - 1];
+          spotX = lastWp.x + (cx - lastWp.x) * ease;
+          spotY = lastWp.y + (cy - lastWp.y) * ease;
+          radius = 140 - 80 * ease;
+        }
+        mask.style.background = 'radial-gradient(circle ' + radius + 'px at ' + spotX + 'px ' + spotY + 'px, transparent 0%, rgba(0,0,0,0.92) 100%)';
         if (p < 1) requestAnimationFrame(frame); else done();
       }
       requestAnimationFrame(frame);
@@ -1463,40 +1533,55 @@
       requestAnimationFrame(frame);
     }
 
-    // 5. Shuffle cards — names scatter then winner flies to center
+    // 5. Shuffle cards — names spread out face-up, shuffle positions, then winner highlights
     function animShuffle(stage, names, winner, done) {
       const w = stage.clientWidth, h = stage.clientHeight;
-      const els = names.map(n => {
+      const cols = Math.min(Math.ceil(Math.sqrt(names.length)), 6);
+      const rows = Math.ceil(names.length / cols);
+      const cellW = (w - 40) / cols, cellH = (h - 40) / rows;
+      const els = names.map((n, i) => {
         const el = document.createElement('div');
         el.className = 'picker-tile';
         el.textContent = n;
-        el.style.left = (w / 2 - 50) + 'px';
-        el.style.top = (h / 2 - 15) + 'px';
-        el.style.transition = 'all 0.5s cubic-bezier(0.34,1.56,0.64,1)';
+        el.style.fontSize = Math.min(cellW / (n.length * 0.7 + 2), 16) + 'px';
+        const col = i % cols, row = Math.floor(i / cols);
+        el.style.left = (20 + col * cellW + cellW * 0.1) + 'px';
+        el.style.top = (20 + row * cellH + cellH * 0.15) + 'px';
+        el.style.width = (cellW * 0.8) + 'px';
+        el.style.textAlign = 'center';
+        el.style.transition = 'all 0.4s cubic-bezier(0.34,1.56,0.64,1)';
         stage.appendChild(el);
         return { el, name: n };
       });
-      // Phase 1: scatter (0-500ms)
+      // Phase 1: shuffle positions (400ms)
       setTimeout(() => {
         els.forEach(e => {
-          e.el.style.left = (30 + Math.random() * (w - 140)) + 'px';
-          e.el.style.top = (30 + Math.random() * (h - 80)) + 'px';
+          e.el.style.left = (20 + Math.random() * (w - 140)) + 'px';
+          e.el.style.top = (20 + Math.random() * (h - 80)) + 'px';
         });
-      }, 50);
-      // Phase 2: non-winners fade, winner flies to center (800ms)
+      }, 300);
+      // Phase 2: shuffle again (700ms)
+      setTimeout(() => {
+        els.forEach(e => {
+          e.el.style.left = (20 + Math.random() * (w - 140)) + 'px';
+          e.el.style.top = (20 + Math.random() * (h - 80)) + 'px';
+        });
+      }, 650);
+      // Phase 3: non-winners fade, winner flies to center (1000ms)
       setTimeout(() => {
         els.forEach(e => {
           if (e.name !== winner.Name) {
             e.el.classList.add('eliminated');
           } else {
             e.el.classList.add('winner');
-            e.el.style.left = (w / 2 - 60) + 'px';
+            e.el.style.left = (w / 2 - 70) + 'px';
             e.el.style.top = (h / 2 - 20) + 'px';
             e.el.style.fontSize = '2rem';
+            e.el.style.width = 'auto';
             e.el.style.padding = '12px 28px';
           }
         });
-      }, 700);
+      }, 1000);
       setTimeout(done, ANIM_DURATION);
     }
 
@@ -1589,55 +1674,119 @@
       setTimeout(done, ANIM_DURATION);
     }
 
-    // 9. Amoeba — blobs drift around, absorb each other until winner remains
+    // 9. Amoeba — blobs steer toward each other, bigger eats smaller on contact
     function animAmoeba(stage, names, winner, done) {
       const w = stage.clientWidth, h = stage.clientHeight;
-      const blobs = names.map(n => {
+      const hues = [210, 260, 170, 330, 30, 50, 290, 190];
+      const maxTime = ANIM_DURATION * 2.5;
+      const blobs = names.map((n, i) => {
         const el = document.createElement('div');
-        el.style.cssText = 'position:absolute;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;color:white;transition:all 0.3s ease;pointer-events:none;';
-        const size = 50 + Math.random() * 20;
+        el.style.cssText = 'position:absolute;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;color:white;pointer-events:none;text-shadow:0 1px 3px rgba(0,0,0,0.5);';
+        const size = 46 + Math.random() * 14;
         el.style.width = size + 'px'; el.style.height = size + 'px';
-        el.style.fontSize = '0.6rem';
-        el.style.background = n === winner.Name ? 'rgba(185,28,28,0.5)' : 'rgba(100,120,180,0.3)';
-        el.style.border = '1px solid ' + (n === winner.Name ? 'rgba(185,28,28,0.6)' : 'rgba(150,160,200,0.3)');
-        el.textContent = n.split(' ')[0]; // first name only to fit
-        const x = 60 + Math.random() * (w - 160), y = 60 + Math.random() * (h - 160);
+        el.style.fontSize = '0.55rem';
+        const hue = hues[i % hues.length];
+        el.style.background = `hsla(${hue},50%,40%,0.5)`;
+        el.style.border = `1px solid hsla(${hue},50%,50%,0.4)`;
+        el.textContent = n.split(' ')[0];
+        const x = 30 + Math.random() * (w - 100), y = 30 + Math.random() * (h - 100);
         el.style.left = x + 'px'; el.style.top = y + 'px';
         stage.appendChild(el);
-        return { el, name: n, x, y, size, vx: (Math.random() - 0.5) * 3, vy: (Math.random() - 0.5) * 3, alive: true };
+        // Random initial angle, each blob has a wander angle that drifts
+        const angle = Math.random() * Math.PI * 2;
+        return { el, name: n, x, y, size, hue, angle, speed: 1.5 + Math.random(), alive: true };
       });
-      // Order so winner blob absorbs last
-      const eatOrder = shuffleArr(blobs.filter(b => b.name !== winner.Name));
-      const interval = (ANIM_DURATION - 200) / (eatOrder.length + 1);
       const winBlob = blobs.find(b => b.name === winner.Name);
-      // Animate movement
+      winBlob.size += 4;
+      winBlob.el.style.width = winBlob.size + 'px';
+      winBlob.el.style.height = winBlob.size + 'px';
+      const startTime = performance.now();
       let animId;
-      function move() {
-        blobs.forEach(b => {
-          if (!b.alive) return;
-          b.x += b.vx; b.y += b.vy;
-          if (b.x < 10 || b.x > w - b.size - 10) b.vx *= -1;
-          if (b.y < 10 || b.y > h - b.size - 10) b.vy *= -1;
+
+      function findNearest(b, alive) {
+        let best = null, bestDist = Infinity;
+        for (const o of alive) {
+          if (o === b) continue;
+          const dx = o.x - b.x, dy = o.y - b.y;
+          const d = dx * dx + dy * dy;
+          if (d < bestDist) { bestDist = d; best = o; }
+        }
+        return best;
+      }
+
+      function absorb(eater, eaten) {
+        eaten.alive = false;
+        eaten.el.style.transition = 'all 0.25s ease-in';
+        eaten.el.style.left = (eater.x + eater.size / 2 - eaten.size / 2) + 'px';
+        eaten.el.style.top = (eater.y + eater.size / 2 - eaten.size / 2) + 'px';
+        eaten.el.style.width = '0px'; eaten.el.style.height = '0px';
+        eaten.el.style.opacity = '0';
+        eater.size += Math.max(6, eaten.size * 0.25);
+        eater.el.style.transition = 'width 0.25s, height 0.25s, font-size 0.25s';
+        eater.el.style.width = eater.size + 'px'; eater.el.style.height = eater.size + 'px';
+        eater.el.style.fontSize = Math.min(0.55 + (eater.size - 46) * 0.014, 1.8) + 'rem';
+      }
+
+      function tick() {
+        const alive = blobs.filter(b => b.alive);
+        const elapsed = performance.now() - startTime;
+        const urgency = Math.min(elapsed / maxTime, 1);
+
+        alive.forEach(b => {
+          const nearest = findNearest(b, alive);
+          if (nearest) {
+            // Steer toward nearest blob (hunt behavior)
+            const dx = nearest.x - b.x, dy = nearest.y - b.y;
+            const targetAngle = Math.atan2(dy, dx);
+            // Blend: more hunting as time goes on, some wandering early
+            const wander = (Math.random() - 0.5) * (1.5 - urgency);
+            b.angle += (targetAngle - b.angle) * (0.08 + urgency * 0.12) + wander * 0.15;
+          } else {
+            b.angle += (Math.random() - 0.5) * 0.3;
+          }
+          // Speed increases with urgency and blob size
+          const spd = b.speed * (1 + urgency * 2);
+          b.x += Math.cos(b.angle) * spd;
+          b.y += Math.sin(b.angle) * spd;
+          // Bounce off walls with angle reflection
+          if (b.x < 5) { b.x = 5; b.angle = Math.PI - b.angle; }
+          if (b.x > w - b.size - 5) { b.x = w - b.size - 5; b.angle = Math.PI - b.angle; }
+          if (b.y < 5) { b.y = 5; b.angle = -b.angle; }
+          if (b.y > h - b.size - 5) { b.y = h - b.size - 5; b.angle = -b.angle; }
           b.el.style.left = b.x + 'px'; b.el.style.top = b.y + 'px';
         });
-        animId = requestAnimationFrame(move);
+
+        // Collision detection: bigger eats smaller
+        for (let i = 0; i < alive.length; i++) {
+          for (let j = i + 1; j < alive.length; j++) {
+            const a = alive[i], b2 = alive[j];
+            if (!a.alive || !b2.alive) continue;
+            const acx = a.x + a.size / 2, acy = a.y + a.size / 2;
+            const bcx = b2.x + b2.size / 2, bcy = b2.y + b2.size / 2;
+            const dx = acx - bcx, dy = acy - bcy;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const touchDist = (a.size + b2.size) * 0.45;
+            if (dist < touchDist) {
+              const eater = a.size >= b2.size ? a : b2;
+              const eaten = eater === a ? b2 : a;
+              if (eaten.name === winner.Name && alive.filter(x => x.alive).length <= 3) continue;
+              absorb(eater, eaten);
+            }
+          }
+        }
+
+        const aliveCount = blobs.filter(b => b.alive).length;
+        if (aliveCount > 1 && elapsed < maxTime) {
+          animId = requestAnimationFrame(tick);
+        } else {
+          // Force finish: winner absorbs all remaining
+          blobs.filter(b => b.alive && b.name !== winner.Name).forEach(b => absorb(winBlob, b));
+          winBlob.el.style.background = 'rgba(185,28,28,0.5)';
+          winBlob.el.style.border = '2px solid rgba(185,28,28,0.7)';
+          setTimeout(done, 350);
+        }
       }
-      move();
-      // Absorb blobs one by one
-      eatOrder.forEach((b, i) => {
-        setTimeout(() => {
-          b.alive = false;
-          // Move to winner position and shrink
-          b.el.style.left = winBlob.x + 'px';
-          b.el.style.top = winBlob.y + 'px';
-          b.el.style.width = '0px'; b.el.style.height = '0px'; b.el.style.opacity = '0';
-          // Grow winner
-          winBlob.size += 8;
-          winBlob.el.style.width = winBlob.size + 'px'; winBlob.el.style.height = winBlob.size + 'px';
-          winBlob.el.style.fontSize = Math.min(0.6 + (winBlob.size - 50) * 0.015, 1.8) + 'rem';
-        }, interval * (i + 1));
-      });
-      setTimeout(() => { cancelAnimationFrame(animId); done(); }, ANIM_DURATION);
+      animId = requestAnimationFrame(tick);
     }
 
     // 10. Rolodex — 3D card flip that spins through names and decelerates
@@ -1677,8 +1826,116 @@
       requestAnimationFrame(frame);
     }
 
+    // 11. March Madness bracket — tournament-style elimination
+    function animBracket(stage, names, winner, done) {
+      const w = stage.clientWidth, h = stage.clientHeight;
+      // Pad to power of 2
+      let entrants = shuffleArr([...names]);
+      const winnerName = winner.Name;
+      while (entrants.length & (entrants.length - 1)) entrants.push('—');
+      // Ensure winner survives every round
+      const rounds = Math.ceil(Math.log2(entrants.length));
+      const totalRounds = rounds;
+      const roundTime = (ANIM_DURATION * 1.5) / (totalRounds + 1);
+
+      const container = document.createElement('div');
+      container.style.cssText = 'display:flex;align-items:stretch;height:100%;gap:4px;padding:10px;overflow:hidden;';
+      stage.appendChild(container);
+
+      // Build bracket columns
+      let currentRound = entrants;
+      const allColumns = [];
+
+      for (let r = 0; r <= totalRounds; r++) {
+        const col = document.createElement('div');
+        col.style.cssText = 'display:flex;flex-direction:column;justify-content:space-around;flex:1;gap:2px;min-width:0;';
+        const cells = [];
+
+        if (r === 0) {
+          // First round: show all entrants
+          currentRound.forEach(name => {
+            const cell = document.createElement('div');
+            cell.style.cssText = 'padding:2px 6px;border-radius:4px;font-size:0.6rem;font-weight:600;color:#d1d5db;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);text-align:center;transition:all 0.3s;';
+            cell.textContent = name === '—' ? '' : name;
+            col.appendChild(cell);
+            cells.push({ el: cell, name });
+          });
+        } else {
+          // Later rounds: empty slots to fill
+          const slots = Math.ceil(entrants.length / Math.pow(2, r));
+          for (let s = 0; s < slots; s++) {
+            const cell = document.createElement('div');
+            cell.style.cssText = 'padding:3px 8px;border-radius:4px;font-size:' + Math.min(0.6 + r * 0.15, 1.2) + 'rem;font-weight:600;color:transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);text-align:center;transition:all 0.4s;';
+            cell.textContent = '\u00a0';
+            col.appendChild(cell);
+            cells.push({ el: cell, name: '' });
+          }
+        }
+        container.appendChild(col);
+        allColumns.push(cells);
+      }
+
+      // Simulate rounds with delays
+      let survivors = [...currentRound];
+      for (let r = 0; r < totalRounds; r++) {
+        ((round) => {
+          setTimeout(() => {
+            const nextSurvivors = [];
+            for (let i = 0; i < survivors.length; i += 2) {
+              const a = survivors[i], b = survivors[i + 1] || '—';
+              let advancing;
+              if (a === winnerName || b === '—') advancing = a;
+              else if (b === winnerName || a === '—') advancing = b;
+              else advancing = Math.random() > 0.5 ? a : b;
+              nextSurvivors.push(advancing);
+
+              // Highlight loser in round column
+              const col0 = allColumns[round];
+              const loser = advancing === a ? b : a;
+              if (col0) {
+                const loserCell = col0.find(c => c.name === loser);
+                if (loserCell) {
+                  loserCell.el.style.opacity = '0.2';
+                  loserCell.el.style.textDecoration = 'line-through';
+                }
+                const winCell = col0.find(c => c.name === advancing);
+                if (winCell) {
+                  winCell.el.style.color = 'white';
+                  winCell.el.style.background = 'rgba(185,28,28,0.2)';
+                  winCell.el.style.borderColor = 'rgba(185,28,28,0.4)';
+                }
+              }
+
+              // Fill next round column
+              const nextCol = allColumns[round + 1];
+              if (nextCol && nextCol[Math.floor(i / 2)]) {
+                const cell = nextCol[Math.floor(i / 2)];
+                cell.el.textContent = advancing === '—' ? '' : advancing;
+                cell.el.style.color = '#d1d5db';
+                cell.name = advancing;
+              }
+            }
+            survivors = nextSurvivors;
+
+            // Final round: highlight champion
+            if (round === totalRounds - 1) {
+              const lastCol = allColumns[totalRounds];
+              if (lastCol && lastCol[0]) {
+                lastCol[0].el.style.color = 'white';
+                lastCol[0].el.style.background = 'rgba(185,28,28,0.4)';
+                lastCol[0].el.style.borderColor = 'rgba(185,28,28,0.7)';
+                lastCol[0].el.style.fontSize = '1.4rem';
+                lastCol[0].el.style.padding = '8px 16px';
+              }
+            }
+          }, roundTime * (round + 1));
+        })(r);
+      }
+      setTimeout(done, roundTime * (totalRounds + 1));
+    }
+
     // --- Animation registry ---
-    const pickerAnimations = [animSlot, animSpotlight, animEliminate, animRoulette, animShuffle, animBinary, animTypewriter, animZoom, animAmoeba, animRolodex];
+    const pickerAnimations = [animSlot, animSpotlight, animEliminate, animRoulette, animShuffle, animBinary, animTypewriter, animZoom, animAmoeba, animRolodex, animBracket];
 
     // --- Main trigger ---
     function triggerPicker() {
@@ -2104,6 +2361,17 @@
         const loginPasswordInput = document.getElementById('login-password');
         if (loginPasswordInput) loginPasswordInput.addEventListener('keyup', e => { if (e.key === 'Enter') handleLogin(); });
         if (loginUsernameInput) loginUsernameInput.addEventListener('keyup', e => { if (e.key === 'Enter') loginPasswordInput && loginPasswordInput.focus(); });
+
+        // Login password visibility toggle
+        const loginTogglePw = document.getElementById('login-toggle-password');
+        if (loginTogglePw && loginPasswordInput) {
+          loginTogglePw.addEventListener('click', () => {
+            const isPassword = loginPasswordInput.type === 'password';
+            loginPasswordInput.type = isPassword ? 'text' : 'password';
+            document.getElementById('login-eye-open').classList.toggle('hidden', !isPassword);
+            document.getElementById('login-eye-closed').classList.toggle('hidden', isPassword);
+          });
+        }
 
         // PIN setup listeners
         const pinSetupSubmitBtn = document.getElementById('pin-setup-submit');
@@ -2931,7 +3199,13 @@
           opt.textContent = `Period ${p}`;
           periodSelect.appendChild(opt);
         });
-        if (curVal) periodSelect.value = curVal;
+        // Restore previous selection, or apply globalPeriod from Firebase
+        if (curVal) {
+          periodSelect.value = curVal;
+        } else if (globalPeriod && !isOverride) {
+          periodSelect.value = globalPeriod;
+          if (periodSelect.value === globalPeriod) onPeriodChange();
+        }
 
         const cur = periodSelect.value;
         if (cur) {
@@ -4346,6 +4620,8 @@
     window.manualCheckIn = manualCheckIn;
 
     function updateUI() {
+      const savedAbsentScroll = absentListEl.scrollTop;
+      const savedGroupScroll = groupReportEl.scrollTop;
       const counts = { 'On Time': 0, 'Late': 0, 'Truant': 0 };
       periodAttendanceLog.forEach(l => { if (counts[l.Status] !== undefined) counts[l.Status]++; });
       const present = periodAttendanceLog.length;
@@ -4456,6 +4732,10 @@
 
       renderPeriodIndicator();
       renderRosterDebug();
+      requestAnimationFrame(() => {
+        absentListEl.scrollTop = savedAbsentScroll;
+        groupReportEl.scrollTop = savedGroupScroll;
+      });
     }
 
     function renderPeriodIndicator() {
@@ -4492,6 +4772,7 @@
           revealSyncTab();
           document.getElementById('sync-enabled-toggle').checked = true;
           document.getElementById('sync-status-section').classList.remove('hidden');
+          document.getElementById('sync-now-section').classList.remove('hidden');
           document.getElementById('sync-toggle-status').textContent = 'Sync is enabled. Attendance syncs to Aeries every 30 minutes during school hours.';
           watchSyncStatus();
         }
@@ -4509,13 +4790,16 @@
             await setDoc(configRef, { syncEnabled: enabled }, { merge: true });
             const statusEl = document.getElementById('sync-toggle-status');
             const statusSection = document.getElementById('sync-status-section');
+            const syncNowSection = document.getElementById('sync-now-section');
             if (enabled) {
               statusEl.textContent = 'Sync is enabled. Attendance syncs to Aeries every 30 minutes during school hours.';
               statusSection.classList.remove('hidden');
+              if (syncNowSection) syncNowSection.classList.remove('hidden');
               watchSyncStatus();
             } else {
               statusEl.textContent = 'Sync is disabled. Attendance will not be sent to Aeries.';
               statusSection.classList.add('hidden');
+              if (syncNowSection) syncNowSection.classList.add('hidden');
               if (unsubSyncStatus) { unsubSyncStatus(); unsubSyncStatus = null; }
             }
           } catch (e) {
@@ -4533,6 +4817,35 @@
           if (errorDetails) {
             errorDetails.classList.toggle('hidden');
             detailsBtn.textContent = errorDetails.classList.contains('hidden') ? 'Details' : 'Hide';
+          }
+        });
+      }
+
+      // Sync Now button
+      const syncNowBtn = document.getElementById('sync-now-btn');
+      if (syncNowBtn) {
+        syncNowBtn.addEventListener('click', async () => {
+          syncNowBtn.disabled = true;
+          const spinner = document.getElementById('sync-now-spinner');
+          if (spinner) spinner.classList.remove('hidden');
+          syncNowBtn.childNodes[syncNowBtn.childNodes.length - 1].textContent = ' Syncing...';
+          try {
+            const triggerSyncFn = httpsCallable(functions, 'triggerSync');
+            const result = await triggerSyncFn({});
+            if (result.data.success) {
+              syncNowBtn.childNodes[syncNowBtn.childNodes.length - 1].textContent = ' Done!';
+              setTimeout(() => { syncNowBtn.childNodes[syncNowBtn.childNodes.length - 1].textContent = ' Sync Now'; }, 2000);
+            } else {
+              syncNowBtn.childNodes[syncNowBtn.childNodes.length - 1].textContent = ' Failed';
+              setTimeout(() => { syncNowBtn.childNodes[syncNowBtn.childNodes.length - 1].textContent = ' Sync Now'; }, 3000);
+            }
+          } catch (err) {
+            console.error('[syncNow]', err);
+            syncNowBtn.childNodes[syncNowBtn.childNodes.length - 1].textContent = ' Error';
+            setTimeout(() => { syncNowBtn.childNodes[syncNowBtn.childNodes.length - 1].textContent = ' Sync Now'; }, 3000);
+          } finally {
+            syncNowBtn.disabled = false;
+            if (spinner) spinner.classList.add('hidden');
           }
         });
       }
@@ -4754,6 +5067,17 @@
       }
       if (newPwInput) {
         newPwInput.addEventListener('keyup', e => { if (e.key === 'Enter' && updatePwSubmit) updatePwSubmit.click(); });
+      }
+
+      // Password visibility toggle
+      const togglePwBtn = document.getElementById('settings-toggle-password');
+      if (togglePwBtn && newPwInput) {
+        togglePwBtn.addEventListener('click', () => {
+          const isPassword = newPwInput.type === 'password';
+          newPwInput.type = isPassword ? 'text' : 'password';
+          document.getElementById('settings-eye-open').classList.toggle('hidden', !isPassword);
+          document.getElementById('settings-eye-closed').classList.toggle('hidden', isPassword);
+        });
       }
 
       // Change PIN

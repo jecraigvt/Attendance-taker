@@ -3267,6 +3267,7 @@
         const students = allRosters[period] || [];
         const sectionId = 'roster-period-' + period;
         const tableId = 'roster-table-' + period;
+        const wasExpanded = expandedPeriods.size > 0 ? expandedPeriods.has(sectionId) : idx === 0;
         const section = document.createElement('div');
         section.className = 'bg-white rounded-xl border border-gray-200 mb-4 overflow-hidden';
         const header = document.createElement('div');
@@ -3294,8 +3295,6 @@
         header.append(headerLeft, chevronSvg);
         const body = document.createElement('div');
         body.id = sectionId;
-        // Restore expanded state, or default to first period open
-        const wasExpanded = expandedPeriods.size > 0 ? expandedPeriods.has(sectionId) : idx === 0;
         body.className = 'roster-period-body border-t border-gray-100' + (wasExpanded ? '' : ' hidden');
         const tableWrap = document.createElement('div');
         tableWrap.className = 'overflow-x-auto';

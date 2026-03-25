@@ -704,7 +704,8 @@
 
               <!-- Visual preview -->
               <div>
-                <h4 class="text-sm font-semibold text-gray-700 mb-2">Preview</h4>
+                <h4 class="text-sm font-semibold text-gray-700 mb-1">Preview</h4>
+                <p class="text-xs text-gray-400 mb-2">Click a group to mark it as a front-of-room seat (for front-row students).</p>
                 <div id="seating-preview" class="flex flex-wrap gap-2"></div>
               </div>
             </div>
@@ -3700,11 +3701,14 @@
             const dsEl = row.querySelector('.period-override-seats');
             const ng = ngEl ? (parseInt(ngEl.value) || numGroups) : numGroups;
             const ds = dsEl ? (parseInt(dsEl.value) || defaultSeatsPerGroup) : defaultSeatsPerGroup;
-            perPeriodOverrides[period] = { numGroups: ng, defaultSeatsPerGroup: ds };
+            // Preserve frontGroups from existing config if set
+            const existingPeriod = (currentSeatingConfig.perPeriodOverrides || {})[period];
+            const fg = existingPeriod?.frontGroups || [];
+            perPeriodOverrides[period] = { numGroups: ng, defaultSeatsPerGroup: ds, frontGroups: fg };
           }
         });
       }
-      currentSeatingConfig = { enabled, numGroups, defaultSeatsPerGroup, perGroupOverrides, perPeriodOverrides };
+      currentSeatingConfig = { enabled, numGroups, defaultSeatsPerGroup, perGroupOverrides, perPeriodOverrides, frontGroups: currentSeatingConfig.frontGroups || [] };
       if (seatingSaveStatus) { seatingSaveStatus.textContent = 'Saving...'; seatingSaveStatus.className = 'text-sm text-blue-600'; }
       if (db && teacherUid) {
         try {
@@ -3779,18 +3783,31 @@
           if (inp.value.trim() !== '') overrides[inp.dataset.group] = parseInt(inp.value) || defaultSeats;
         });
       }
+      const fg = currentSeatingConfig.frontGroups || [];
+      const frontSet = new Set(fg.map(String));
       seatingPreview.replaceChildren();
       for (let g = 1; g <= n; g++) {
         const seats = overrides[String(g)] != null ? overrides[String(g)] : defaultSeats;
+        const isFront = frontSet.has(String(g));
         const chip = document.createElement('div');
-        chip.className = 'flex flex-col items-center bg-gray-100 rounded-lg px-3 py-2 border border-gray-200 min-w-[56px]';
+        chip.className = 'flex flex-col items-center rounded-lg px-3 py-2 border min-w-[56px] cursor-pointer select-none transition-all '
+          + (isFront ? 'bg-blue-100 border-blue-400 ring-1 ring-blue-300' : 'bg-gray-100 border-gray-200 hover:border-gray-300');
+        chip.title = isFront ? 'Front of room (click to remove)' : 'Click to mark as front of room';
         const gl = document.createElement('span');
-        gl.className = 'text-xs font-semibold text-gray-700';
-        gl.textContent = `G${g}`;
+        gl.className = 'text-xs font-semibold ' + (isFront ? 'text-blue-700' : 'text-gray-700');
+        gl.textContent = 'G' + g;
         const sl = document.createElement('span');
-        sl.className = 'text-xs text-gray-500';
-        sl.textContent = seats + (seats !== 1 ? ' seats' : ' seat');
+        sl.className = 'text-xs ' + (isFront ? 'text-blue-500' : 'text-gray-500');
+        sl.textContent = isFront ? 'Front' : seats + (seats !== 1 ? ' seats' : ' seat');
         chip.append(gl, sl);
+        chip.addEventListener('click', () => {
+          const fgs = new Set((currentSeatingConfig.frontGroups || []).map(String));
+          if (fgs.has(String(g))) fgs.delete(String(g));
+          else fgs.add(String(g));
+          currentSeatingConfig.frontGroups = Array.from(fgs).map(Number).sort((a, b) => a - b);
+          renderSeatingPreview();
+          saveSeatingConfig();
+        });
         seatingPreview.appendChild(chip);
       }
     }
@@ -3856,11 +3873,60 @@
         dsLabel.className = 'text-xs text-gray-500';
         dsLabel.textContent = 'seats each';
         customFields.append(ngInp, ngLabel, dsInp, dsLabel);
+
+        // Front groups for this period (only shown in custom mode)
+        const frontRow = document.createElement('div');
+        frontRow.className = 'flex flex-wrap items-center gap-1 mt-1';
+        if (mode !== 'custom') frontRow.classList.add('hidden');
+        const frontLabel = document.createElement('span');
+        frontLabel.className = 'text-xs text-gray-400 mr-1';
+        frontLabel.textContent = 'Front:';
+        frontRow.appendChild(frontLabel);
+
+        function renderPeriodFrontChips() {
+          // Remove old chips (keep the label)
+          while (frontRow.children.length > 1) frontRow.removeChild(frontRow.lastChild);
+          const ng = parseInt(ngInp.value) || numGroups;
+          const pfg = (existing && existing.frontGroups) || [];
+          const pfgSet = new Set(pfg.map(String));
+          for (let g = 1; g <= ng; g++) {
+            const isFront = pfgSet.has(String(g));
+            const chip = document.createElement('span');
+            chip.className = 'text-xs px-1.5 py-0.5 rounded cursor-pointer select-none transition-all '
+              + (isFront ? 'bg-blue-200 text-blue-700 font-semibold' : 'bg-gray-100 text-gray-500 hover:bg-gray-200');
+            chip.textContent = g;
+            chip.title = isFront ? 'Front (click to remove)' : 'Click to mark front';
+            chip.addEventListener('click', () => {
+              if (!existing) periodOverrides[String(period)] = { numGroups: ng, defaultSeatsPerGroup: parseInt(dsInp.value) || defSeats };
+              const cur = periodOverrides[String(period)];
+              const fgs = new Set((cur.frontGroups || []).map(String));
+              if (fgs.has(String(g))) fgs.delete(String(g));
+              else fgs.add(String(g));
+              cur.frontGroups = Array.from(fgs).map(Number).sort((a, b) => a - b);
+              // Update the existing reference so re-renders pick it up
+              if (existing) existing.frontGroups = cur.frontGroups;
+              renderPeriodFrontChips();
+              saveSeatingConfig();
+            });
+            frontRow.appendChild(chip);
+          }
+        }
+        renderPeriodFrontChips();
+        ngInp.addEventListener('input', renderPeriodFrontChips);
+
         modeSelect.addEventListener('change', () => {
-          customFields.classList.toggle('hidden', modeSelect.value !== 'custom');
+          const isCustom = modeSelect.value === 'custom';
+          customFields.classList.toggle('hidden', !isCustom);
+          frontRow.classList.toggle('hidden', !isCustom);
         });
-        row.append(label, modeSelect, customFields);
-        seatingPeriodOverrides.appendChild(row);
+        const periodContainer = document.createElement('div');
+        periodContainer.className = 'period-override-row py-2 border-b border-gray-100 last:border-0';
+        periodContainer.dataset.period = period;
+        const topRow = document.createElement('div');
+        topRow.className = 'flex flex-wrap items-center gap-2';
+        topRow.append(label, modeSelect, customFields);
+        periodContainer.append(topRow, frontRow);
+        seatingPeriodOverrides.appendChild(periodContainer);
       });
     }
 
@@ -4152,11 +4218,16 @@
 
       const cap = g => getGroupCap(g, effectiveCfg);
 
-      // Front groups = first ~15% of groups (configurable convention)
+      // Front groups from config (teacher-designated), or fallback to first group
+      const configFront = effectiveCfg.frontGroups || currentSeatingConfig.frontGroups || [];
       const frontGroups = new Set();
       if (needsFront) {
-        const frontCount = Math.max(1, Math.ceil(numGroups * 0.15));
-        for (let g = 1; g <= frontCount; g++) frontGroups.add(g);
+        if (configFront.length > 0) {
+          configFront.forEach(g => frontGroups.add(g));
+        } else {
+          // Fallback: first group if none configured
+          frontGroups.add(1);
+        }
       }
 
       // Pool = groups with capacity, not in avoid set

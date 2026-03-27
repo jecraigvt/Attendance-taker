@@ -1162,9 +1162,17 @@ exports.syncAttendance = onSchedule(
       const dueTeachers = [];
       for (const uid of teacherUids) {
         const check = shouldSyncNow(uid, now);
-        if (check.sync) {
-          dueTeachers.push(uid);
+        if (!check.sync) continue;
+
+        // Skip teachers who haven't enabled sync
+        const configSnap = await db
+            .collection("teachers").doc(uid)
+            .collection("config").doc("main").get();
+        if (!configSnap.exists || configSnap.data().syncEnabled !== true) {
+          continue;
         }
+
+        dueTeachers.push(uid);
       }
 
       if (dueTeachers.length === 0) {

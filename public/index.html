@@ -1272,13 +1272,26 @@
 
       const period = periodSelect ? periodSelect.value : null;
       const effectiveCfg = getEffectiveSeatingConfig(period);
-      const numGroups = effectiveCfg.enabled ? effectiveCfg.numGroups : MAX_GROUP;
 
-      const map = new Map();
-      for (let g = 1; g <= numGroups; g++) map.set(g, []);
-      periodAttendanceLog.forEach(l => {
-        if (l.Group && map.has(l.Group)) map.get(l.Group).push({ name: l.Name, seat: l.Seat, sid: l.StudentID });
-      });
+      // Helper to render a fullscreen student list item
+      function renderFsStudentLi(entry) {
+        const streak = absenceStreaks.get(entry.sid) || 0;
+        const li = document.createElement('li');
+        let liClass = 'text-gray-300 text-base';
+        if (streak === 1) liClass += ' text-amber-300';
+        else if (streak >= 2) liClass += ' text-red-400';
+        li.className = liClass;
+        let text = entry.seat != null ? entry.name + ' \u2014 Seat ' + entry.seat : entry.name;
+        li.textContent = text;
+        if (streak > 0) {
+          const dot = document.createElement('span');
+          dot.className = streak >= 2 ? 'ml-1.5 text-red-400 text-xs' : 'ml-1.5 text-amber-300 text-xs';
+          dot.title = streak === 1 ? 'Absent last class' : 'Absent ' + streak + ' classes in a row';
+          dot.textContent = streak === 1 ? '\u25CF' : '\u25CF' + streak;
+          li.appendChild(dot);
+        }
+        return li;
+      }
 
       fullscreenListEl.replaceChildren();
       if (periodAttendanceLog.length === 0) {
@@ -1286,10 +1299,35 @@
         p.className = 'col-span-full text-center text-gray-500 text-xl mt-20';
         p.textContent = 'Students will appear here as they sign in.';
         fullscreenListEl.appendChild(p);
+      } else if (!effectiveCfg.enabled) {
+        // No seating — single card with all present students
+        const card = document.createElement('div');
+        card.className = 'seat-fs-card rounded-2xl p-5';
+        const h4 = document.createElement('h4');
+        h4.className = 'font-bold text-xl text-red-500 mb-3 seat-fs-card-header';
+        h4.textContent = 'Present';
+        const countBadge = document.createElement('span');
+        countBadge.className = 'text-sm font-normal text-gray-500 ml-2';
+        countBadge.textContent = periodAttendanceLog.length + '';
+        h4.appendChild(countBadge);
+        const ul = document.createElement('ul');
+        ul.className = 'space-y-1.5';
+        periodAttendanceLog.forEach(l => {
+          ul.appendChild(renderFsStudentLi({ name: l.Name, seat: l.Seat, sid: l.StudentID }));
+        });
+        card.append(h4, ul);
+        fullscreenListEl.appendChild(card);
       } else {
+        // Seating enabled — group cards
+        const numGroups = effectiveCfg.numGroups;
+        const map = new Map();
+        for (let g = 1; g <= numGroups; g++) map.set(g, []);
+        periodAttendanceLog.forEach(l => {
+          if (l.Group && map.has(l.Group)) map.get(l.Group).push({ name: l.Name, seat: l.Seat, sid: l.StudentID });
+        });
         map.forEach((arr, grp) => {
           if (arr.length > 0) {
-            const cap = effectiveCfg.enabled ? getGroupCap(grp, effectiveCfg) : 3;
+            const cap = getGroupCap(grp, effectiveCfg);
             const card = document.createElement('div');
             card.className = 'seat-fs-card rounded-2xl p-5';
             const h4 = document.createElement('h4');
@@ -1301,24 +1339,7 @@
             h4.appendChild(countBadge);
             const ul = document.createElement('ul');
             ul.className = 'space-y-1.5';
-            arr.forEach(entry => {
-              const streak = absenceStreaks.get(entry.sid) || 0;
-              const li = document.createElement('li');
-              let liClass = 'text-gray-300 text-base';
-              if (streak === 1) liClass += ' text-amber-300';
-              else if (streak >= 2) liClass += ' text-red-400';
-              li.className = liClass;
-              let text = entry.seat != null ? entry.name + ' \u2014 Seat ' + entry.seat : entry.name;
-              li.textContent = text;
-              if (streak > 0) {
-                const dot = document.createElement('span');
-                dot.className = streak >= 2 ? 'ml-1.5 text-red-400 text-xs' : 'ml-1.5 text-amber-300 text-xs';
-                dot.title = streak === 1 ? 'Absent last class' : 'Absent ' + streak + ' classes in a row';
-                dot.textContent = streak === 1 ? '\u25CF' : '\u25CF' + streak;
-                li.appendChild(dot);
-              }
-              ul.appendChild(li);
-            });
+            arr.forEach(entry => ul.appendChild(renderFsStudentLi(entry)));
             card.append(h4, ul);
             fullscreenListEl.appendChild(card);
           }
@@ -4860,10 +4881,6 @@
       } else {
         const period = periodSelect.value;
         const effectiveCfg = getEffectiveSeatingConfig(period);
-        const numGroups = effectiveCfg.enabled ? effectiveCfg.numGroups : MAX_GROUP;
-        const map = new Map();
-        for (let g = 1; g <= numGroups; g++) map.set(g, []);
-        periodAttendanceLog.forEach(l => { if (l.Group && map.has(l.Group)) map.get(l.Group).push(l); });
 
         if (periodAttendanceLog.length === 0) {
           const placeholder = document.createElement('p');
@@ -4871,55 +4888,77 @@
           placeholder.textContent = 'Students will appear here as they sign in.';
           groupReportEl.appendChild(placeholder);
         } else {
-          map.forEach((arr, grp) => {
-            if (arr.length > 0) {
-              const cap = effectiveCfg.enabled ? getGroupCap(grp, effectiveCfg) : 3;
-              const div = document.createElement('div');
-              const h4 = document.createElement('h4');
-              h4.className = 'font-bold text-md text-gray-700 mt-2';
-              h4.textContent = 'Group ' + grp + ' (' + arr.length + '/' + cap + ')';
-              const ul = document.createElement('ul');
-              ul.className = 'text-sm list-disc list-inside mb-2';
-              arr.forEach(s => {
-                let color = 'text-green-600';
-                if (s.Status === 'Late') color = 'text-yellow-600';
-                if (s.Status === 'Truant' || s.Status === 'Absent') color = 'text-red-600';
-                const streak = absenceStreaks.get(s.StudentID) || 0;
-                const li = document.createElement('li');
-                let bgTint = '';
-                if (streak === 1) bgTint = 'bg-amber-50 border-l-2 border-amber-400';
-                else if (streak >= 2) bgTint = 'bg-red-50 border-l-2 border-red-400';
-                li.className = 'flex justify-between items-center group pl-1 py-1 hover:bg-gray-200 rounded ' + bgTint;
-                const nameSpan = document.createElement('span');
-                let nameText = s.Seat != null ? s.Name + ' (Seat ' + s.Seat + ')' : s.Name;
-                nameSpan.textContent = nameText;
-                if (streak > 0) {
-                  const badge = document.createElement('span');
-                  badge.className = streak >= 2 ? 'text-xs ml-1.5 text-red-500' : 'text-xs ml-1.5 text-amber-500';
-                  badge.title = streak === 1 ? 'Absent last class' : 'Absent ' + streak + ' classes in a row';
-                  badge.textContent = streak === 1 ? '\u25CF' : '\u25CF' + streak;
-                  nameSpan.appendChild(badge);
-                }
-                const actionsDiv = document.createElement('div');
-                actionsDiv.className = 'flex items-center gap-2';
-                const toggleBtn = document.createElement('button');
-                toggleBtn.className = 'text-xs font-mono cursor-pointer ' + color + ' hover:underline font-bold';
-                toggleBtn.title = 'Click to toggle status';
-                toggleBtn.textContent = (s.Status || '').toUpperCase().substring(0, 3);
-                toggleBtn.addEventListener('click', () => toggleStatus(s.StudentID, s.Status));
-                const removeBtn = document.createElement('button');
-                removeBtn.className = 'text-red-400 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold px-1';
-                removeBtn.title = 'Delete';
-                removeBtn.textContent = '\u00d7';
-                removeBtn.addEventListener('click', () => removeStudent(s.StudentID));
-                actionsDiv.append(toggleBtn, removeBtn);
-                li.append(nameSpan, actionsDiv);
-                ul.appendChild(li);
-              });
-              div.append(h4, ul);
-              groupReportEl.appendChild(div);
+
+          // Helper to render a student list item
+          function renderStudentLi(s) {
+            let color = 'text-green-600';
+            if (s.Status === 'Late') color = 'text-yellow-600';
+            if (s.Status === 'Truant' || s.Status === 'Absent') color = 'text-red-600';
+            const streak = absenceStreaks.get(s.StudentID) || 0;
+            const li = document.createElement('li');
+            let bgTint = '';
+            if (streak === 1) bgTint = 'bg-amber-50 border-l-2 border-amber-400';
+            else if (streak >= 2) bgTint = 'bg-red-50 border-l-2 border-red-400';
+            li.className = 'flex justify-between items-center group pl-1 py-1 hover:bg-gray-200 rounded ' + bgTint;
+            const nameSpan = document.createElement('span');
+            let nameText = s.Seat != null ? s.Name + ' (Seat ' + s.Seat + ')' : s.Name;
+            nameSpan.textContent = nameText;
+            if (streak > 0) {
+              const badge = document.createElement('span');
+              badge.className = streak >= 2 ? 'text-xs ml-1.5 text-red-500' : 'text-xs ml-1.5 text-amber-500';
+              badge.title = streak === 1 ? 'Absent last class' : 'Absent ' + streak + ' classes in a row';
+              badge.textContent = streak === 1 ? '\u25CF' : '\u25CF' + streak;
+              nameSpan.appendChild(badge);
             }
-          });
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'flex items-center gap-2';
+            const toggleBtn = document.createElement('button');
+            toggleBtn.className = 'text-xs font-mono cursor-pointer ' + color + ' hover:underline font-bold';
+            toggleBtn.title = 'Click to toggle status';
+            toggleBtn.textContent = (s.Status || '').toUpperCase().substring(0, 3);
+            toggleBtn.addEventListener('click', () => toggleStatus(s.StudentID, s.Status));
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'text-red-400 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold px-1';
+            removeBtn.title = 'Delete';
+            removeBtn.textContent = '\u00d7';
+            removeBtn.addEventListener('click', () => removeStudent(s.StudentID));
+            actionsDiv.append(toggleBtn, removeBtn);
+            li.append(nameSpan, actionsDiv);
+            return li;
+          }
+
+          if (!effectiveCfg.enabled) {
+            // No seating — flat list of all present students
+            const div = document.createElement('div');
+            const h4 = document.createElement('h4');
+            h4.className = 'font-bold text-md text-gray-700 mt-2';
+            h4.textContent = 'Present (' + periodAttendanceLog.length + ')';
+            const ul = document.createElement('ul');
+            ul.className = 'text-sm list-disc list-inside mb-2';
+            periodAttendanceLog.forEach(s => ul.appendChild(renderStudentLi(s)));
+            div.append(h4, ul);
+            groupReportEl.appendChild(div);
+          } else {
+            // Seating enabled — group buckets
+            const numGroups = effectiveCfg.numGroups;
+            const map = new Map();
+            for (let g = 1; g <= numGroups; g++) map.set(g, []);
+            periodAttendanceLog.forEach(l => { if (l.Group && map.has(l.Group)) map.get(l.Group).push(l); });
+            map.forEach((arr, grp) => {
+              if (arr.length > 0) {
+                const cap = getGroupCap(grp, effectiveCfg);
+                const div = document.createElement('div');
+                const h4 = document.createElement('h4');
+                h4.className = 'font-bold text-md text-gray-700 mt-2';
+                h4.textContent = 'Group ' + grp + ' (' + arr.length + '/' + cap + ')';
+                const ul = document.createElement('ul');
+                ul.className = 'text-sm list-disc list-inside mb-2';
+                arr.forEach(s => ul.appendChild(renderStudentLi(s)));
+                div.append(h4, ul);
+                groupReportEl.appendChild(div);
+              }
+            });
+          }
         }
         const fsContainer = document.getElementById('group-display-fullscreen');
         if (fsContainer && !fsContainer.classList.contains('hidden')) {

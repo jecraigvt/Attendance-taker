@@ -1675,16 +1675,18 @@
           if (!s.locked) s.span.textContent = chars[Math.floor(Math.random() * chars.length)];
         });
       }, 60);
-      // Lock in each character one at a time, left to right
-      const lockDelay = (ANIM_DURATION * 0.85) / target.length;
-      spans.forEach((s, i) => {
-        if (s.locked) return; // spaces are already locked
+      // Lock in each character one at a time, in random order
+      const unlocked = spans.map((s, i) => i).filter(i => !spans[i].locked);
+      const order = shuffleArr(unlocked);
+      const lockDelay = (ANIM_DURATION * 0.85) / order.length;
+      order.forEach((idx, step) => {
         setTimeout(() => {
+          const s = spans[idx];
           s.locked = true;
           s.span.textContent = s.target;
           s.span.style.color = 'white';
           s.span.style.textShadow = '0 0 20px rgba(185,28,28,0.6)';
-        }, ANIM_DURATION * 0.15 + lockDelay * i);
+        }, ANIM_DURATION * 0.15 + lockDelay * step);
       });
       setTimeout(() => { clearInterval(scrambleInterval); done(); }, ANIM_DURATION);
     }

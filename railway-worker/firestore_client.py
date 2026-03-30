@@ -9,7 +9,7 @@ helpers needed by sync_engine.py.
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import firebase_admin
@@ -348,10 +348,12 @@ def is_sync_enabled(uid: str) -> bool:
 
 def is_sync_blocked(uid: str) -> bool:
     """
-    Return True if the teacher's sync is blocked due to credentials_invalid.
+    Return True if the teacher's sync is blocked due to credentials_invalid
+    AND the failure happened less than 2 hours ago.
 
-    Once credentials are re-entered (Settings page calls authenticateTeacher CF
-    which clears the errorCategory), the block lifts automatically.
+    This auto-expires so a single transient Aeries login failure doesn't
+    permanently block auto-sync.  If credentials are truly wrong the block
+    will be re-set on the next attempt.
     """
     db = get_db()
     try:
@@ -359,7 +361,18 @@ def is_sync_blocked(uid: str) -> bool:
         if not doc.exists:
             return False
         data = doc.to_dict()
-        return data.get("errorCategory") == "credentials_invalid"
+        if data.get("errorCategory") != "credentials_invalid":
+            return False
+        # Auto-expire after 2 hours
+        last_sync = data.get("lastSyncTime")
+        if last_sync is not None:
+            if hasattr(last_sync, "seconds"):
+                last_dt = datetime.fromtimestamp(last_sync.seconds, tz=timezone.utc)
+            else:
+                last_dt = last_sync
+            if datetime.now(timezone.utc) - last_dt > timedelta(hours=2):
+                return False  # block expired — retry
+        return True
     except Exception as exc:
         logger.error(f"[{uid}] Error checking sync block status: {exc}")
         return False

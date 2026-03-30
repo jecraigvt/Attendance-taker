@@ -1078,17 +1078,25 @@ const SYNC_START_MINUTE = 7 * 60 + 45; // 7:45 AM = minute 465
 const SYNC_END_MINUTE = 16 * 60 + 20; // 4:20 PM = minute 980
 const SYNC_INTERVAL = 30; // target interval per teacher (minutes)
 
+/** Convert a Date to Pacific time (handles DST automatically). */
+function toPacific(date) {
+  return new Date(
+      date.toLocaleString("en-US", {timeZone: "America/Los_Angeles"}),
+  );
+}
+
 /**
  * Determine if a teacher should sync on this invocation.
  * Uses a daily hash of uid+date to create a staggered offset (0–29 min)
  * so different teachers sync at different times, ~30 min apart.
  */
 function shouldSyncNow(uid, now) {
-  const dateStr = now.toLocaleDateString("en-CA");
+  const pac = toPacific(now);
+  const dateStr = pac.toLocaleDateString("en-CA");
   const hash = crypto.createHash("md5").update(uid + dateStr).digest();
   const offset = hash.readUInt16BE(0) % SYNC_INTERVAL;
 
-  const minuteOfDay = now.getHours() * 60 + now.getMinutes();
+  const minuteOfDay = pac.getHours() * 60 + pac.getMinutes();
   if (minuteOfDay < SYNC_START_MINUTE || minuteOfDay > SYNC_END_MINUTE) {
     return {sync: false, reason: "outside_window"};
   }
@@ -1147,7 +1155,7 @@ exports.syncAttendance = onSchedule(
     },
     async () => {
       const now = new Date();
-      const dateStr = now.toLocaleDateString("en-CA"); // YYYY-MM-DD
+      const dateStr = toPacific(now).toLocaleDateString("en-CA"); // YYYY-MM-DD Pacific
 
       // 1. Get all teacher UIDs
       const teachersSnap = await db.collection("teachers").get();
@@ -1368,9 +1376,10 @@ async function syncTeacher(uid, dateStr) {
     if (page.url().toLowerCase().includes("login")) {
       logger.error("Aeries login failed for sync", {uid});
       syncResults.error = "login_failed";
-      return;
     }
-    logger.info("Aeries login successful for sync", {uid});
+
+    if (!syncResults.error) {
+      logger.info("Aeries login successful for sync", {uid});
 
     // Navigate to Teacher Attendance page
     const currentOrigin = new URL(page.url()).origin;
@@ -1572,6 +1581,12 @@ async function syncTeacher(uid, dateStr) {
           uid, period, error: err.message,
         });
       }
+    }
+    } // end if (!syncResults.error)
+  } catch (err) {
+    logger.error("Puppeteer sync error", {uid, error: err.message});
+    if (!syncResults.error) {
+      syncResults.error = err.message;
     }
   } finally {
     await browser.close();

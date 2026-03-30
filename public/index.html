@@ -1351,7 +1351,7 @@
 
     const pickerWeights = new Map();
     let pickerBusy = false;
-    const ANIM_DURATION = 1500; // ms per animation
+    const ANIM_DURATION = 4000; // ms per animation
 
     function getPickerWeight(id) { return pickerWeights.get(id) || 1.0; }
 
@@ -1547,7 +1547,7 @@
         return el;
       });
       // Spin a highlight indicator
-      const totalRotations = 3 + Math.random() * 2;
+      const totalRotations = 3 + Math.floor(Math.random() * 3);
       const targetAngle = totalRotations * names.length + winIdx;
       const start = performance.now();
       let lastHighlight = -1;
@@ -1803,7 +1803,7 @@
             if (dist < touchDist) {
               const eater = a.size >= b2.size ? a : b2;
               const eaten = eater === a ? b2 : a;
-              if (eaten.name === winner.Name && alive.filter(x => x.alive).length <= 3) continue;
+              if (eaten.name === winner.Name) continue;
               absorb(eater, eaten);
             }
           }
@@ -1860,112 +1860,125 @@
       requestAnimationFrame(frame);
     }
 
-    // 11. March Madness bracket — tournament-style elimination
+    // 11. March Madness bracket — left-vs-right tournament converging to center champion
     function animBracket(stage, names, winner, done) {
       const w = stage.clientWidth, h = stage.clientHeight;
-      // Pad to power of 2
       let entrants = shuffleArr([...names]);
       const winnerName = winner.Name;
       while (entrants.length & (entrants.length - 1)) entrants.push('—');
-      // Ensure winner survives every round
-      const rounds = Math.ceil(Math.log2(entrants.length));
-      const totalRounds = rounds;
-      const roundTime = (ANIM_DURATION * 1.5) / (totalRounds + 1);
+
+      const half = entrants.length / 2;
+      const leftEntrants = entrants.slice(0, half);
+      const rightEntrants = entrants.slice(half);
+      const sideRounds = Math.max(Math.ceil(Math.log2(half)), 1);
+      const totalTime = ANIM_DURATION * 1.5;
+      const roundTime = totalTime / (sideRounds + 2);
 
       const container = document.createElement('div');
-      container.style.cssText = 'display:flex;align-items:stretch;height:100%;gap:4px;padding:10px;overflow:hidden;';
+      container.style.cssText = 'display:flex;align-items:stretch;height:100%;gap:3px;padding:10px;overflow:hidden;';
       stage.appendChild(container);
 
-      // Build bracket columns
-      let currentRound = entrants;
-      const allColumns = [];
-
-      for (let r = 0; r <= totalRounds; r++) {
-        const col = document.createElement('div');
-        col.style.cssText = 'display:flex;flex-direction:column;justify-content:space-around;flex:1;gap:2px;min-width:0;';
-        const cells = [];
-
-        if (r === 0) {
-          // First round: show all entrants
-          currentRound.forEach(name => {
+      function buildSideColumns(sideEntrants) {
+        const columns = [];
+        for (let r = 0; r <= sideRounds; r++) {
+          const col = document.createElement('div');
+          col.style.cssText = 'display:flex;flex-direction:column;justify-content:space-around;flex:1;gap:2px;min-width:0;';
+          const cells = [];
+          const count = r === 0 ? sideEntrants.length : Math.ceil(sideEntrants.length / Math.pow(2, r));
+          const fontSize = Math.min(0.7 + r * 0.15, 1.2);
+          for (let s = 0; s < count; s++) {
             const cell = document.createElement('div');
-            cell.style.cssText = 'padding:2px 6px;border-radius:4px;font-size:0.6rem;font-weight:600;color:#d1d5db;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);text-align:center;transition:all 0.3s;';
-            cell.textContent = name === '—' ? '' : name;
+            if (r === 0) {
+              const name = sideEntrants[s];
+              cell.style.cssText = 'padding:2px 6px;border-radius:4px;font-size:' + fontSize + 'rem;font-weight:600;color:#d1d5db;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);text-align:center;transition:all 0.3s;';
+              cell.textContent = name === '—' ? '' : name;
+              cells.push({ el: cell, name: name });
+            } else {
+              cell.style.cssText = 'padding:3px 8px;border-radius:4px;font-size:' + fontSize + 'rem;font-weight:600;color:transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);text-align:center;transition:all 0.4s;';
+              cell.textContent = '\u00a0';
+              cells.push({ el: cell, name: '' });
+            }
             col.appendChild(cell);
-            cells.push({ el: cell, name });
-          });
-        } else {
-          // Later rounds: empty slots to fill
-          const slots = Math.ceil(entrants.length / Math.pow(2, r));
-          for (let s = 0; s < slots; s++) {
-            const cell = document.createElement('div');
-            cell.style.cssText = 'padding:3px 8px;border-radius:4px;font-size:' + Math.min(0.6 + r * 0.15, 1.2) + 'rem;font-weight:600;color:transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);text-align:center;transition:all 0.4s;';
-            cell.textContent = '\u00a0';
-            col.appendChild(cell);
-            cells.push({ el: cell, name: '' });
           }
+          columns.push({ col, cells });
         }
-        container.appendChild(col);
-        allColumns.push(cells);
+        return columns;
       }
 
-      // Simulate rounds with delays
-      let survivors = [...currentRound];
-      for (let r = 0; r < totalRounds; r++) {
+      // Left side: entrants on far left, advancing rightward toward center
+      const leftData = buildSideColumns(leftEntrants);
+      leftData.forEach(d => container.appendChild(d.col));
+      const leftColumns = leftData.map(d => d.cells);
+
+      // Championship cell in center
+      const centerCol = document.createElement('div');
+      centerCol.style.cssText = 'display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 4px;';
+      const champCell = document.createElement('div');
+      champCell.style.cssText = 'padding:8px 14px;border-radius:8px;font-size:1.3rem;font-weight:700;color:transparent;white-space:nowrap;background:rgba(255,255,255,0.03);border:2px solid rgba(255,255,255,0.08);text-align:center;transition:all 0.5s;';
+      champCell.textContent = '\u00a0';
+      centerCol.appendChild(champCell);
+      container.appendChild(centerCol);
+
+      // Right side: advancing leftward toward center, entrants on far right
+      const rightData = buildSideColumns(rightEntrants);
+      for (let r = rightData.length - 1; r >= 0; r--) container.appendChild(rightData[r].col);
+      const rightColumns = rightData.map(d => d.cells);
+
+      function processRound(survivors, columns, round) {
+        const next = [];
+        for (let i = 0; i < survivors.length; i += 2) {
+          const a = survivors[i], b = survivors[i + 1] || '—';
+          let advancing;
+          if (a === winnerName || b === '—') advancing = a;
+          else if (b === winnerName || a === '—') advancing = b;
+          else advancing = Math.random() > 0.5 ? a : b;
+          next.push(advancing);
+
+          const col = columns[round];
+          const loser = advancing === a ? b : a;
+          if (col) {
+            const loserCell = col.find(c => c.name === loser);
+            if (loserCell) { loserCell.el.style.opacity = '0.2'; loserCell.el.style.textDecoration = 'line-through'; }
+            const winCell = col.find(c => c.name === advancing);
+            if (winCell) { winCell.el.style.color = 'white'; winCell.el.style.background = 'rgba(185,28,28,0.2)'; winCell.el.style.borderColor = 'rgba(185,28,28,0.4)'; }
+          }
+
+          const nextCol = columns[round + 1];
+          if (nextCol && nextCol[Math.floor(i / 2)]) {
+            const cell = nextCol[Math.floor(i / 2)];
+            cell.el.textContent = advancing === '—' ? '' : advancing;
+            cell.el.style.color = '#d1d5db';
+            cell.name = advancing;
+          }
+        }
+        return next;
+      }
+
+      // Run side rounds simultaneously
+      let leftSurvivors = [...leftEntrants];
+      let rightSurvivors = [...rightEntrants];
+      for (let r = 0; r < sideRounds; r++) {
         ((round) => {
           setTimeout(() => {
-            const nextSurvivors = [];
-            for (let i = 0; i < survivors.length; i += 2) {
-              const a = survivors[i], b = survivors[i + 1] || '—';
-              let advancing;
-              if (a === winnerName || b === '—') advancing = a;
-              else if (b === winnerName || a === '—') advancing = b;
-              else advancing = Math.random() > 0.5 ? a : b;
-              nextSurvivors.push(advancing);
-
-              // Highlight loser in round column
-              const col0 = allColumns[round];
-              const loser = advancing === a ? b : a;
-              if (col0) {
-                const loserCell = col0.find(c => c.name === loser);
-                if (loserCell) {
-                  loserCell.el.style.opacity = '0.2';
-                  loserCell.el.style.textDecoration = 'line-through';
-                }
-                const winCell = col0.find(c => c.name === advancing);
-                if (winCell) {
-                  winCell.el.style.color = 'white';
-                  winCell.el.style.background = 'rgba(185,28,28,0.2)';
-                  winCell.el.style.borderColor = 'rgba(185,28,28,0.4)';
-                }
-              }
-
-              // Fill next round column
-              const nextCol = allColumns[round + 1];
-              if (nextCol && nextCol[Math.floor(i / 2)]) {
-                const cell = nextCol[Math.floor(i / 2)];
-                cell.el.textContent = advancing === '—' ? '' : advancing;
-                cell.el.style.color = '#d1d5db';
-                cell.name = advancing;
-              }
-            }
-            survivors = nextSurvivors;
-
-            // Final round: highlight champion
-            if (round === totalRounds - 1) {
-              const lastCol = allColumns[totalRounds];
-              if (lastCol && lastCol[0]) {
-                lastCol[0].el.style.color = 'white';
-                lastCol[0].el.style.background = 'rgba(185,28,28,0.4)';
-                lastCol[0].el.style.borderColor = 'rgba(185,28,28,0.7)';
-                lastCol[0].el.style.fontSize = '1.4rem';
-                lastCol[0].el.style.padding = '8px 16px';
-              }
-            }
+            leftSurvivors = processRound(leftSurvivors, leftColumns, round);
+            rightSurvivors = processRound(rightSurvivors, rightColumns, round);
           }, roundTime * (round + 1));
         })(r);
       }
-      setTimeout(done, roundTime * (totalRounds + 1));
+
+      // Championship reveal
+      setTimeout(() => {
+        const lfCell = leftColumns[sideRounds] && leftColumns[sideRounds][0];
+        const rfCell = rightColumns[sideRounds] && rightColumns[sideRounds][0];
+        if (lfCell) { lfCell.el.style.color = 'white'; lfCell.el.style.background = 'rgba(185,28,28,0.15)'; }
+        if (rfCell) { rfCell.el.style.color = 'white'; rfCell.el.style.background = 'rgba(185,28,28,0.15)'; }
+        champCell.textContent = winnerName;
+        champCell.style.color = 'white';
+        champCell.style.background = 'rgba(185,28,28,0.4)';
+        champCell.style.borderColor = 'rgba(185,28,28,0.7)';
+      }, roundTime * (sideRounds + 1));
+
+      setTimeout(done, totalTime);
     }
 
     // --- Animation registry ---

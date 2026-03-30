@@ -1689,21 +1689,21 @@
       setTimeout(() => { clearInterval(scrambleInterval); done(); }, ANIM_DURATION);
     }
 
-    // 8. Zoom — all names tiny, winner zooms huge
+    // 8. Zoom — names scattered, all visible, then winner zooms to center
     function animZoom(stage, names, winner, done) {
       const w = stage.clientWidth, h = stage.clientHeight;
       const els = names.map(n => {
         const el = document.createElement('div');
         el.className = 'picker-tile';
-        el.style.fontSize = '0.7rem';
-        el.style.padding = '2px 8px';
-        el.style.left = (20 + Math.random() * (w - 120)) + 'px';
+        el.style.fontSize = '0.85rem';
+        el.style.padding = '4px 10px';
+        el.style.left = (20 + Math.random() * (w - 160)) + 'px';
         el.style.top = (20 + Math.random() * (h - 60)) + 'px';
         el.style.transition = 'all 0.8s cubic-bezier(0.34,1.56,0.64,1)';
         stage.appendChild(el);
         return { el, name: n };
       });
-      // After brief pause, zoom winner
+      // Show all names briefly, then zoom winner
       setTimeout(() => {
         els.forEach(e => {
           if (e.name === winner.Name) {
@@ -1717,7 +1717,7 @@
             e.el.style.transform = 'scale(0.2)';
           }
         });
-      }, 300);
+      }, ANIM_DURATION * 0.4);
       setTimeout(done, ANIM_DURATION);
     }
 

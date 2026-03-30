@@ -1655,25 +1655,38 @@
       const wrap = document.createElement('div');
       wrap.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;';
       const text = document.createElement('div');
-      text.style.cssText = 'font-size:4rem;font-weight:700;color:white;font-family:monospace;';
-      const cursor = document.createElement('span');
-      cursor.style.cssText = 'border-right:3px solid rgba(185,28,28,0.8);padding-right:4px;animation:blink 0.6s step-end infinite;';
-      text.appendChild(cursor);
+      text.style.cssText = 'font-size:4rem;font-weight:700;color:white;font-family:monospace;letter-spacing:0.05em;';
       wrap.appendChild(text);
       stage.appendChild(wrap);
-      // Add style for blink if not present
-      if (!document.getElementById('blink-style')) {
-        const s = document.createElement('style');
-        s.id = 'blink-style';
-        s.textContent = '@keyframes blink{0%,100%{border-color:rgba(185,28,28,0.8);}50%{border-color:transparent;}}';
-        document.head.appendChild(s);
-      }
-      const letters = winner.Name.split('');
-      const delay = Math.min(ANIM_DURATION / (letters.length + 2), 120);
-      letters.forEach((ch, i) => {
-        setTimeout(() => { cursor.before(document.createTextNode(ch)); }, delay * (i + 1));
+      const target = winner.Name;
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+      // Create a span per character, all start as random letters
+      const spans = target.split('').map((ch, i) => {
+        const span = document.createElement('span');
+        span.textContent = ch === ' ' ? ' ' : chars[Math.floor(Math.random() * chars.length)];
+        span.style.color = 'rgba(255,255,255,0.5)';
+        span.style.transition = 'color 0.2s';
+        text.appendChild(span);
+        return { span, target: ch, locked: ch === ' ' };
       });
-      setTimeout(done, ANIM_DURATION);
+      // Scramble phase: rapidly cycle random letters in unlocked positions
+      const scrambleInterval = setInterval(() => {
+        spans.forEach(s => {
+          if (!s.locked) s.span.textContent = chars[Math.floor(Math.random() * chars.length)];
+        });
+      }, 60);
+      // Lock in each character one at a time, left to right
+      const lockDelay = (ANIM_DURATION * 0.85) / target.length;
+      spans.forEach((s, i) => {
+        if (s.locked) return; // spaces are already locked
+        setTimeout(() => {
+          s.locked = true;
+          s.span.textContent = s.target;
+          s.span.style.color = 'white';
+          s.span.style.textShadow = '0 0 20px rgba(185,28,28,0.6)';
+        }, ANIM_DURATION * 0.15 + lockDelay * i);
+      });
+      setTimeout(() => { clearInterval(scrambleInterval); done(); }, ANIM_DURATION);
     }
 
     // 8. Zoom — all names tiny, winner zooms huge
@@ -1790,7 +1803,7 @@
           b.el.style.left = b.x + 'px'; b.el.style.top = b.y + 'px';
         });
 
-        // Collision detection: bigger eats smaller
+        // Collision detection: bigger eats smaller, winner always wins its matchups
         for (let i = 0; i < alive.length; i++) {
           for (let j = i + 1; j < alive.length; j++) {
             const a = alive[i], b2 = alive[j];
@@ -1801,9 +1814,15 @@
             const dist = Math.sqrt(dx * dx + dy * dy);
             const touchDist = (a.size + b2.size) * 0.45;
             if (dist < touchDist) {
-              const eater = a.size >= b2.size ? a : b2;
-              const eaten = eater === a ? b2 : a;
-              if (eaten.name === winner.Name) continue;
+              let eater, eaten;
+              if (a === winBlob || b2 === winBlob) {
+                // Winner always wins its collisions
+                eater = winBlob;
+                eaten = a === winBlob ? b2 : a;
+              } else {
+                eater = a.size >= b2.size ? a : b2;
+                eaten = eater === a ? b2 : a;
+              }
               absorb(eater, eaten);
             }
           }
@@ -1894,7 +1913,7 @@
               cell.textContent = name === '—' ? '' : name;
               cells.push({ el: cell, name: name });
             } else {
-              cell.style.cssText = 'padding:3px 8px;border-radius:4px;font-size:' + fontSize + 'rem;font-weight:600;color:transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);text-align:center;transition:all 0.4s;';
+              cell.style.cssText = 'padding:3px 8px;border-radius:4px;font-size:' + fontSize + 'rem;font-weight:600;color:transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);text-align:center;transition:all 0.4s;';
               cell.textContent = '\u00a0';
               cells.push({ el: cell, name: '' });
             }
@@ -1914,7 +1933,7 @@
       const centerCol = document.createElement('div');
       centerCol.style.cssText = 'display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 4px;';
       const champCell = document.createElement('div');
-      champCell.style.cssText = 'padding:8px 14px;border-radius:8px;font-size:1.3rem;font-weight:700;color:transparent;white-space:nowrap;background:rgba(255,255,255,0.03);border:2px solid rgba(255,255,255,0.08);text-align:center;transition:all 0.5s;';
+      champCell.style.cssText = 'padding:8px 14px;border-radius:8px;font-size:1.3rem;font-weight:700;color:transparent;white-space:nowrap;background:rgba(255,255,255,0.06);border:2px solid rgba(255,255,255,0.2);text-align:center;transition:all 0.5s;';
       champCell.textContent = '\u00a0';
       centerCol.appendChild(champCell);
       container.appendChild(centerCol);

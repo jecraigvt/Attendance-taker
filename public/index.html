@@ -120,7 +120,7 @@
     .picker-tile.eliminated { opacity: 0 !important; transform: scale(0.3) !important; }
     .picker-tile.winner { background: rgba(185,28,28,0.3) !important; border-color: rgba(185,28,28,0.6) !important; color: white !important; z-index: 10; }
     .picker-tile.spotlight-dim { opacity: 0.45 !important; }
-    .picker-tile.spotlight-lit { background: rgba(185,28,28,0.25); border-color: rgba(185,28,28,0.5); color: white; }
+    .picker-tile.spotlight-lit { background: rgba(185,28,28,0.5); border-color: rgba(185,28,28,0.8); color: white; transform: scale(1.15); z-index: 10; text-shadow: 0 0 10px rgba(255,255,255,0.3); }
 
     .picker-slot-strip {
       display: flex;
@@ -1540,19 +1540,21 @@
         const angle = (2 * Math.PI * i) / names.length - Math.PI / 2;
         const el = document.createElement('div');
         el.className = 'picker-tile';
+        el.style.transition = 'transform 0.15s, background 0.15s, border-color 0.15s, opacity 0.15s';
         el.textContent = n;
         el.style.left = (cx + r * Math.cos(angle) - 50) + 'px';
         el.style.top = (cy + r * Math.sin(angle) - 15) + 'px';
         stage.appendChild(el);
         return el;
       });
-      // Spin a highlight indicator
+      // Spin a highlight indicator — use 80% of duration so winner holds at end
+      const spinDuration = ANIM_DURATION * 0.8;
       const totalRotations = 3 + Math.floor(Math.random() * 3);
       const targetAngle = totalRotations * names.length + winIdx;
       const start = performance.now();
       let lastHighlight = -1;
       function frame(t) {
-        const p = Math.min((t - start) / ANIM_DURATION, 1);
+        const p = Math.min((t - start) / spinDuration, 1);
         const ease = 1 - Math.pow(1 - p, 3);
         const current = Math.floor(ease * targetAngle) % names.length;
         if (current !== lastHighlight) {
@@ -1562,7 +1564,7 @@
           });
           lastHighlight = current;
         }
-        if (p < 1) requestAnimationFrame(frame); else done();
+        if (p < 1) requestAnimationFrame(frame); else setTimeout(done, 800);
       }
       requestAnimationFrame(frame);
     }
@@ -1616,7 +1618,7 @@
           }
         });
       }, 1000);
-      setTimeout(done, ANIM_DURATION);
+      setTimeout(done, 2000);
     }
 
     // 6. Binary split — names split in half, one half fades, repeat
@@ -1720,7 +1722,7 @@
           }
         });
       }, ANIM_DURATION * 0.4);
-      setTimeout(done, ANIM_DURATION);
+      setTimeout(done, ANIM_DURATION * 0.4 + 1000);
     }
 
     // 9. Amoeba — blobs steer toward each other, bigger eats smaller on contact
@@ -1883,39 +1885,44 @@
 
     // 11. March Madness bracket — left-vs-right tournament converging to center champion
     function animBracket(stage, names, winner, done) {
-      const w = stage.clientWidth, h = stage.clientHeight;
-      let entrants = shuffleArr([...names]);
       const winnerName = winner.Name;
-      while (entrants.length & (entrants.length - 1)) entrants.push('—');
-
-      const half = entrants.length / 2;
-      const leftEntrants = entrants.slice(0, half);
-      const rightEntrants = entrants.slice(half);
-      const sideRounds = Math.max(Math.ceil(Math.log2(half)), 1);
+      // Split names evenly, then pad each half to power of 2
+      const shuffled = shuffleArr([...names]);
+      const mid = Math.ceil(shuffled.length / 2);
+      const leftRaw = shuffled.slice(0, mid);
+      const rightRaw = shuffled.slice(mid);
+      function padToPow2(arr) { while (arr.length > 1 && (arr.length & (arr.length - 1))) arr.push('—'); if (arr.length === 0) arr.push('—'); return arr; }
+      const leftEntrants = padToPow2([...leftRaw]);
+      const rightEntrants = padToPow2([...rightRaw]);
+      const sideRounds = Math.max(Math.ceil(Math.log2(Math.max(leftEntrants.length, rightEntrants.length))), 1);
       const totalTime = ANIM_DURATION * 1.5;
       const roundTime = totalTime / (sideRounds + 2);
 
+      // Total columns: left (sideRounds+1) + center (1) + right (sideRounds+1)
+      const totalCols = (sideRounds + 1) * 2 + 1;
       const container = document.createElement('div');
-      container.style.cssText = 'display:flex;align-items:stretch;height:100%;gap:3px;padding:10px;overflow:hidden;';
+      container.style.cssText = 'display:flex;align-items:stretch;width:100%;height:100%;gap:3px;padding:10px;overflow:hidden;';
       stage.appendChild(container);
 
-      function buildSideColumns(sideEntrants) {
+      const cellStyle = 'padding:2px 4px;border-radius:4px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;';
+
+      function buildSideColumns(sideEntrants, numRounds) {
         const columns = [];
-        for (let r = 0; r <= sideRounds; r++) {
+        for (let r = 0; r <= numRounds; r++) {
           const col = document.createElement('div');
-          col.style.cssText = 'display:flex;flex-direction:column;justify-content:space-around;flex:1;gap:2px;min-width:0;';
+          col.style.cssText = 'display:flex;flex-direction:column;justify-content:space-around;flex:1 1 0%;width:0;gap:2px;min-width:0;overflow:hidden;';
           const cells = [];
           const count = r === 0 ? sideEntrants.length : Math.ceil(sideEntrants.length / Math.pow(2, r));
-          const fontSize = Math.min(0.7 + r * 0.15, 1.2);
+          const fontSize = Math.min(0.65 + r * 0.12, 1.1);
           for (let s = 0; s < count; s++) {
             const cell = document.createElement('div');
             if (r === 0) {
               const name = sideEntrants[s];
-              cell.style.cssText = 'padding:2px 6px;border-radius:4px;font-size:' + fontSize + 'rem;font-weight:600;color:#d1d5db;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);text-align:center;transition:color 0.3s,background 0.3s,border-color 0.3s,opacity 0.3s;';
+              cell.style.cssText = cellStyle + 'font-size:' + fontSize + 'rem;color:#d1d5db;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);transition:color 0.3s,background 0.3s,border-color 0.3s,opacity 0.3s;';
               cell.textContent = name === '—' ? '' : name;
               cells.push({ el: cell, name: name });
             } else {
-              cell.style.cssText = 'padding:3px 8px;border-radius:4px;font-size:' + fontSize + 'rem;font-weight:600;color:transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);text-align:center;transition:color 0.3s,background 0.3s,border-color 0.3s,opacity 0.3s;';
+              cell.style.cssText = cellStyle + 'font-size:' + fontSize + 'rem;color:transparent;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);transition:color 0.3s,background 0.3s,border-color 0.3s,opacity 0.3s;';
               cell.textContent = '\u00a0';
               cells.push({ el: cell, name: '' });
             }
@@ -1926,22 +1933,22 @@
         return columns;
       }
 
-      // Left side: entrants on far left, advancing rightward toward center
-      const leftData = buildSideColumns(leftEntrants);
+      // Left side
+      const leftData = buildSideColumns(leftEntrants, sideRounds);
       leftData.forEach(d => container.appendChild(d.col));
       const leftColumns = leftData.map(d => d.cells);
 
       // Championship cell in center
       const centerCol = document.createElement('div');
-      centerCol.style.cssText = 'display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 4px;';
+      centerCol.style.cssText = 'display:flex;flex-direction:column;justify-content:center;align-items:center;flex:1 1 0%;width:0;min-width:0;';
       const champCell = document.createElement('div');
-      champCell.style.cssText = 'padding:8px 14px;border-radius:8px;font-size:1.3rem;font-weight:700;color:transparent;white-space:nowrap;background:rgba(255,255,255,0.06);border:2px solid rgba(255,255,255,0.2);text-align:center;transition:color 0.4s,background 0.4s,border-color 0.4s;';
+      champCell.style.cssText = 'padding:6px 10px;border-radius:8px;font-size:1rem;font-weight:700;color:transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(255,255,255,0.06);border:2px solid rgba(255,255,255,0.2);text-align:center;transition:color 0.4s,background 0.4s,border-color 0.4s;';
       champCell.textContent = '\u00a0';
       centerCol.appendChild(champCell);
       container.appendChild(centerCol);
 
-      // Right side: advancing leftward toward center, entrants on far right
-      const rightData = buildSideColumns(rightEntrants);
+      // Right side (columns reversed so entrants are on far right)
+      const rightData = buildSideColumns(rightEntrants, sideRounds);
       for (let r = rightData.length - 1; r >= 0; r--) container.appendChild(rightData[r].col);
       const rightColumns = rightData.map(d => d.cells);
 
@@ -1975,7 +1982,6 @@
         return next;
       }
 
-      // Run side rounds simultaneously
       let leftSurvivors = [...leftEntrants];
       let rightSurvivors = [...rightEntrants];
       for (let r = 0; r < sideRounds; r++) {

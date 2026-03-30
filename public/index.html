@@ -1911,11 +1911,11 @@
             const cell = document.createElement('div');
             if (r === 0) {
               const name = sideEntrants[s];
-              cell.style.cssText = 'padding:2px 6px;border-radius:4px;font-size:' + fontSize + 'rem;font-weight:600;color:#d1d5db;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);text-align:center;transition:all 0.3s;';
+              cell.style.cssText = 'padding:2px 6px;border-radius:4px;font-size:' + fontSize + 'rem;font-weight:600;color:#d1d5db;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);text-align:center;transition:color 0.3s,background 0.3s,border-color 0.3s,opacity 0.3s;';
               cell.textContent = name === '—' ? '' : name;
               cells.push({ el: cell, name: name });
             } else {
-              cell.style.cssText = 'padding:3px 8px;border-radius:4px;font-size:' + fontSize + 'rem;font-weight:600;color:transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);text-align:center;transition:all 0.4s;';
+              cell.style.cssText = 'padding:3px 8px;border-radius:4px;font-size:' + fontSize + 'rem;font-weight:600;color:transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);text-align:center;transition:color 0.3s,background 0.3s,border-color 0.3s,opacity 0.3s;';
               cell.textContent = '\u00a0';
               cells.push({ el: cell, name: '' });
             }
@@ -1935,7 +1935,7 @@
       const centerCol = document.createElement('div');
       centerCol.style.cssText = 'display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 4px;';
       const champCell = document.createElement('div');
-      champCell.style.cssText = 'padding:8px 14px;border-radius:8px;font-size:1.3rem;font-weight:700;color:transparent;white-space:nowrap;background:rgba(255,255,255,0.06);border:2px solid rgba(255,255,255,0.2);text-align:center;transition:all 0.5s;';
+      champCell.style.cssText = 'padding:8px 14px;border-radius:8px;font-size:1.3rem;font-weight:700;color:transparent;white-space:nowrap;background:rgba(255,255,255,0.06);border:2px solid rgba(255,255,255,0.2);text-align:center;transition:color 0.4s,background 0.4s,border-color 0.4s;';
       champCell.textContent = '\u00a0';
       centerCol.appendChild(champCell);
       container.appendChild(centerCol);

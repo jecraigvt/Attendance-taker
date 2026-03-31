@@ -2223,7 +2223,7 @@
 
       const btn = document.getElementById('correction-submit-btn');
       if (!btn) return;
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const studentSel = document.getElementById('correction-student');
         const dateSel = document.getElementById('correction-date');
         const reasonSel = document.getElementById('correction-reason');
@@ -2236,6 +2236,8 @@
         const reason = reasonSel.value;
         const period = periodSelect ? periodSelect.value : '';
         const corrDate = dateSel.value; // YYYY-MM-DD
+
+        // Open the Google Form
         const params = new URLSearchParams();
         params.set(ENTRY.teacher, teacherName || '');
         params.set(ENTRY.date, corrDate);
@@ -2244,6 +2246,54 @@
         params.set(ENTRY.id, studentId);
         params.set(ENTRY.reason, reason);
         window.open(FORM_BASE + params.toString(), '_blank');
+
+        // Also update Firestore to keep local data in sync
+        if (db && teacherUid && period) {
+          try {
+            const studentDocRef = doc(db, teacherPath(`attendance/${corrDate}/periods/${period}/students/${studentId}`));
+
+            if (reason === 'Student was not marked absent but was absent.') {
+              // Student should be absent — remove their sign-in record
+              await deleteDoc(studentDocRef);
+            } else if (reason === 'Student was marked absent but was tardy.') {
+              // Student was absent, should be tardy — add a sign-in record
+              await setDoc(studentDocRef, {
+                StudentID: studentId,
+                Name: studentName,
+                Date: new Date(corrDate + 'T12:00:00').toLocaleDateString(),
+                SignInTime: 'Corrected',
+                Status: 'Late',
+                Period: period,
+                Group: null,
+                Timestamp: serverTimestamp(),
+              });
+            } else {
+              // All other reasons: student should be present — add/update sign-in record
+              const existing = await getDoc(studentDocRef);
+              if (existing.exists()) {
+                // Already signed in — update status to On Time
+                await setDoc(studentDocRef, { Status: 'On Time' }, { merge: true });
+              } else {
+                // Was absent — create a present record
+                await setDoc(studentDocRef, {
+                  StudentID: studentId,
+                  Name: studentName,
+                  Date: new Date(corrDate + 'T12:00:00').toLocaleDateString(),
+                  SignInTime: 'Corrected',
+                  Status: 'On Time',
+                  Period: period,
+                  Group: null,
+                  Timestamp: serverTimestamp(),
+                });
+              }
+            }
+            console.log('Firestore updated for correction:', studentId, corrDate, reason);
+            // Clear insights cache so it refreshes
+            insightsCache.delete(period);
+          } catch (err) {
+            console.error('Failed to update Firestore for correction:', err);
+          }
+        }
       });
     })();
 

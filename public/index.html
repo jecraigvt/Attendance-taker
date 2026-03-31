@@ -5341,73 +5341,54 @@
             neverTardy.push(name);
           }
 
-          // Alert: High absence rate (>25% over last 20 classes, min 4)
-          if (absentCount >= 4 && absentRate > 0.25) {
-            alerts.push({
-              severity: 'high',
-              student: name,
-              message: 'absent ' + absentCount + ' of last ' + totalClasses + ' classes (' + Math.round(absentRate * 100) + '%)',
-            });
+          // Build a single summary for this student
+          const streak = absenceStreaks.get(s.StudentID) || 0;
+          const concerns = [];
+          let severity = null;
+
+          // Absence concerns
+          if (streak >= 3 && absentCount >= 4) {
+            concerns.push('has missed the last ' + streak + ' classes and ' + absentCount + ' of the last ' + totalClasses);
+            severity = 'high';
+          } else if (streak >= 3) {
+            concerns.push('has missed the last ' + streak + ' consecutive classes');
+            severity = 'high';
+          } else if (absentCount >= 4 && absentRate > 0.25) {
+            concerns.push('has missed ' + absentCount + ' of the last ' + totalClasses + ' classes (' + Math.round(absentRate * 100) + '%)');
+            severity = 'high';
+          } else {
+            const recent5 = history.slice(0, 5);
+            const recentAbsent = recent5.filter(h => h.status === 'Absent').length;
+            if (recentAbsent >= 3) {
+              concerns.push('has missed ' + recentAbsent + ' of the last ' + recent5.length + ' classes');
+              severity = 'high';
+            }
           }
 
-          // Alert: Frequent tardies (>30% over last 20 classes, min 4)
+          // Tardy concerns
           if (tardyCount >= 4 && tardyRate > 0.3) {
-            alerts.push({
-              severity: 'medium',
-              student: name,
-              message: 'tardy ' + tardyCount + ' of last ' + totalClasses + ' classes (' + Math.round(tardyRate * 100) + '%)',
-            });
-          }
-
-          // Alert: Recent absence cluster (3+ in last 5 classes)
-          const recent5 = history.slice(0, 5);
-          const recentAbsent = recent5.filter(h => h.status === 'Absent').length;
-          if (recentAbsent >= 3 && absentCount < 4) {
-            alerts.push({
-              severity: 'high',
-              student: name,
-              message: 'absent ' + recentAbsent + ' of last ' + recent5.length + ' classes',
-            });
-          }
-
-          // Alert: Worsening tardy trend
-          if (history.length >= 10) {
+            concerns.push('tardy ' + tardyCount + ' of the last ' + totalClasses + ' classes (' + Math.round(tardyRate * 100) + '%)');
+            if (!severity) severity = 'medium';
+          } else if (history.length >= 10) {
             const half = Math.ceil(history.length / 2);
             const recent = history.slice(0, half);
             const prior = history.slice(half);
             const recentTardyRate = recent.filter(h => h.status === 'Tardy').length / recent.length;
             const priorTardyRate = prior.filter(h => h.status === 'Tardy').length / prior.length;
             if (recentTardyRate >= 0.3 && priorTardyRate < 0.15 && recentTardyRate - priorTardyRate > 0.2) {
-              alerts.push({
-                severity: 'medium',
-                student: name,
-                message: 'tardiness increasing \u2014 was ' + Math.round(priorTardyRate * 100) + '%, now ' + Math.round(recentTardyRate * 100) + '%',
-              });
+              concerns.push('tardiness increasing \u2014 was ' + Math.round(priorTardyRate * 100) + '%, now ' + Math.round(recentTardyRate * 100) + '%');
+              if (!severity) severity = 'medium';
             }
           }
 
-          // Alert: Current absence streak
-          const streak = absenceStreaks.get(s.StudentID) || 0;
-          if (streak >= 3) {
-            alerts.push({
-              severity: 'high',
-              student: name,
-              message: 'absent ' + streak + ' consecutive classes',
-            });
+          if (concerns.length > 0) {
+            alerts.push({ severity, student: name, message: concerns.join('; also ') });
           }
         }
 
-        // Sort: high severity first, then medium, then by student name
+        // Sort: high severity first, then by student name
         alerts.sort((a, b) => (a.severity === 'high' ? 0 : 1) - (b.severity === 'high' ? 0 : 1) || a.student.localeCompare(b.student));
-
-        // Deduplicate per student+message
-        const seen = new Set();
-        const deduped = alerts.filter(a => {
-          const key = a.student + ':' + a.message;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
+        const deduped = alerts;
 
         // Add positive insights (only after 45+ days of data)
         const maxHistory = Math.max(...[...studentHistory.values()].map(h => h.length));

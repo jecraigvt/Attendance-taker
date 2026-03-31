@@ -2003,7 +2003,7 @@
 
       function buildSideColumns(sideEntrants, numRounds) {
         const columns = [];
-        for (let r = 0; r <= numRounds; r++) {
+        for (let r = 0; r < numRounds; r++) {
           const col = document.createElement('div');
           col.style.cssText = 'display:flex;flex-direction:column;justify-content:space-around;flex:1 1 0%;width:0;gap:2px;min-width:0;overflow:hidden;';
           const cells = [];
@@ -2097,10 +2097,6 @@
 
       // Championship reveal
       setTimeout(() => {
-        const lfCell = leftColumns[sideRounds] && leftColumns[sideRounds][0];
-        const rfCell = rightColumns[sideRounds] && rightColumns[sideRounds][0];
-        if (lfCell) { lfCell.el.style.color = 'white'; lfCell.el.style.background = 'rgba(185,28,28,0.15)'; }
-        if (rfCell) { rfCell.el.style.color = 'white'; rfCell.el.style.background = 'rgba(185,28,28,0.15)'; }
         champCell.textContent = winnerName;
         champCell.style.color = 'white';
         champCell.style.background = 'rgba(185,28,28,0.4)';

@@ -1458,6 +1458,8 @@
       const result = document.getElementById('picker-result');
       stage.replaceChildren();
       stage.classList.remove('hidden');
+      stage.style.cursor = 'pointer';
+      stage.onclick = () => { if (skipToReveal) skipToReveal(); };
       result.style.opacity = '0';
       return stage;
     }

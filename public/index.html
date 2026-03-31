@@ -1582,29 +1582,33 @@
 
     // 3. Elimination — grid of names, rapidly disappear until winner remains
     function animEliminate(stage, names, winner, done) {
-      const w = stage.clientWidth;
-      const cols = Math.min(Math.ceil(Math.sqrt(names.length)), 5);
-      const grid = document.createElement('div');
-      grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-content:center;height:100%;padding:40px;';
+      const w = stage.clientWidth, h = stage.clientHeight;
+      const cols = Math.min(Math.ceil(Math.sqrt(names.length)), 7);
+      const rows = Math.ceil(names.length / cols);
+      const cellW = (w - 40) / cols, cellH = (h - 40) / rows;
       const els = [];
-      names.forEach(n => {
+      names.forEach((n, i) => {
         const el = document.createElement('div');
-        el.className = 'picker-tile';
-        el.style.position = 'relative';
+        el.style.cssText = 'position:absolute;border-radius:8px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;color:white;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);transition:all 0.4s ease;';
+        el.style.fontSize = Math.min(cellW / 8, 18) + 'px';
+        el.style.padding = '4px 8px';
+        el.style.width = (cellW * 0.85) + 'px';
+        const col = i % cols, row = Math.floor(i / cols);
+        el.style.left = (20 + col * cellW + cellW * 0.075) + 'px';
+        el.style.top = (20 + row * cellH + cellH * 0.15) + 'px';
         el.textContent = n;
-        grid.appendChild(el);
+        stage.appendChild(el);
         els.push({ el, name: n });
       });
-      stage.appendChild(grid);
       // Remove non-winners one by one
       const toRemove = shuffleArr(els.filter(e => e.name !== winner.Name));
       const interval = ANIM_DURATION / (toRemove.length + 1);
       toRemove.forEach((e, i) => {
-        setTimeout(() => { e.el.classList.add('eliminated'); }, interval * (i + 1));
+        setTimeout(() => { e.el.style.opacity = '0'; e.el.style.transform = 'scale(0.3)'; }, interval * (i + 1));
       });
       setTimeout(() => {
         const winEl = els.find(e => e.name === winner.Name);
-        if (winEl) winEl.el.classList.add('winner');
+        if (winEl) { winEl.el.style.background = 'rgba(185,28,28,0.3)'; winEl.el.style.borderColor = 'rgba(185,28,28,0.6)'; }
         done();
       }, ANIM_DURATION);
     }
@@ -1701,29 +1705,38 @@
 
     // 6. Binary split — names split in half, one half fades, repeat
     function animBinary(stage, names, winner, done) {
-      const container = document.createElement('div');
-      container.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-content:center;height:100%;padding:40px;';
+      const w = stage.clientWidth, h = stage.clientHeight;
+      const cols = Math.min(Math.ceil(Math.sqrt(names.length)), 7);
+      const rows = Math.ceil(names.length / cols);
+      const cellW = (w - 40) / cols, cellH = (h - 40) / rows;
       let remaining = [...names];
-      // Make sure winner is in the list
       const els = new Map();
-      remaining.forEach(n => {
+      names.forEach((n, i) => {
         const el = document.createElement('div');
-        el.className = 'picker-tile';
-        el.style.position = 'relative';
+        el.style.cssText = 'position:absolute;border-radius:8px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;color:white;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);transition:all 0.4s ease;';
+        el.style.fontSize = Math.min(cellW / 8, 18) + 'px';
+        el.style.padding = '4px 8px';
+        el.style.width = (cellW * 0.85) + 'px';
+        const col = i % cols, row = Math.floor(i / cols);
+        el.style.left = (20 + col * cellW + cellW * 0.075) + 'px';
+        el.style.top = (20 + row * cellH + cellH * 0.15) + 'px';
         el.textContent = n;
-        container.appendChild(el);
+        stage.appendChild(el);
         els.set(n, el);
       });
-      stage.appendChild(container);
       const rounds = Math.ceil(Math.log2(remaining.length));
       const roundTime = ANIM_DURATION / (rounds + 1);
       function doRound(r) {
-        if (remaining.length <= 1) { if (els.get(winner.Name)) els.get(winner.Name).classList.add('winner'); done(); return; }
+        if (remaining.length <= 1) {
+          const winEl = els.get(winner.Name);
+          if (winEl) { winEl.style.background = 'rgba(185,28,28,0.3)'; winEl.style.borderColor = 'rgba(185,28,28,0.6)'; }
+          done(); return;
+        }
         const shuffled = shuffleArr(remaining);
         const winSide = shuffled.indexOf(winner.Name) < shuffled.length / 2 ? 0 : 1;
         const keep = [], remove = [];
         shuffled.forEach((n, i) => { (i < shuffled.length / 2 ? (winSide === 0 ? keep : remove) : (winSide === 1 ? keep : remove)).push(n); });
-        remove.forEach(n => { const e = els.get(n); if (e) e.classList.add('eliminated'); });
+        remove.forEach(n => { const e = els.get(n); if (e) { e.style.opacity = '0'; e.style.transform = 'scale(0.3)'; } });
         remaining = keep;
         setTimeout(() => doRound(r + 1), roundTime);
       }

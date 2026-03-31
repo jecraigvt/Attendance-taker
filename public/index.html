@@ -2317,9 +2317,10 @@
 
         try {
           if (fullDayCheck.checked) {
-            // Open a form for every period that has data
+            // Open a form for every period the teacher has a roster for
             // Pre-open tabs while we still have user-gesture trust (popup blocker)
-            const allPeriods = ['0', '1', '2', '3', '4', '5', '6', '7'];
+            const allPeriods = Object.keys(allRosters).filter(p => (allRosters[p] || []).length > 0).sort();
+            if (allPeriods.length === 0) { statusEl.textContent = 'No roster periods found.'; return; }
             const tabs = allPeriods.map(() => window.open('about:blank', '_blank'));
             const urls = await Promise.all(allPeriods.map(p => buildPeriodUrl(date, p)));
             let opened = 0;

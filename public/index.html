@@ -2111,17 +2111,21 @@
       const names = shuffleArr(students.map(s => s.Name));
       const stage = stageSetup();
 
-      // Pick a random animation
+      // Pick a random animation — with safety timeout so a frozen animation never blocks
       const anim = pickerAnimations[Math.floor(Math.random() * pickerAnimations.length)];
-      anim(stage, names, winner, () => {
-        setTimeout(() => {
-          stageFinish(winner);
-          updateWeightsAfterPick(winner.StudentID, students.map(s => s.StudentID));
-          btn.disabled = false;
-          btn.classList.remove('opacity-50');
-          pickerBusy = false;
-        }, 400); // brief pause before showing result
-      });
+      let revealed = false;
+      function revealWinner() {
+        if (revealed) return;
+        revealed = true;
+        stageFinish(winner);
+        updateWeightsAfterPick(winner.StudentID, students.map(s => s.StudentID));
+        btn.disabled = false;
+        btn.classList.remove('opacity-50');
+        pickerBusy = false;
+      }
+      anim(stage, names, winner, () => setTimeout(revealWinner, 400));
+      // Safety net: force reveal after ANIM_DURATION + 1s no matter what
+      setTimeout(revealWinner, ANIM_DURATION + 1000);
     }
 
     // Picker button + keyboard

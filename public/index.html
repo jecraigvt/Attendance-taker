@@ -553,6 +553,10 @@
                     <option value="6">6</option><option value="7">7</option>
                   </select>
                 </div>
+                <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                  <input type="checkbox" id="period-correction-fullday" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                  Full day (opens a form for each period)
+                </label>
                 <button id="period-correction-btn"
                   class="w-full text-center text-sm font-bold py-2 px-4 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all cursor-pointer">
                   Open Period Correction Form
@@ -2242,6 +2246,7 @@
       };
       const dateInput = document.getElementById('period-correction-date');
       const periodSel = document.getElementById('period-correction-period');
+      const fullDayCheck = document.getElementById('period-correction-fullday');
       const btn = document.getElementById('period-correction-btn');
       const statusEl = document.getElementById('period-correction-status');
       if (!btn || !dateInput || !periodSel) return;
@@ -2252,60 +2257,82 @@
       // Default period to current selection
       if (periodSelect && periodSelect.value) periodSel.value = periodSelect.value;
 
+      // Toggle period selector when full day is checked
+      if (fullDayCheck) {
+        fullDayCheck.addEventListener('change', () => {
+          periodSel.disabled = fullDayCheck.checked;
+          periodSel.style.opacity = fullDayCheck.checked ? '0.4' : '1';
+        });
+      }
+
+      // Build a pre-filled URL for one period
+      async function buildPeriodUrl(date, period) {
+        const basePath = teacherPath(`attendance/${date}/periods/${period}`);
+        const periodDoc = await getDoc(doc(db, basePath));
+        if (!periodDoc.exists() || !(periodDoc.data().roster_snapshot || []).length) return null;
+
+        const roster = periodDoc.data().roster_snapshot;
+        const studentsSnap = await getDocs(collection(db, `${basePath}/students`));
+        const signedIn = {};
+        studentsSnap.forEach(d => { signedIn[d.id] = d.data(); });
+
+        const absentNames = [];
+        const tardyNames = [];
+        for (const student of roster) {
+          const sid = String(student.StudentID);
+          const displayName = (student.preferredName || student.FirstName || '') + ' ' + (student.LastName || '');
+          if (!signedIn[sid]) {
+            absentNames.push(displayName.trim());
+          } else {
+            const status = signedIn[sid].Status || 'On Time';
+            if (['Late', 'Tardy', 'Truant', 'Cut', 'Late > 20'].includes(status)) {
+              tardyNames.push(displayName.trim());
+            }
+          }
+        }
+
+        const params = new URLSearchParams();
+        params.set(ENTRY.teacher, teacherName || '');
+        params.set(ENTRY.date, date);
+        params.set(ENTRY.period, period);
+        if (absentNames.length > 0) params.set(ENTRY.absent, absentNames.join(', '));
+        if (tardyNames.length > 0) params.set(ENTRY.tardy, tardyNames.join(', '));
+        return FORM_BASE + params.toString();
+      }
+
       btn.addEventListener('click', async () => {
         if (!dateInput.value) { dateInput.focus(); return; }
-        if (!periodSel.value) { periodSel.focus(); return; }
+        if (!fullDayCheck.checked && !periodSel.value) { periodSel.focus(); return; }
         if (!db || !teacherUid) return;
 
         const date = dateInput.value;
-        const period = periodSel.value;
-
         statusEl.textContent = 'Loading attendance data...';
         statusEl.classList.remove('hidden');
 
         try {
-          const basePath = teacherPath(`attendance/${date}/periods/${period}`);
-          const periodDoc = await getDoc(doc(db, basePath));
-
-          if (!periodDoc.exists() || !(periodDoc.data().roster_snapshot || []).length) {
-            statusEl.textContent = 'No attendance data found for that date/period.';
-            return;
-          }
-
-          const roster = periodDoc.data().roster_snapshot;
-          const studentsSnap = await getDocs(collection(db, `${basePath}/students`));
-          const signedIn = {};
-          studentsSnap.forEach(d => { signedIn[d.id] = d.data(); });
-
-          const absentNames = [];
-          const tardyNames = [];
-
-          for (const student of roster) {
-            const sid = String(student.StudentID);
-            const displayName = (student.preferredName || student.FirstName || '') + ' ' + (student.LastName || '');
-            if (!signedIn[sid]) {
-              absentNames.push(displayName.trim());
-            } else {
-              const status = signedIn[sid].Status || 'On Time';
-              if (['Late', 'Tardy', 'Truant', 'Cut', 'Late > 20'].includes(status)) {
-                tardyNames.push(displayName.trim());
-              }
+          if (fullDayCheck.checked) {
+            // Open a form for every period that has data
+            const allPeriods = ['0', '1', '2', '3', '4', '5', '6', '7'];
+            const urls = await Promise.all(allPeriods.map(p => buildPeriodUrl(date, p)));
+            const validUrls = urls.filter(Boolean);
+            if (validUrls.length === 0) {
+              statusEl.textContent = 'No attendance data found for any period on ' + date + '.';
+              return;
             }
+            statusEl.textContent = 'Opening ' + validUrls.length + ' period form(s)...';
+            validUrls.forEach((url, i) => {
+              setTimeout(() => window.open(url, '_blank'), i * 300);
+            });
+            setTimeout(() => statusEl.classList.add('hidden'), 2000);
+          } else {
+            const url = await buildPeriodUrl(date, periodSel.value);
+            if (!url) {
+              statusEl.textContent = 'No attendance data found for that date/period.';
+              return;
+            }
+            statusEl.classList.add('hidden');
+            window.open(url, '_blank');
           }
-
-          statusEl.classList.add('hidden');
-
-          const params = new URLSearchParams();
-          params.set(ENTRY.teacher, teacherName || '');
-          params.set(ENTRY.date, date);
-          params.set(ENTRY.period, period);
-          if (absentNames.length > 0) {
-            params.set(ENTRY.absent, absentNames.join(', '));
-          }
-          if (tardyNames.length > 0) {
-            params.set(ENTRY.tardy, tardyNames.join(', '));
-          }
-          window.open(FORM_BASE + params.toString(), '_blank');
         } catch (err) {
           statusEl.textContent = 'Error loading data: ' + err.message;
           console.error('Period correction lookup failed:', err);

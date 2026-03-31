@@ -2101,8 +2101,14 @@
     const pickerAnimations = [animSlot, animSpotlight, animEliminate, animRoulette, animShuffle, animBinary, animTypewriter, animZoom, animAmoeba, animRolodex, animBracket];
 
     // --- Main trigger ---
+    let skipToReveal = null; // set during animation so a second click skips ahead
+
     function triggerPicker() {
-      if (pickerBusy) return;
+      // If animation is running, skip to reveal
+      if (pickerBusy) {
+        if (skipToReveal) skipToReveal();
+        return;
+      }
       const students = getPresentStudents();
       if (students.length === 0) {
         document.getElementById('picker-name-display').textContent = 'No students yet';
@@ -2111,8 +2117,6 @@
 
       pickerBusy = true;
       const btn = document.getElementById('picker-go-btn');
-      btn.disabled = true;
-      btn.classList.add('opacity-50');
 
       const winner = pickWeightedRandom(students);
       const names = shuffleArr(students.map(s => s.Name));
@@ -2124,12 +2128,12 @@
       function revealWinner() {
         if (revealed) return;
         revealed = true;
+        skipToReveal = null;
         stageFinish(winner);
         updateWeightsAfterPick(winner.StudentID, students.map(s => s.StudentID));
-        btn.disabled = false;
-        btn.classList.remove('opacity-50');
         pickerBusy = false;
       }
+      skipToReveal = revealWinner;
       anim(stage, names, winner, () => setTimeout(revealWinner, 400));
       // Safety net: force reveal after ANIM_DURATION + 1s no matter what
       setTimeout(revealWinner, ANIM_DURATION + 1000);

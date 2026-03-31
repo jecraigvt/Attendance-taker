@@ -1616,7 +1616,7 @@
         const angle = (2 * Math.PI * i) / names.length - Math.PI / 2;
         const el = document.createElement('div');
         el.className = 'picker-tile';
-        el.style.transition = 'transform 0.15s, background 0.15s, border-color 0.15s, opacity 0.15s';
+        el.style.transition = 'none';
         el.textContent = n;
         el.style.left = (cx + r * Math.cos(angle) - 50) + 'px';
         el.style.top = (cy + r * Math.sin(angle) - 15) + 'px';

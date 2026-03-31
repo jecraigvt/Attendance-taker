@@ -541,8 +541,27 @@
                 </button>
               </div>
 
+              <!-- Entire period correction -->
+              <div class="pt-3 mt-3 border-t space-y-2">
+                <h4 class="text-xs font-semibold text-gray-600">Entire Period Correction</h4>
+                <div class="flex gap-2">
+                  <input type="date" id="period-correction-date" class="flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                  <select id="period-correction-period" class="flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    <option value="">Period...</option>
+                    <option value="0">0</option><option value="1">1</option><option value="2">2</option>
+                    <option value="3">3</option><option value="4">4</option><option value="5">5</option>
+                    <option value="6">6</option><option value="7">7</option>
+                  </select>
+                </div>
+                <button id="period-correction-btn"
+                  class="w-full text-center text-sm font-bold py-2 px-4 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all cursor-pointer">
+                  Open Period Correction Form
+                </button>
+                <p id="period-correction-status" class="hidden text-xs text-gray-400 italic"></p>
+              </div>
+
               <!-- Plain form links -->
-              <div class="flex gap-2">
+              <div class="flex gap-2 pt-3 mt-3 border-t">
                 <a href="https://docs.google.com/forms/d/e/1FAIpQLSevvK08WkMZnrVvSACsW5PEid53rOoUvOqZPWA0S9heHdnNng/viewform"
                   target="_blank" rel="noopener"
                   class="flex-1 text-center text-xs py-1.5 px-3 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 transition-all">
@@ -551,7 +570,7 @@
                 <a href="https://docs.google.com/forms/d/e/1FAIpQLSdvGPsETs-jY5iity2O3-jDEnIEhF-liLwQ2eWiKcXTIcHMYg/viewform"
                   target="_blank" rel="noopener"
                   class="flex-1 text-center text-xs py-1.5 px-3 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 transition-all">
-                  Entire Period Form
+                  Blank Period Form
                 </a>
               </div>
             </div>
@@ -2207,6 +2226,90 @@
         params.set(ENTRY.id, studentId);
         params.set(ENTRY.reason, reason);
         window.open(FORM_BASE + params.toString(), '_blank');
+      });
+    })();
+
+    // --- Entire Period Correction Form ---
+    (function initPeriodCorrectionForm() {
+      const FORM_BASE = 'https://docs.google.com/forms/d/e/1FAIpQLSdvGPsETs-jY5iity2O3-jDEnIEhF-liLwQ2eWiKcXTIcHMYg/viewform?';
+      const ENTRY = {
+        teacher: 'entry.1358303787',
+        date:    'entry.1373797864',
+        period:  'entry.77713515',
+        absent:  'entry.1075080481',
+        tardy:   'entry.509116090',
+        record:  'entry.870442974',
+      };
+      const dateInput = document.getElementById('period-correction-date');
+      const periodSel = document.getElementById('period-correction-period');
+      const btn = document.getElementById('period-correction-btn');
+      const statusEl = document.getElementById('period-correction-status');
+      if (!btn || !dateInput || !periodSel) return;
+
+      // Default date to today
+      dateInput.value = new Date().toLocaleDateString('en-CA');
+
+      // Default period to current selection
+      if (periodSelect && periodSelect.value) periodSel.value = periodSelect.value;
+
+      btn.addEventListener('click', async () => {
+        if (!dateInput.value) { dateInput.focus(); return; }
+        if (!periodSel.value) { periodSel.focus(); return; }
+        if (!db || !teacherUid) return;
+
+        const date = dateInput.value;
+        const period = periodSel.value;
+
+        statusEl.textContent = 'Loading attendance data...';
+        statusEl.classList.remove('hidden');
+
+        try {
+          const basePath = teacherPath(`attendance/${date}/periods/${period}`);
+          const periodDoc = await getDoc(doc(db, basePath));
+
+          if (!periodDoc.exists() || !(periodDoc.data().roster_snapshot || []).length) {
+            statusEl.textContent = 'No attendance data found for that date/period.';
+            return;
+          }
+
+          const roster = periodDoc.data().roster_snapshot;
+          const studentsSnap = await getDocs(collection(db, `${basePath}/students`));
+          const signedIn = {};
+          studentsSnap.forEach(d => { signedIn[d.id] = d.data(); });
+
+          const absentNames = [];
+          const tardyNames = [];
+
+          for (const student of roster) {
+            const sid = String(student.StudentID);
+            const displayName = (student.preferredName || student.FirstName || '') + ' ' + (student.LastName || '');
+            if (!signedIn[sid]) {
+              absentNames.push(displayName.trim());
+            } else {
+              const status = signedIn[sid].Status || 'On Time';
+              if (['Late', 'Tardy', 'Truant', 'Cut', 'Late > 20'].includes(status)) {
+                tardyNames.push(displayName.trim());
+              }
+            }
+          }
+
+          statusEl.classList.add('hidden');
+
+          const params = new URLSearchParams();
+          params.set(ENTRY.teacher, teacherName || '');
+          params.set(ENTRY.date, date);
+          params.set(ENTRY.period, period);
+          if (absentNames.length > 0) {
+            params.set(ENTRY.absent, absentNames.join(', '));
+          }
+          if (tardyNames.length > 0) {
+            params.set(ENTRY.tardy, tardyNames.join(', '));
+          }
+          window.open(FORM_BASE + params.toString(), '_blank');
+        } catch (err) {
+          statusEl.textContent = 'Error loading data: ' + err.message;
+          console.error('Period correction lookup failed:', err);
+        }
       });
     })();
 

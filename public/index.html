@@ -924,6 +924,22 @@
           </div>
         </div>
 
+        <!-- Teacher Display Name (for correction forms) -->
+        <div class="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-1">Teacher Name</h2>
+          <p class="text-sm text-gray-500 mb-3">Used to auto-fill attendance correction forms.</p>
+          <div class="flex gap-2">
+            <input type="text" id="settings-teacher-display-name"
+              class="flex-1 p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+              placeholder="e.g. J. Craig" />
+            <button id="settings-save-display-name"
+              class="bg-red-700 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-red-800 transition-all disabled:opacity-50">
+              Save
+            </button>
+          </div>
+          <p id="settings-display-name-status" class="hidden text-xs mt-2 font-medium"></p>
+        </div>
+
         <!-- Account Info -->
         <div class="bg-white rounded-xl border border-gray-200 p-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-4">Account Information</h2>
@@ -2239,7 +2255,7 @@
 
         // Open the Google Form
         const params = new URLSearchParams();
-        params.set(ENTRY.teacher, teacherName || '');
+        params.set(ENTRY.teacher, teacherDisplayName || teacherName || '');
         params.set(ENTRY.date, corrDate);
         if (period) params.set(ENTRY.period, period);
         params.set(ENTRY.name, studentName);
@@ -2357,7 +2373,7 @@
         }
 
         const params = new URLSearchParams();
-        params.set(ENTRY.teacher, teacherName || '');
+        params.set(ENTRY.teacher, teacherDisplayName || teacherName || '');
         params.set(ENTRY.date, date);
         params.set(ENTRY.period, period);
         if (absentNames.length > 0) params.set(ENTRY.absent, absentNames.join(', '));
@@ -2565,6 +2581,7 @@
     // ===== Teacher auth state =====
     let teacherUid = null;
     let teacherName = null;
+    let teacherDisplayName = null; // from Settings, used for correction forms
     let teacherPin = null;
 
     // Build a Firestore path under the authenticated teacher's root
@@ -5884,9 +5901,42 @@
         }
       }
 
+      // Load teacher display name from Firestore config
+      const displayNameInput = document.getElementById('settings-teacher-display-name');
+      if (displayNameInput && db && teacherUid) {
+        getDoc(doc(db, teacherPath('config/main'))).then(snap => {
+          if (snap.exists() && snap.data().teacherDisplayName) {
+            displayNameInput.value = snap.data().teacherDisplayName;
+            teacherDisplayName = snap.data().teacherDisplayName;
+          }
+        }).catch(() => {});
+      }
+
       // Event listeners — only attach once to prevent stacking on repeated showDashboard() calls
       if (_settingsListenersAttached) return;
       _settingsListenersAttached = true;
+
+      // Save teacher display name
+      const saveDisplayNameBtn = document.getElementById('settings-save-display-name');
+      if (saveDisplayNameBtn && displayNameInput) {
+        saveDisplayNameBtn.addEventListener('click', async () => {
+          const name = displayNameInput.value.trim();
+          if (!name) { displayNameInput.focus(); return; }
+          const statusEl = document.getElementById('settings-display-name-status');
+          try {
+            await setDoc(doc(db, teacherPath('config/main')), { teacherDisplayName: name }, { merge: true });
+            teacherDisplayName = name;
+            statusEl.textContent = 'Saved!';
+            statusEl.className = 'text-xs mt-2 font-medium text-green-600';
+            statusEl.classList.remove('hidden');
+            setTimeout(() => statusEl.classList.add('hidden'), 2000);
+          } catch (err) {
+            statusEl.textContent = 'Failed to save: ' + err.message;
+            statusEl.className = 'text-xs mt-2 font-medium text-red-600';
+            statusEl.classList.remove('hidden');
+          }
+        });
+      }
 
       // Sync status details toggle
       const detailsBtn = document.getElementById('sync-status-details-btn');

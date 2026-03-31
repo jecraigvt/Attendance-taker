@@ -517,18 +517,32 @@
             <!-- Attendance Corrections -->
             <div class="pt-6 border-t">
               <h3 class="text-sm font-semibold text-gray-700 mb-2">Attendance Corrections</h3>
-              <div class="space-y-2">
-                <a href="https://docs.google.com/forms/d/e/1FAIpQLSevvK08WkMZnrVvSACsW5PEid53rOoUvOqZPWA0S9heHdnNng/viewform"
-                  target="_blank" rel="noopener"
-                  class="block w-full text-center text-sm font-bold py-2 px-4 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all">
-                  Correct One Student
-                </a>
-                <a href="https://docs.google.com/forms/d/e/1FAIpQLSdvGPsETs-jY5iity2O3-jDEnIEhF-liLwQ2eWiKcXTIcHMYg/viewform"
-                  target="_blank" rel="noopener"
-                  class="block w-full text-center text-sm font-bold py-2 px-4 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all">
-                  Correct Entire Period
-                </a>
+
+              <!-- Single student correction -->
+              <div id="correction-single" class="space-y-2 mb-3">
+                <select id="correction-student" class="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <option value="">Select a student...</option>
+                </select>
+                <select id="correction-reason" class="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <option value="">Select correction reason...</option>
+                  <option value="Student was marked absent but was tardy.">Marked absent but was tardy</option>
+                  <option value="Student was marked absent by mistake.">Marked absent by mistake</option>
+                  <option value="Student was not marked absent but was absent.">Not marked absent but was absent</option>
+                  <option value="Student needs to be cleared for reasons provided in notes/comments.">Needs to be cleared (see notes)</option>
+                  <option value="Student was marked absent by substitue, I have verified that the student was present.">Sub marked absent, student was present</option>
+                </select>
+                <button id="correction-submit-btn"
+                  class="w-full text-center text-sm font-bold py-2 px-4 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all cursor-pointer">
+                  Open Correction Form
+                </button>
               </div>
+
+              <!-- Entire period correction (plain link) -->
+              <a href="https://docs.google.com/forms/d/e/1FAIpQLSdvGPsETs-jY5iity2O3-jDEnIEhF-liLwQ2eWiKcXTIcHMYg/viewform"
+                target="_blank" rel="noopener"
+                class="block w-full text-center text-sm font-bold py-2 px-4 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all">
+                Correct Entire Period
+              </a>
             </div>
 
             <!-- Hidden inputs kept for JS compatibility -->
@@ -2064,6 +2078,42 @@
       });
     })();
 
+
+    // --- Attendance Correction Form (pre-filled Google Form) ---
+    (function initCorrectionForm() {
+      const FORM_BASE = 'https://docs.google.com/forms/d/e/1FAIpQLSevvK08WkMZnrVvSACsW5PEid53rOoUvOqZPWA0S9heHdnNng/viewform?';
+      const ENTRY = {
+        teacher:  'entry.2116484739',
+        date:     'entry.2133221732',
+        period:   'entry.333248502',
+        name:     'entry.120618819',
+        id:       'entry.1072789732',
+        reason:   'entry.1039797176',
+        notes:    'entry.2019423498',
+      };
+      const btn = document.getElementById('correction-submit-btn');
+      if (!btn) return;
+      btn.addEventListener('click', () => {
+        const studentSel = document.getElementById('correction-student');
+        const reasonSel = document.getElementById('correction-reason');
+        if (!studentSel.value) { studentSel.focus(); return; }
+        if (!reasonSel.value) { reasonSel.focus(); return; }
+        const opt = studentSel.selectedOptions[0];
+        const studentName = opt.dataset.name || opt.textContent;
+        const studentId = studentSel.value;
+        const reason = reasonSel.value;
+        const period = periodSelect ? periodSelect.value : '';
+        const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+        const params = new URLSearchParams();
+        params.set(ENTRY.teacher, teacherName || '');
+        params.set(ENTRY.date, today);
+        if (period) params.set(ENTRY.period, period);
+        params.set(ENTRY.name, studentName);
+        params.set(ENTRY.id, studentId);
+        params.set(ENTRY.reason, reason);
+        window.open(FORM_BASE + params.toString(), '_blank');
+      });
+    })();
 
     async function exportDateRangeCSV() {
       const startDateInput = document.getElementById('start-date');
@@ -4913,6 +4963,26 @@
             absentListEl.appendChild(li);
           });
         }
+      }
+
+      // Populate correction student dropdown — all roster students
+      const corrStudentSel = document.getElementById('correction-student');
+      if (corrStudentSel) {
+        const prev = corrStudentSel.value;
+        corrStudentSel.replaceChildren();
+        const defOpt = document.createElement('option');
+        defOpt.value = '';
+        defOpt.textContent = 'Select a student...';
+        corrStudentSel.appendChild(defOpt);
+        const allStudents = [...(currentRoster || [])].sort((a, b) => String(a.LastName || '').localeCompare(String(b.LastName || '')));
+        allStudents.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s.StudentID;
+          opt.textContent = (s.LastName || '') + ', ' + (s.preferredName || s.FirstName || '');
+          opt.dataset.name = (s.preferredName || s.FirstName || '') + ' ' + (s.LastName || '');
+          corrStudentSel.appendChild(opt);
+        });
+        if (prev) corrStudentSel.value = prev;
       }
 
       // Group Report — DOM-safe construction

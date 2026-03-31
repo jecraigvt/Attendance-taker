@@ -2254,8 +2254,9 @@
       // Default date to today
       dateInput.value = new Date().toLocaleDateString('en-CA');
 
-      // Default period to current selection
-      if (periodSelect && periodSelect.value) periodSel.value = periodSelect.value;
+      // Default period to current selection (periodSelect is declared later, use getElementById)
+      const globalPeriodSel = document.getElementById('period-select');
+      if (globalPeriodSel && globalPeriodSel.value) periodSel.value = globalPeriodSel.value;
 
       // Toggle period selector when full day is checked
       if (fullDayCheck) {

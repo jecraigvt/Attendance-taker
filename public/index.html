@@ -523,6 +523,10 @@
                 <select id="correction-student" class="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                   <option value="">Select a student...</option>
                 </select>
+                <select id="correction-date" class="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <option value="">Select a date...</option>
+                </select>
+                <p id="correction-date-loading" class="hidden text-xs text-gray-400 italic">Loading attendance history...</p>
                 <select id="correction-reason" class="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                   <option value="">Select correction reason...</option>
                   <option value="Student was marked absent but was tardy.">Marked absent but was tardy</option>
@@ -2098,23 +2102,93 @@
         reason:   'entry.1039797176',
         notes:    'entry.2019423498',
       };
-      // Auto-select correction reason when a student is picked
       const corrStudentSel = document.getElementById('correction-student');
+      const corrDateSel = document.getElementById('correction-date');
       const corrReasonSel = document.getElementById('correction-reason');
+      const corrDateLoading = document.getElementById('correction-date-loading');
+
+      // When a student is selected, fetch their absent/tardy dates for the current period
       if (corrStudentSel) {
-        corrStudentSel.addEventListener('change', () => {
-          if (!corrStudentSel.value) return;
+        corrStudentSel.addEventListener('change', async () => {
+          // Reset date and reason
+          corrDateSel.replaceChildren();
+          const defOpt = document.createElement('option');
+          defOpt.value = ''; defOpt.textContent = 'Select a date...';
+          corrDateSel.appendChild(defOpt);
+          corrReasonSel.value = '';
+
+          if (!corrStudentSel.value || !db || !teacherUid) return;
           const sid = corrStudentSel.value;
-          const logEntry = periodAttendanceLog.find(l => String(l.StudentID) === String(sid));
-          if (!logEntry) {
-            // Student is absent — most likely correction is "marked absent by mistake"
+          const period = periodSelect ? periodSelect.value : '';
+          if (!period) return;
+
+          corrDateLoading.classList.remove('hidden');
+
+          // Check last 30 school days for this student
+          const dates = [];
+          const today = new Date();
+          for (let i = 0; i < 45; i++) {
+            const d = new Date(today);
+            d.setDate(d.getDate() - i);
+            if (d.getDay() === 0 || d.getDay() === 6) continue; // skip weekends
+            dates.push(d.toISOString().slice(0, 10));
+            if (dates.length >= 30) break;
+          }
+
+          try {
+            const results = await Promise.all(dates.map(async (date) => {
+              const basePath = teacherPath(`attendance/${date}/periods/${period}`);
+              const periodDoc = await getDoc(doc(db, basePath));
+              if (!periodDoc.exists()) return null;
+              const roster = periodDoc.data().roster_snapshot || [];
+              if (!roster.some(s => String(s.StudentID) === String(sid))) return null;
+
+              const studentDoc = await getDoc(doc(db, `${basePath}/students/${sid}`));
+              if (!studentDoc.exists()) {
+                return { date, status: 'Absent' };
+              }
+              const status = studentDoc.data().Status || 'Present';
+              if (['Late', 'Tardy', 'Truant', 'Cut', 'Late > 20'].includes(status)) {
+                return { date, status };
+              }
+              return null; // present — no correction needed
+            }));
+
+            const entries = results.filter(Boolean);
+            corrDateLoading.classList.add('hidden');
+
+            if (entries.length === 0) {
+              const opt = document.createElement('option');
+              opt.value = ''; opt.textContent = 'No absent/tardy dates found';
+              corrDateSel.appendChild(opt);
+            } else {
+              entries.forEach(e => {
+                const opt = document.createElement('option');
+                opt.value = e.date;
+                const label = new Date(e.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                opt.textContent = label + ' — ' + e.status;
+                opt.dataset.status = e.status;
+                corrDateSel.appendChild(opt);
+              });
+            }
+          } catch (err) {
+            corrDateLoading.classList.add('hidden');
+            console.error('Correction date lookup failed:', err);
+          }
+        });
+      }
+
+      // Auto-select reason when a date is picked
+      if (corrDateSel) {
+        corrDateSel.addEventListener('change', () => {
+          const opt = corrDateSel.selectedOptions[0];
+          if (!opt || !opt.dataset.status) { corrReasonSel.value = ''; return; }
+          const status = opt.dataset.status;
+          if (status === 'Absent') {
             corrReasonSel.value = 'Student was marked absent by mistake.';
-          } else if (logEntry.Status === 'Late' || logEntry.Status === 'Tardy') {
-            // Already marked late — maybe they were actually absent
-            corrReasonSel.value = 'Student was not marked absent but was absent.';
           } else {
-            // Present — maybe they were actually absent
-            corrReasonSel.value = 'Student was not marked absent but was absent.';
+            // Tardy/Late — probably shouldn't have been marked tardy
+            corrReasonSel.value = 'Student was marked absent by mistake.';
           }
         });
       }
@@ -2123,18 +2197,20 @@
       if (!btn) return;
       btn.addEventListener('click', () => {
         const studentSel = document.getElementById('correction-student');
+        const dateSel = document.getElementById('correction-date');
         const reasonSel = document.getElementById('correction-reason');
         if (!studentSel.value) { studentSel.focus(); return; }
+        if (!dateSel.value) { dateSel.focus(); return; }
         if (!reasonSel.value) { reasonSel.focus(); return; }
         const opt = studentSel.selectedOptions[0];
         const studentName = opt.dataset.name || opt.textContent;
         const studentId = studentSel.value;
         const reason = reasonSel.value;
         const period = periodSelect ? periodSelect.value : '';
-        const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+        const corrDate = dateSel.value; // YYYY-MM-DD
         const params = new URLSearchParams();
         params.set(ENTRY.teacher, teacherName || '');
-        params.set(ENTRY.date, today);
+        params.set(ENTRY.date, corrDate);
         if (period) params.set(ENTRY.period, period);
         params.set(ENTRY.name, studentName);
         params.set(ENTRY.id, studentId);

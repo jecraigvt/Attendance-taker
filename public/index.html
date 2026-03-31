@@ -1699,10 +1699,11 @@
       const els = names.map(n => {
         const el = document.createElement('div');
         el.className = 'picker-tile';
-        el.style.fontSize = '0.85rem';
-        el.style.padding = '4px 10px';
-        el.style.left = (20 + Math.random() * (w - 160)) + 'px';
-        el.style.top = (20 + Math.random() * (h - 60)) + 'px';
+        el.style.fontSize = '1.1rem';
+        el.style.padding = '6px 14px';
+        el.style.color = 'white';
+        el.style.left = (20 + Math.random() * (w - 200)) + 'px';
+        el.style.top = (20 + Math.random() * (h - 70)) + 'px';
         el.style.transition = 'all 0.8s cubic-bezier(0.34,1.56,0.64,1)';
         stage.appendChild(el);
         return { el, name: n };

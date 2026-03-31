@@ -537,7 +537,7 @@
                 </select>
                 <button id="correction-submit-btn"
                   class="w-full text-center text-sm font-bold py-2 px-4 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all cursor-pointer">
-                  Open Correction Form
+                  Single Student Correction
                 </button>
               </div>
 
@@ -559,7 +559,7 @@
                 </label>
                 <button id="period-correction-btn"
                   class="w-full text-center text-sm font-bold py-2 px-4 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all cursor-pointer">
-                  Open Period Correction Form
+                  Period Correction
                 </button>
                 <p id="period-correction-status" class="hidden text-xs text-gray-400 italic"></p>
               </div>
@@ -614,33 +614,59 @@
               </div>
             </div>
 
-            <!-- Actions -->
+            <!-- Period Stats -->
             <div class="pt-6 border-t space-y-3">
-              <h3 class="text-lg font-semibold text-gray-800">Export Attendance</h3>
-              <button id="export-csv"
-                class="w-full bg-red-700 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-800 transition-all">Download
-                Today's Full Log</button>
+              <h3 class="text-lg font-semibold text-gray-800">Period Snapshot</h3>
+              <div id="period-stats" class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div class="bg-gray-50 rounded-lg p-3 text-center border">
+                  <div id="stat-attendance-rate" class="text-2xl font-bold text-gray-800">—</div>
+                  <div class="text-xs text-gray-500">Attendance Rate</div>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-3 text-center border">
+                  <div id="stat-ontime-rate" class="text-2xl font-bold text-gray-800">—</div>
+                  <div class="text-xs text-gray-500">On-Time Rate</div>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-3 text-center border">
+                  <div id="stat-tardy-count" class="text-2xl font-bold text-gray-800">—</div>
+                  <div class="text-xs text-gray-500">Tardy Today</div>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-3 text-center border">
+                  <div id="stat-streak-count" class="text-2xl font-bold text-gray-800">—</div>
+                  <div class="text-xs text-gray-500">Absence Streaks</div>
+                </div>
+              </div>
+              <div id="period-stats-detail" class="text-xs text-gray-500 space-y-1">
+                <p id="stat-first-signin" class="hidden"></p>
+                <p id="stat-last-signin" class="hidden"></p>
+                <p id="stat-streak-names" class="hidden"></p>
+              </div>
+            </div>
 
-              <div class="pt-2 border-t">
-                <p class="text-xs text-gray-500 my-2 text-center">Or, select a date range to export:</p>
-                <div class="grid grid-cols-2 gap-4">
+            <!-- Export (collapsed) -->
+            <details class="pt-4 border-t">
+              <summary class="text-sm font-semibold text-gray-600 cursor-pointer hover:text-gray-800">Export Attendance</summary>
+              <div class="mt-3 space-y-3">
+                <button id="export-csv"
+                  class="w-full bg-gray-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-700 transition-all text-sm">Download
+                  Today's Full Log</button>
+                <div class="grid grid-cols-2 gap-3">
                   <div>
-                    <label for="start-date" class="block text-sm font-medium text-gray-700">Start Date</label>
+                    <label for="start-date" class="block text-xs font-medium text-gray-600">Start Date</label>
                     <input type="date" id="start-date"
-                      class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                      class="mt-1 block w-full p-1.5 text-sm border border-gray-300 rounded-md">
                   </div>
                   <div>
-                    <label for="end-date" class="block text-sm font-medium text-gray-700">End Date</label>
+                    <label for="end-date" class="block text-xs font-medium text-gray-600">End Date</label>
                     <input type="date" id="end-date"
-                      class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                      class="mt-1 block w-full p-1.5 text-sm border border-gray-300 rounded-md">
                   </div>
                 </div>
                 <button id="export-range-csv"
-                  class="w-full mt-4 bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-all">Export
+                  class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-all text-sm">Export
                   Selected Range</button>
                 <p id="export-status" class="text-xs mt-2 text-center font-medium"></p>
               </div>
-            </div>
+            </details>
 
             <!-- Hidden elements kept for JS compatibility -->
             <p id="roster-status" class="hidden"></p>
@@ -5222,6 +5248,59 @@
           corrStudentSel.appendChild(opt);
         });
         if (prev) corrStudentSel.value = prev;
+      }
+
+      // Period Stats
+      const rosterLen = (currentRoster || []).length;
+      const presentCount = periodAttendanceLog.length;
+      const absentCount = Math.max(0, rosterLen - presentCount);
+      const tardyCount = periodAttendanceLog.filter(l => ['Late', 'Tardy', 'Truant', 'Cut', 'Late > 20'].includes(l.Status)).length;
+      const onTimeCount = presentCount - tardyCount;
+
+      const statRate = document.getElementById('stat-attendance-rate');
+      const statOnTime = document.getElementById('stat-ontime-rate');
+      const statTardy = document.getElementById('stat-tardy-count');
+      const statStreaks = document.getElementById('stat-streak-count');
+      const statFirstEl = document.getElementById('stat-first-signin');
+      const statLastEl = document.getElementById('stat-last-signin');
+      const statStreakNames = document.getElementById('stat-streak-names');
+
+      if (rosterLen > 0 && periodSelect.value) {
+        statRate.textContent = Math.round((presentCount / rosterLen) * 100) + '%';
+        statRate.className = 'text-2xl font-bold ' + (presentCount === rosterLen ? 'text-green-600' : absentCount > 3 ? 'text-red-600' : 'text-gray-800');
+        statOnTime.textContent = Math.round((onTimeCount / rosterLen) * 100) + '%';
+        statTardy.textContent = tardyCount;
+        statTardy.className = 'text-2xl font-bold ' + (tardyCount === 0 ? 'text-green-600' : tardyCount > 3 ? 'text-yellow-600' : 'text-gray-800');
+
+        // Absence streaks
+        const streakStudents = [];
+        (currentRoster || []).forEach(s => {
+          const streak = absenceStreaks.get(s.StudentID) || 0;
+          if (streak >= 2) streakStudents.push({ name: (s.preferredName || s.FirstName || '') + ' ' + (s.LastName || ''), streak });
+        });
+        statStreaks.textContent = streakStudents.length;
+        statStreaks.className = 'text-2xl font-bold ' + (streakStudents.length === 0 ? 'text-green-600' : 'text-red-600');
+        if (streakStudents.length > 0) {
+          statStreakNames.textContent = streakStudents.map(s => s.name.trim() + ' (' + s.streak + ')').join(', ');
+          statStreakNames.classList.remove('hidden');
+        } else {
+          statStreakNames.classList.add('hidden');
+        }
+
+        // First/last sign-in times
+        const times = periodAttendanceLog.map(l => l.SignInTime).filter(Boolean).sort();
+        if (times.length > 0) {
+          statFirstEl.textContent = 'First sign-in: ' + times[0];
+          statLastEl.textContent = 'Last sign-in: ' + times[times.length - 1];
+          statFirstEl.classList.remove('hidden');
+          statLastEl.classList.remove('hidden');
+        } else {
+          statFirstEl.classList.add('hidden');
+          statLastEl.classList.add('hidden');
+        }
+      } else {
+        [statRate, statOnTime, statTardy, statStreaks].forEach(el => { if (el) { el.textContent = '—'; el.className = 'text-2xl font-bold text-gray-800'; } });
+        [statFirstEl, statLastEl, statStreakNames].forEach(el => { if (el) el.classList.add('hidden'); });
       }
 
       // Group Report — DOM-safe construction

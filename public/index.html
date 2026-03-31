@@ -2318,17 +2318,24 @@
         try {
           if (fullDayCheck.checked) {
             // Open a form for every period that has data
+            // Pre-open tabs while we still have user-gesture trust (popup blocker)
             const allPeriods = ['0', '1', '2', '3', '4', '5', '6', '7'];
+            const tabs = allPeriods.map(() => window.open('about:blank', '_blank'));
             const urls = await Promise.all(allPeriods.map(p => buildPeriodUrl(date, p)));
-            const validUrls = urls.filter(Boolean);
-            if (validUrls.length === 0) {
+            let opened = 0;
+            urls.forEach((url, i) => {
+              if (url && tabs[i]) {
+                tabs[i].location.href = url;
+                opened++;
+              } else if (tabs[i]) {
+                tabs[i].close(); // no data for this period, close the blank tab
+              }
+            });
+            if (opened === 0) {
               statusEl.textContent = 'No attendance data found for any period on ' + date + '.';
               return;
             }
-            statusEl.textContent = 'Opening ' + validUrls.length + ' period form(s)...';
-            validUrls.forEach((url, i) => {
-              setTimeout(() => window.open(url, '_blank'), i * 300);
-            });
+            statusEl.textContent = 'Opened ' + opened + ' period form(s).';
             setTimeout(() => statusEl.classList.add('hidden'), 2000);
           } else {
             const url = await buildPeriodUrl(date, periodSel.value);

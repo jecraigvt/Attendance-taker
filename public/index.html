@@ -1813,13 +1813,13 @@
     function animAmoeba(stage, names, winner, done) {
       const w = stage.clientWidth, h = stage.clientHeight;
       const hues = [210, 260, 170, 330, 30, 50, 290, 190];
-      const maxTime = ANIM_DURATION * 2.5;
+      const maxTime = ANIM_DURATION * 0.9; // finish before safety timeout
       const blobs = names.map((n, i) => {
         const el = document.createElement('div');
         el.style.cssText = 'position:absolute;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;color:white;pointer-events:none;text-shadow:0 1px 3px rgba(0,0,0,0.5);';
-        const size = 46 + Math.random() * 14;
+        const size = 52 + Math.random() * 16;
         el.style.width = size + 'px'; el.style.height = size + 'px';
-        el.style.fontSize = '0.55rem';
+        el.style.fontSize = '0.6rem';
         const hue = hues[i % hues.length];
         el.style.background = `hsla(${hue},50%,40%,0.5)`;
         el.style.border = `1px solid hsla(${hue},50%,50%,0.4)`;
@@ -1829,7 +1829,7 @@
         stage.appendChild(el);
         // Random initial angle, each blob has a wander angle that drifts
         const angle = Math.random() * Math.PI * 2;
-        return { el, name: n, x, y, size, hue, angle, speed: 1.5 + Math.random(), alive: true };
+        return { el, name: n, x, y, size, hue, angle, speed: 2.5 + Math.random() * 1.5, alive: true };
       });
       const winBlob = blobs.find(b => b.name === winner.Name);
       winBlob.size += 4;
@@ -1873,9 +1873,9 @@
             // Steer toward nearest blob (hunt behavior)
             const dx = nearest.x - b.x, dy = nearest.y - b.y;
             const targetAngle = Math.atan2(dy, dx);
-            // Blend: more hunting as time goes on, some wandering early
-            const wander = (Math.random() - 0.5) * (1.5 - urgency);
-            b.angle += (targetAngle - b.angle) * (0.08 + urgency * 0.12) + wander * 0.15;
+            // Blend: aggressive hunting from the start, less wandering
+            const wander = (Math.random() - 0.5) * (0.8 - urgency * 0.6);
+            b.angle += (targetAngle - b.angle) * (0.15 + urgency * 0.15) + wander * 0.1;
           } else {
             b.angle += (Math.random() - 0.5) * 0.3;
           }
@@ -2001,7 +2001,14 @@
             if (r === 0) {
               const name = sideEntrants[s];
               cell.style.cssText = cellStyle + 'font-size:' + fontSize + 'rem;color:#d1d5db;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);transition:color 0.3s,background 0.3s,border-color 0.3s,opacity 0.3s;';
-              cell.textContent = name === '—' ? '' : name;
+              if (name === '—') {
+                cell.style.visibility = 'hidden';
+                cell.style.padding = '0';
+                cell.style.border = 'none';
+                cell.style.fontSize = '0';
+              } else {
+                cell.textContent = name;
+              }
               cells.push({ el: cell, name: name });
             } else {
               cell.style.cssText = cellStyle + 'font-size:' + fontSize + 'rem;color:transparent;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);transition:color 0.3s,background 0.3s,border-color 0.3s,opacity 0.3s;';

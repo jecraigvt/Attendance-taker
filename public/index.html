@@ -1769,30 +1769,37 @@
       setTimeout(() => { clearInterval(scrambleInterval); done(); }, ANIM_DURATION);
     }
 
-    // 8. Zoom — names scattered, all visible, then winner zooms to center
+    // 8. Zoom — names in a grid, all visible, then winner zooms to center
     function animZoom(stage, names, winner, done) {
       const w = stage.clientWidth, h = stage.clientHeight;
-      const els = names.map(n => {
+      const cols = Math.min(Math.ceil(Math.sqrt(names.length)), 7);
+      const rows = Math.ceil(names.length / cols);
+      const cellW = (w - 40) / cols, cellH = (h - 40) / rows;
+      const els = names.map((n, i) => {
         const el = document.createElement('div');
-        el.className = 'picker-tile';
-        el.style.fontSize = '1.1rem';
-        el.style.padding = '6px 14px';
-        el.style.color = 'white';
-        el.style.left = (20 + Math.random() * (w - 200)) + 'px';
-        el.style.top = (20 + Math.random() * (h - 70)) + 'px';
-        el.style.transition = 'all 0.8s cubic-bezier(0.34,1.56,0.64,1)';
+        el.style.cssText = 'position:absolute;border-radius:8px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;color:white;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);transition:all 0.8s cubic-bezier(0.34,1.56,0.64,1);';
+        el.style.fontSize = Math.min(cellW / 8, 18) + 'px';
+        el.style.padding = '4px 8px';
+        el.style.width = (cellW * 0.85) + 'px';
+        const col = i % cols, row = Math.floor(i / cols);
+        el.style.left = (20 + col * cellW + cellW * 0.075) + 'px';
+        el.style.top = (20 + row * cellH + cellH * 0.15) + 'px';
+        el.textContent = n;
         stage.appendChild(el);
         return { el, name: n };
       });
-      // Show all names briefly, then zoom winner
+      // Show all names in grid, then zoom winner to center
       setTimeout(() => {
         els.forEach(e => {
           if (e.name === winner.Name) {
-            e.el.style.left = (w / 2 - 100) + 'px';
+            e.el.style.left = (w / 2 - 120) + 'px';
             e.el.style.top = (h / 2 - 30) + 'px';
             e.el.style.fontSize = '3rem';
             e.el.style.padding = '14px 32px';
-            e.el.classList.add('winner');
+            e.el.style.width = 'auto';
+            e.el.style.background = 'rgba(185,28,28,0.3)';
+            e.el.style.borderColor = 'rgba(185,28,28,0.6)';
+            e.el.style.zIndex = '10';
           } else {
             e.el.style.opacity = '0';
             e.el.style.transform = 'scale(0.2)';
@@ -1915,8 +1922,6 @@
         } else {
           // Force finish: winner absorbs all remaining
           blobs.filter(b => b.alive && b.name !== winner.Name).forEach(b => absorb(winBlob, b));
-          winBlob.el.style.background = 'rgba(185,28,28,0.5)';
-          winBlob.el.style.border = '2px solid rgba(185,28,28,0.7)';
           setTimeout(done, 350);
         }
       }

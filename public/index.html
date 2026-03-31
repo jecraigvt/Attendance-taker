@@ -625,14 +625,14 @@
             <!-- Live Data Panels -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <h3 class="text-xl font-semibold text-gray-800 mb-2">Currently Absent</h3>
+                <h3 class="text-xl font-semibold text-gray-800 mb-2 flex items-center justify-between">Currently Absent <span id="absent-pct" class="text-base font-bold"></span></h3>
                 <ul id="absent-list" class="text-sm space-y-1 h-96 overflow-y-auto bg-gray-100 p-3 rounded-md border">
                   <li class="text-gray-500">Select a period to see list.</li>
                 </ul>
               </div>
 
               <div>
-                <h3 class="text-xl font-semibold text-gray-800 mb-2">Group Assignments</h3>
+                <h3 class="text-xl font-semibold text-gray-800 mb-2 flex items-center justify-between">Currently Present <span id="present-pct" class="text-base font-bold"></span></h3>
                 <div id="group-report" class="space-y-3 h-96 overflow-y-auto bg-gray-100 p-3 rounded-md border">
                   <p class="text-gray-500">Students will appear here as they sign in.</p>
                 </div>
@@ -5521,6 +5521,24 @@
           corrStudentSel.appendChild(opt);
         });
         if (prev) corrStudentSel.value = prev;
+      }
+
+      // Update absent/present percentages
+      const absentPctEl = document.getElementById('absent-pct');
+      const presentPctEl = document.getElementById('present-pct');
+      const rosterLen = (currentRoster || []).length;
+      const presentCount = periodAttendanceLog.length;
+      const absentCount = Math.max(0, rosterLen - presentCount);
+      if (rosterLen > 0 && periodSelect.value) {
+        const absentPct = Math.round((absentCount / rosterLen) * 100);
+        const presentPct = Math.round((presentCount / rosterLen) * 100);
+        absentPctEl.textContent = absentPct + '%';
+        absentPctEl.className = 'text-base font-bold ' + (absentCount === 0 ? 'text-green-600' : absentCount >= 4 ? 'text-red-600' : 'text-yellow-600');
+        presentPctEl.textContent = presentPct + '%';
+        presentPctEl.className = 'text-base font-bold ' + (presentPct === 100 ? 'text-green-600' : presentPct >= 85 ? 'text-blue-600' : 'text-yellow-600');
+      } else {
+        absentPctEl.textContent = '';
+        presentPctEl.textContent = '';
       }
 
       // Trigger attendance insights analysis (debounced, runs in background)

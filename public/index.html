@@ -537,12 +537,19 @@
                 </button>
               </div>
 
-              <!-- Entire period correction (plain link) -->
-              <a href="https://docs.google.com/forms/d/e/1FAIpQLSdvGPsETs-jY5iity2O3-jDEnIEhF-liLwQ2eWiKcXTIcHMYg/viewform"
-                target="_blank" rel="noopener"
-                class="block w-full text-center text-sm font-bold py-2 px-4 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all">
-                Correct Entire Period
-              </a>
+              <!-- Plain form links -->
+              <div class="flex gap-2">
+                <a href="https://docs.google.com/forms/d/e/1FAIpQLSevvK08WkMZnrVvSACsW5PEid53rOoUvOqZPWA0S9heHdnNng/viewform"
+                  target="_blank" rel="noopener"
+                  class="flex-1 text-center text-xs py-1.5 px-3 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 transition-all">
+                  Blank Student Form
+                </a>
+                <a href="https://docs.google.com/forms/d/e/1FAIpQLSdvGPsETs-jY5iity2O3-jDEnIEhF-liLwQ2eWiKcXTIcHMYg/viewform"
+                  target="_blank" rel="noopener"
+                  class="flex-1 text-center text-xs py-1.5 px-3 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 transition-all">
+                  Entire Period Form
+                </a>
+              </div>
             </div>
 
             <!-- Hidden inputs kept for JS compatibility -->
@@ -2091,6 +2098,27 @@
         reason:   'entry.1039797176',
         notes:    'entry.2019423498',
       };
+      // Auto-select correction reason when a student is picked
+      const corrStudentSel = document.getElementById('correction-student');
+      const corrReasonSel = document.getElementById('correction-reason');
+      if (corrStudentSel) {
+        corrStudentSel.addEventListener('change', () => {
+          if (!corrStudentSel.value) return;
+          const sid = corrStudentSel.value;
+          const logEntry = periodAttendanceLog.find(l => String(l.StudentID) === String(sid));
+          if (!logEntry) {
+            // Student is absent — most likely correction is "marked absent by mistake"
+            corrReasonSel.value = 'Student was marked absent by mistake.';
+          } else if (logEntry.Status === 'Late' || logEntry.Status === 'Tardy') {
+            // Already marked late — maybe they were actually absent
+            corrReasonSel.value = 'Student was not marked absent but was absent.';
+          } else {
+            // Present — maybe they were actually absent
+            corrReasonSel.value = 'Student was not marked absent but was absent.';
+          }
+        });
+      }
+
       const btn = document.getElementById('correction-submit-btn');
       if (!btn) return;
       btn.addEventListener('click', () => {

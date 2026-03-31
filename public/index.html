@@ -614,31 +614,14 @@
               </div>
             </div>
 
-            <!-- Period Stats -->
+            <!-- Attendance Insights -->
             <div class="pt-6 border-t space-y-3">
-              <h3 class="text-lg font-semibold text-gray-800">Period Snapshot</h3>
-              <div id="period-stats" class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div class="bg-gray-50 rounded-lg p-3 text-center border">
-                  <div id="stat-attendance-rate" class="text-2xl font-bold text-gray-800">—</div>
-                  <div class="text-xs text-gray-500">Attendance Rate</div>
-                </div>
-                <div class="bg-gray-50 rounded-lg p-3 text-center border">
-                  <div id="stat-ontime-rate" class="text-2xl font-bold text-gray-800">—</div>
-                  <div class="text-xs text-gray-500">On-Time Rate</div>
-                </div>
-                <div class="bg-gray-50 rounded-lg p-3 text-center border">
-                  <div id="stat-tardy-count" class="text-2xl font-bold text-gray-800">—</div>
-                  <div class="text-xs text-gray-500">Tardy Today</div>
-                </div>
-                <div class="bg-gray-50 rounded-lg p-3 text-center border">
-                  <div id="stat-streak-count" class="text-2xl font-bold text-gray-800">—</div>
-                  <div class="text-xs text-gray-500">Absence Streaks</div>
-                </div>
+              <div class="flex items-center justify-between">
+                <h3 class="text-lg font-semibold text-gray-800">Attendance Insights</h3>
+                <span id="insights-loading" class="hidden text-xs text-gray-400 italic">Analyzing...</span>
               </div>
-              <div id="period-stats-detail" class="text-xs text-gray-500 space-y-1">
-                <p id="stat-first-signin" class="hidden"></p>
-                <p id="stat-last-signin" class="hidden"></p>
-                <p id="stat-streak-names" class="hidden"></p>
+              <div id="insights-list" class="space-y-2">
+                <p class="text-sm text-gray-400 italic">Select a period to see insights.</p>
               </div>
             </div>
 
@@ -5184,6 +5167,242 @@
     }
     window.manualCheckIn = manualCheckIn;
 
+    // ===== Attendance Insights Engine =====
+    let insightsTimer = null;
+    let lastInsightsPeriod = null;
+    const insightsCache = new Map(); // period -> { timestamp, alerts }
+
+    function scheduleInsightsUpdate() {
+      clearTimeout(insightsTimer);
+      insightsTimer = setTimeout(() => runInsightsAnalysis(), 500);
+    }
+
+    async function runInsightsAnalysis() {
+      const listEl = document.getElementById('insights-list');
+      const loadingEl = document.getElementById('insights-loading');
+      if (!listEl) return;
+
+      const period = periodSelect ? periodSelect.value : '';
+      if (!period || !db || !teacherUid || !(currentRoster || []).length) {
+        listEl.replaceChildren();
+        const p = document.createElement('p');
+        p.className = 'text-sm text-gray-400 italic';
+        p.textContent = 'Select a period to see insights.';
+        listEl.appendChild(p);
+        return;
+      }
+
+      // Use cache if same period and less than 60s old
+      const cached = insightsCache.get(period);
+      if (cached && Date.now() - cached.timestamp < 60000 && lastInsightsPeriod === period) {
+        renderInsights(cached.alerts);
+        return;
+      }
+      lastInsightsPeriod = period;
+
+      loadingEl.classList.remove('hidden');
+      listEl.replaceChildren();
+      const loadMsg = document.createElement('p');
+      loadMsg.className = 'text-sm text-gray-400 italic';
+      loadMsg.textContent = 'Analyzing attendance patterns...';
+      listEl.appendChild(loadMsg);
+
+      try {
+        // Generate last 20 school days
+        const dates = [];
+        const today = new Date();
+        for (let i = 0; i < 30 && dates.length < 20; i++) {
+          const d = new Date(today);
+          d.setDate(d.getDate() - i);
+          if (d.getDay() === 0 || d.getDay() === 6) continue;
+          dates.push(d.toISOString().slice(0, 10));
+        }
+
+        // Fetch attendance for each date in this period
+        const roster = currentRoster || [];
+        const studentHistory = new Map(); // sid -> [{date, status}]
+        roster.forEach(s => studentHistory.set(String(s.StudentID), []));
+
+        await Promise.all(dates.map(async (date) => {
+          const basePath = teacherPath(`attendance/${date}/periods/${period}`);
+          const periodDoc = await getDoc(doc(db, basePath));
+          if (!periodDoc.exists()) return;
+          const snap = periodDoc.data().roster_snapshot || [];
+          if (snap.length === 0) return;
+
+          const studentsSnap = await getDocs(collection(db, `${basePath}/students`));
+          const signedIn = new Map();
+          studentsSnap.forEach(d => signedIn.set(d.id, d.data()));
+
+          const rosterSids = new Set(snap.map(s => String(s.StudentID)));
+          for (const [sid, history] of studentHistory) {
+            if (!rosterSids.has(sid)) continue;
+            if (signedIn.has(sid)) {
+              const status = signedIn.get(sid).Status || 'On Time';
+              const isTardy = ['Late', 'Tardy', 'Truant', 'Cut', 'Late > 20'].includes(status);
+              history.push({ date, status: isTardy ? 'Tardy' : 'Present' });
+            } else {
+              history.push({ date, status: 'Absent' });
+            }
+          }
+        }));
+
+        // Analyze patterns and generate alerts
+        const alerts = [];
+        const perfectAttendance = [];
+        const neverTardy = [];
+
+        for (const s of roster) {
+          const sid = String(s.StudentID);
+          const history = studentHistory.get(sid) || [];
+          if (history.length < 3) continue;
+
+          const name = ((s.preferredName || s.FirstName || '') + ' ' + (s.LastName || '')).trim();
+          const totalClasses = history.length;
+          const absentCount = history.filter(h => h.status === 'Absent').length;
+          const tardyCount = history.filter(h => h.status === 'Tardy').length;
+          const absentRate = absentCount / totalClasses;
+          const tardyRate = tardyCount / totalClasses;
+
+          // Positive: perfect attendance
+          if (absentCount === 0 && tardyCount === 0) {
+            perfectAttendance.push(name);
+            continue; // no concerns to check
+          }
+          // Positive: never tardy (but may have absences)
+          if (tardyCount === 0 && absentCount <= 1) {
+            neverTardy.push(name);
+          }
+
+          // Alert: High absence rate (>25% over last 20 classes, min 4)
+          if (absentCount >= 4 && absentRate > 0.25) {
+            alerts.push({
+              severity: 'high',
+              student: name,
+              message: 'absent ' + absentCount + ' of last ' + totalClasses + ' classes (' + Math.round(absentRate * 100) + '%)',
+            });
+          }
+
+          // Alert: Frequent tardies (>30% over last 20 classes, min 4)
+          if (tardyCount >= 4 && tardyRate > 0.3) {
+            alerts.push({
+              severity: 'medium',
+              student: name,
+              message: 'tardy ' + tardyCount + ' of last ' + totalClasses + ' classes (' + Math.round(tardyRate * 100) + '%)',
+            });
+          }
+
+          // Alert: Recent absence cluster (3+ in last 5 classes)
+          const recent5 = history.slice(0, 5);
+          const recentAbsent = recent5.filter(h => h.status === 'Absent').length;
+          if (recentAbsent >= 3 && absentCount < 4) {
+            alerts.push({
+              severity: 'high',
+              student: name,
+              message: 'absent ' + recentAbsent + ' of last ' + recent5.length + ' classes',
+            });
+          }
+
+          // Alert: Worsening tardy trend
+          if (history.length >= 10) {
+            const half = Math.ceil(history.length / 2);
+            const recent = history.slice(0, half);
+            const prior = history.slice(half);
+            const recentTardyRate = recent.filter(h => h.status === 'Tardy').length / recent.length;
+            const priorTardyRate = prior.filter(h => h.status === 'Tardy').length / prior.length;
+            if (recentTardyRate >= 0.3 && priorTardyRate < 0.15 && recentTardyRate - priorTardyRate > 0.2) {
+              alerts.push({
+                severity: 'medium',
+                student: name,
+                message: 'tardiness increasing \u2014 was ' + Math.round(priorTardyRate * 100) + '%, now ' + Math.round(recentTardyRate * 100) + '%',
+              });
+            }
+          }
+
+          // Alert: Current absence streak
+          const streak = absenceStreaks.get(s.StudentID) || 0;
+          if (streak >= 3) {
+            alerts.push({
+              severity: 'high',
+              student: name,
+              message: 'absent ' + streak + ' consecutive classes',
+            });
+          }
+        }
+
+        // Sort: high severity first, then medium, then by student name
+        alerts.sort((a, b) => (a.severity === 'high' ? 0 : 1) - (b.severity === 'high' ? 0 : 1) || a.student.localeCompare(b.student));
+
+        // Deduplicate per student+message
+        const seen = new Set();
+        const deduped = alerts.filter(a => {
+          const key = a.student + ':' + a.message;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
+        // Add positive insights
+        if (perfectAttendance.length > 0) {
+          deduped.push({ severity: 'positive', student: '', message: perfectAttendance.join(', ') + (perfectAttendance.length === 1 ? ' has' : ' have') + ' perfect attendance!' });
+        }
+        if (neverTardy.length > 0 && neverTardy.length <= 5) {
+          deduped.push({ severity: 'positive', student: '', message: neverTardy.join(', ') + ' \u2014 always on time!' });
+        }
+
+        insightsCache.set(period, { timestamp: Date.now(), alerts: deduped });
+        renderInsights(deduped);
+      } catch (err) {
+        console.error('Insights analysis failed:', err);
+        listEl.replaceChildren();
+        const p = document.createElement('p');
+        p.className = 'text-sm text-gray-400 italic';
+        p.textContent = 'Could not load insights.';
+        listEl.appendChild(p);
+      } finally {
+        loadingEl.classList.add('hidden');
+      }
+    }
+
+    function renderInsights(alerts) {
+      const listEl = document.getElementById('insights-list');
+      if (!listEl) return;
+      listEl.replaceChildren();
+
+      if (alerts.length === 0) {
+        const p = document.createElement('p');
+        p.className = 'text-sm text-green-600 font-medium';
+        p.textContent = 'No concerns \u2014 all students are on track.';
+        listEl.appendChild(p);
+        return;
+      }
+
+      alerts.forEach(a => {
+        const div = document.createElement('div');
+        if (a.severity === 'positive') {
+          div.className = 'flex items-start gap-2 p-2.5 rounded-lg text-sm bg-green-50 border border-green-200';
+        } else {
+          const isHigh = a.severity === 'high';
+          div.className = 'flex items-start gap-2 p-2.5 rounded-lg text-sm ' +
+            (isHigh ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200');
+        }
+        const icon = document.createElement('span');
+        icon.className = 'flex-shrink-0 mt-0.5';
+        icon.textContent = a.severity === 'positive' ? '\u2b50' : a.severity === 'high' ? '\u26a0\ufe0f' : '\u23f0';
+        const text = document.createElement('span');
+        if (a.student) {
+          const strong = document.createElement('strong');
+          strong.textContent = a.student;
+          text.appendChild(strong);
+          text.appendChild(document.createTextNode(' \u2014 ' + a.message));
+        } else {
+          text.textContent = a.message;
+        }
+        div.append(icon, text);
+        listEl.appendChild(div);
+      });
+    }
+
     function updateUI() {
       const savedAbsentScroll = absentListEl.scrollTop;
       const savedGroupScroll = groupReportEl.scrollTop;
@@ -5250,58 +5469,8 @@
         if (prev) corrStudentSel.value = prev;
       }
 
-      // Period Stats
-      const rosterLen = (currentRoster || []).length;
-      const presentCount = periodAttendanceLog.length;
-      const absentCount = Math.max(0, rosterLen - presentCount);
-      const tardyCount = periodAttendanceLog.filter(l => ['Late', 'Tardy', 'Truant', 'Cut', 'Late > 20'].includes(l.Status)).length;
-      const onTimeCount = presentCount - tardyCount;
-
-      const statRate = document.getElementById('stat-attendance-rate');
-      const statOnTime = document.getElementById('stat-ontime-rate');
-      const statTardy = document.getElementById('stat-tardy-count');
-      const statStreaks = document.getElementById('stat-streak-count');
-      const statFirstEl = document.getElementById('stat-first-signin');
-      const statLastEl = document.getElementById('stat-last-signin');
-      const statStreakNames = document.getElementById('stat-streak-names');
-
-      if (rosterLen > 0 && periodSelect.value) {
-        statRate.textContent = Math.round((presentCount / rosterLen) * 100) + '%';
-        statRate.className = 'text-2xl font-bold ' + (presentCount === rosterLen ? 'text-green-600' : absentCount > 3 ? 'text-red-600' : 'text-gray-800');
-        statOnTime.textContent = Math.round((onTimeCount / rosterLen) * 100) + '%';
-        statTardy.textContent = tardyCount;
-        statTardy.className = 'text-2xl font-bold ' + (tardyCount === 0 ? 'text-green-600' : tardyCount > 3 ? 'text-yellow-600' : 'text-gray-800');
-
-        // Absence streaks
-        const streakStudents = [];
-        (currentRoster || []).forEach(s => {
-          const streak = absenceStreaks.get(s.StudentID) || 0;
-          if (streak >= 2) streakStudents.push({ name: (s.preferredName || s.FirstName || '') + ' ' + (s.LastName || ''), streak });
-        });
-        statStreaks.textContent = streakStudents.length;
-        statStreaks.className = 'text-2xl font-bold ' + (streakStudents.length === 0 ? 'text-green-600' : 'text-red-600');
-        if (streakStudents.length > 0) {
-          statStreakNames.textContent = streakStudents.map(s => s.name.trim() + ' (' + s.streak + ')').join(', ');
-          statStreakNames.classList.remove('hidden');
-        } else {
-          statStreakNames.classList.add('hidden');
-        }
-
-        // First/last sign-in times
-        const times = periodAttendanceLog.map(l => l.SignInTime).filter(Boolean).sort();
-        if (times.length > 0) {
-          statFirstEl.textContent = 'First sign-in: ' + times[0];
-          statLastEl.textContent = 'Last sign-in: ' + times[times.length - 1];
-          statFirstEl.classList.remove('hidden');
-          statLastEl.classList.remove('hidden');
-        } else {
-          statFirstEl.classList.add('hidden');
-          statLastEl.classList.add('hidden');
-        }
-      } else {
-        [statRate, statOnTime, statTardy, statStreaks].forEach(el => { if (el) { el.textContent = '—'; el.className = 'text-2xl font-bold text-gray-800'; } });
-        [statFirstEl, statLastEl, statStreakNames].forEach(el => { if (el) el.classList.add('hidden'); });
-      }
+      // Trigger attendance insights analysis (debounced, runs in background)
+      scheduleInsightsUpdate();
 
       // Group Report — DOM-safe construction
       groupReportEl.replaceChildren();

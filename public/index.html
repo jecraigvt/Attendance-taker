@@ -5376,7 +5376,10 @@
             const recentTardyRate = recent.filter(h => h.status === 'Tardy').length / recent.length;
             const priorTardyRate = prior.filter(h => h.status === 'Tardy').length / prior.length;
             if (recentTardyRate >= 0.3 && priorTardyRate < 0.15 && recentTardyRate - priorTardyRate > 0.2) {
-              concerns.push('tardiness increasing \u2014 was ' + Math.round(priorTardyRate * 100) + '%, now ' + Math.round(recentTardyRate * 100) + '%');
+              const fmt = d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+              const priorRange = fmt(prior[prior.length - 1].date) + '\u2013' + fmt(prior[0].date);
+              const recentRange = fmt(recent[recent.length - 1].date) + '\u2013' + fmt(recent[0].date);
+              concerns.push('tardiness increasing \u2014 ' + Math.round(priorTardyRate * 100) + '% (' + priorRange + ') to ' + Math.round(recentTardyRate * 100) + '% (' + recentRange + ')');
               if (!severity) severity = 'medium';
             }
           }

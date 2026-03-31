@@ -2107,7 +2107,7 @@
       const corrReasonSel = document.getElementById('correction-reason');
       const corrDateLoading = document.getElementById('correction-date-loading');
 
-      // When a student is selected, fetch their absent/tardy dates for the current period
+      // When a student is selected, fetch all their attendance records for the current period
       if (corrStudentSel) {
         corrStudentSel.addEventListener('change', async () => {
           // Reset date and reason
@@ -2124,19 +2124,13 @@
 
           corrDateLoading.classList.remove('hidden');
 
-          // Check last 30 school days for this student
-          const dates = [];
-          const today = new Date();
-          for (let i = 0; i < 45; i++) {
-            const d = new Date(today);
-            d.setDate(d.getDate() - i);
-            if (d.getDay() === 0 || d.getDay() === 6) continue; // skip weekends
-            dates.push(d.toISOString().slice(0, 10));
-            if (dates.length >= 30) break;
-          }
-
           try {
-            const results = await Promise.all(dates.map(async (date) => {
+            // Get all attendance date docs for this period
+            const attRef = collection(db, teacherPath('attendance'));
+            const attSnap = await getDocs(attRef);
+            const allDates = attSnap.docs.map(d => d.id).sort().reverse(); // newest first
+
+            const results = await Promise.all(allDates.map(async (date) => {
               const basePath = teacherPath(`attendance/${date}/periods/${period}`);
               const periodDoc = await getDoc(doc(db, basePath));
               if (!periodDoc.exists()) return null;
@@ -2148,10 +2142,7 @@
                 return { date, status: 'Absent' };
               }
               const status = studentDoc.data().Status || 'Present';
-              if (['Late', 'Tardy', 'Truant', 'Cut', 'Late > 20'].includes(status)) {
-                return { date, status };
-              }
-              return null; // present — no correction needed
+              return { date, status };
             }));
 
             const entries = results.filter(Boolean);
@@ -2159,7 +2150,7 @@
 
             if (entries.length === 0) {
               const opt = document.createElement('option');
-              opt.value = ''; opt.textContent = 'No absent/tardy dates found';
+              opt.value = ''; opt.textContent = 'No attendance records found';
               corrDateSel.appendChild(opt);
             } else {
               entries.forEach(e => {

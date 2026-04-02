@@ -940,6 +940,22 @@
           <p id="settings-display-name-status" class="hidden text-xs mt-2 font-medium"></p>
         </div>
 
+        <!-- Kiosk Prompt -->
+        <div class="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-1">Kiosk Prompt</h2>
+          <p class="text-sm text-gray-500 mb-3">Customize the sign-in message shown on the kiosk screen.</p>
+          <div class="flex gap-2">
+            <input type="text" id="settings-kiosk-prompt"
+              class="flex-1 p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+              placeholder="Enter your 5-digit student ID or teacher PIN." />
+            <button id="settings-save-kiosk-prompt"
+              class="bg-red-700 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-red-800 transition-all disabled:opacity-50">
+              Save
+            </button>
+          </div>
+          <p id="settings-kiosk-prompt-status" class="hidden text-xs mt-2 font-medium"></p>
+        </div>
+
         <!-- Account Info -->
         <div class="bg-white rounded-xl border border-gray-200 p-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-4">Account Information</h2>
@@ -1099,7 +1115,7 @@
         <div id="kiosk-view" class="w-full max-w-sm text-center">
           <h1 class="text-4xl font-bold mb-2">Welcome Warriors!</h1>
           <p id="kiosk-teacher-name" class="text-sm text-red-400 font-semibold mb-1 hidden"></p>
-          <p class="text-lg text-gray-400">Enter your 5-digit student ID or teacher PIN.</p>
+          <p id="kiosk-prompt-text" class="text-lg text-gray-400">Enter your 5-digit student ID or teacher PIN.</p>
           <p id="period-indicator" class="mt-2 text-sm text-white/90"></p>
 
           <input type="text" id="student-id-input" maxlength="10"
@@ -3616,6 +3632,19 @@
 
     // Called after successful authentication (login or PIN entry from stored session)
     async function onTeacherAuthenticated(remember) {
+      // Load custom kiosk prompt
+      if (db && teacherUid) {
+        try {
+          const cfgSnap = await getDoc(doc(db, teacherPath('config/main')));
+          if (cfgSnap.exists() && cfgSnap.data().kioskPrompt) {
+            const promptEl = document.getElementById('kiosk-prompt-text');
+            if (promptEl) promptEl.textContent = cfgSnap.data().kioskPrompt;
+          }
+          if (cfgSnap.exists() && cfgSnap.data().teacherDisplayName) {
+            teacherDisplayName = cfgSnap.data().teacherDisplayName;
+          }
+        } catch (e) { console.warn('[onTeacherAuthenticated] config load failed', e); }
+      }
       if (db) {
         watchRostersFromCloud();
         loadExceptions();
@@ -5974,11 +6003,19 @@
 
       // Load teacher display name from Firestore config
       const displayNameInput = document.getElementById('settings-teacher-display-name');
+      const kioskPromptInput = document.getElementById('settings-kiosk-prompt');
       if (displayNameInput && db && teacherUid) {
         getDoc(doc(db, teacherPath('config/main'))).then(snap => {
-          if (snap.exists() && snap.data().teacherDisplayName) {
-            displayNameInput.value = snap.data().teacherDisplayName;
-            teacherDisplayName = snap.data().teacherDisplayName;
+          if (snap.exists()) {
+            if (snap.data().teacherDisplayName) {
+              displayNameInput.value = snap.data().teacherDisplayName;
+              teacherDisplayName = snap.data().teacherDisplayName;
+            }
+            if (snap.data().kioskPrompt) {
+              if (kioskPromptInput) kioskPromptInput.value = snap.data().kioskPrompt;
+              const promptEl = document.getElementById('kiosk-prompt-text');
+              if (promptEl) promptEl.textContent = snap.data().kioskPrompt;
+            }
           }
         }).catch(() => {});
       }
@@ -5997,6 +6034,29 @@
           try {
             await setDoc(doc(db, teacherPath('config/main')), { teacherDisplayName: name }, { merge: true });
             teacherDisplayName = name;
+            statusEl.textContent = 'Saved!';
+            statusEl.className = 'text-xs mt-2 font-medium text-green-600';
+            statusEl.classList.remove('hidden');
+            setTimeout(() => statusEl.classList.add('hidden'), 2000);
+          } catch (err) {
+            statusEl.textContent = 'Failed to save: ' + err.message;
+            statusEl.className = 'text-xs mt-2 font-medium text-red-600';
+            statusEl.classList.remove('hidden');
+          }
+        });
+      }
+
+      // Save kiosk prompt
+      const saveKioskPromptBtn = document.getElementById('settings-save-kiosk-prompt');
+      if (saveKioskPromptBtn && kioskPromptInput) {
+        saveKioskPromptBtn.addEventListener('click', async () => {
+          const prompt = kioskPromptInput.value.trim();
+          if (!prompt) { kioskPromptInput.focus(); return; }
+          const statusEl = document.getElementById('settings-kiosk-prompt-status');
+          try {
+            await setDoc(doc(db, teacherPath('config/main')), { kioskPrompt: prompt }, { merge: true });
+            const promptEl = document.getElementById('kiosk-prompt-text');
+            if (promptEl) promptEl.textContent = prompt;
             statusEl.textContent = 'Saved!';
             statusEl.className = 'text-xs mt-2 font-medium text-green-600';
             statusEl.classList.remove('hidden');

@@ -3694,7 +3694,8 @@
               numGroups: sc.numGroups || 6,
               defaultSeatsPerGroup: sc.defaultSeatsPerGroup || 4,
               perGroupOverrides: sc.perGroupOverrides || {},
-              perPeriodOverrides: sc.perPeriodOverrides || {}
+              perPeriodOverrides: sc.perPeriodOverrides || {},
+              frontGroups: sc.frontGroups || [],
             };
           }
         } catch (e) { console.warn('[onTeacherAuthenticated] local seating config load failed', e); }
@@ -4236,7 +4237,8 @@
           numGroups: sc.numGroups || 6,
           defaultSeatsPerGroup: sc.defaultSeatsPerGroup || 4,
           perGroupOverrides: sc.perGroupOverrides || {},
-          perPeriodOverrides: sc.perPeriodOverrides || {}
+          perPeriodOverrides: sc.perPeriodOverrides || {},
+          frontGroups: sc.frontGroups || [],
         };
       }
       renderSeatingUI();

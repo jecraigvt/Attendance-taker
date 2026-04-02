@@ -4825,27 +4825,30 @@
 
       const cap = g => getGroupCap(g, effectiveCfg);
 
-      // Front groups from config (teacher-designated), or fallback to first group
+      // Front groups from config (teacher-designated)
       const configFront = effectiveCfg.frontGroups || currentSeatingConfig.frontGroups || [];
-      const frontGroups = new Set();
-      if (needsFront) {
-        if (configFront.length > 0) {
-          configFront.forEach(g => frontGroups.add(g));
-        } else {
-          // Fallback: first group if none configured
-          frontGroups.add(1);
-        }
-      }
+      const frontGroups = new Set(configFront.map(Number).filter(g => g >= 1 && g <= numGroups));
+
+      // Reserve seats in front groups for front-row students who haven't signed in yet
+      const signedInIds = new Set(periodAttendanceLog.map(l => String(l.StudentID)));
+      const unsignedFrontCount = [...exceptions.frontRow].filter(sid => !signedInIds.has(sid)).length;
+      const reservedPerGroup = frontGroups.size > 0 ? Math.ceil(unsignedFrontCount / frontGroups.size) : 0;
 
       // Pool = groups with capacity, not in avoid set
+      // For non-front students, reduce front group capacity by reserved seats
       let pool = [];
       for (let g = 1; g <= numGroups; g++) {
-        if (counts[g] < cap(g) && !avoid.has(g)) pool.push(g);
+        const effectiveCap = (frontGroups.has(g) && !needsFront) ? Math.max(0, cap(g) - reservedPerGroup) : cap(g);
+        if (counts[g] < effectiveCap && !avoid.has(g)) pool.push(g);
       }
 
       // Front-row preference: narrow to front groups if available
       if (needsFront && frontGroups.size > 0) {
-        const frontPool = pool.filter(g => frontGroups.has(g));
+        // Front students use full capacity (not reduced)
+        const frontPool = [];
+        for (let g = 1; g <= numGroups; g++) {
+          if (frontGroups.has(g) && counts[g] < cap(g) && !avoid.has(g)) frontPool.push(g);
+        }
         if (frontPool.length) pool = frontPool;
       }
 

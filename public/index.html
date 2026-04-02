@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Attendance & Group Assigner — Ultimate Edition</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet" />
   <style>
     body {
@@ -276,7 +277,7 @@
             class="file-input-button flex items-center justify-center w-full bg-gray-100 text-gray-700 font-semibold py-2.5 rounded-lg hover:bg-gray-200 transition-all cursor-pointer text-sm">
             Upload CSV File
           </label>
-          <input type="file" id="wizard-roster-upload" accept=".csv" class="hidden" multiple />
+          <input type="file" id="wizard-roster-upload" accept=".csv,.xlsx,.xls" class="hidden" multiple />
         </div>
 
         <!-- Status message -->
@@ -657,7 +658,7 @@
             <div id="roster-warning" class="hidden"></div>
             <div id="roster-summary" class="hidden"></div>
             <div id="roster-debug" class="hidden"></div>
-            <input type="file" id="roster-upload" accept=".csv" class="hidden" multiple />
+            <input type="file" id="roster-upload" accept=".csv,.xlsx,.xls" class="hidden" multiple />
             <button id="clear-rosters" class="hidden"></button>
 
           </div><!-- End Right Column -->
@@ -688,7 +689,7 @@
                 class="file-input-button text-center bg-gray-100 text-gray-700 font-semibold text-sm py-2 px-4 rounded-lg hover:bg-gray-200 transition-all cursor-pointer">
                 Upload CSV
               </label>
-              <input type="file" id="roster-upload-tab" accept=".csv" class="hidden" multiple />
+              <input type="file" id="roster-upload-tab" accept=".csv,.xlsx,.xls" class="hidden" multiple />
             </div>
           </div>
           <div id="roster-tab-status" class="mt-3 text-sm font-medium text-gray-600 hidden"></div>
@@ -3205,7 +3206,7 @@
         const changed = new Set();
         for (const f of files) {
           try {
-            const text = await f.text();
+            const text = await fileToCSV(f);
             const parsed = parseRoster(text);
             for (const p in parsed) { merged[p] = parsed[p]; changed.add(String(p)); }
             processed++;
@@ -4014,6 +4015,15 @@
       el.classList.add(colorMap[type] || 'text-gray-600');
     }
 
+    async function fileToCSV(f) {
+      if (f.name.match(/\.xlsx?$/i) && typeof XLSX !== 'undefined') {
+        const data = await f.arrayBuffer();
+        const wb = XLSX.read(data);
+        return XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]);
+      }
+      return await f.text();
+    }
+
     function onRosterUpload(evt) {
       (async e => {
         const files = e.target.files; if (!files || !files.length) return;
@@ -4026,7 +4036,7 @@
 
         for (const f of files) {
           try {
-            const text = await f.text();
+            const text = await fileToCSV(f);
             const parsed = parseRoster(text);
             console.log(`[onRosterUpload] Parsed file ${f.name}:`, parsed);
             for (const p in parsed) {
@@ -4677,8 +4687,32 @@
         }
       }
 
-      if (Object.keys(rosters).length === 0)
-        throw new Error('No valid period rosters found in the file.');
+      // If Aeries-format parsing found nothing, try simple table format:
+      // Column A = ID, Column B = Last, Column C = First (or "Last, First" in B)
+      if (Object.keys(rosters).length === 0) {
+        const simple = [];
+        for (let raw of lines) {
+          let line = raw;
+          if (!line) continue;
+          if (line.charCodeAt(0) === 0xFEFF) line = line.slice(1);
+          const cells = splitCSVRow(line);
+          // Skip header rows (first cell isn't a number)
+          const idCell = (cells[0] || '').replace(/"/g, '').trim();
+          if (!idCell || !/^\d+$/.test(idCell)) continue;
+          const last = (cells[1] || '').replace(/"/g, '').trim();
+          const first = (cells[2] || '').replace(/"/g, '').trim();
+          if (!last) continue;
+          simple.push({
+            StudentID: idCell,
+            LastName: last,
+            FirstName: first,
+            preferredName: (first || last).split(' ')[0],
+            source: 'csv',
+          });
+        }
+        if (simple.length > 0) return { '1': simple };
+        throw new Error('No valid roster data found in the file.');
+      }
 
       return rosters;
     }

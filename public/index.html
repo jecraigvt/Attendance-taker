@@ -235,8 +235,9 @@
             </svg>
           </div>
           <div>
-            <h2 class="text-lg font-semibold text-gray-900">Your Aeries credentials have been verified!</h2>
+            <h2 id="wizard-verified-title" class="text-lg font-semibold text-gray-900">Your Aeries credentials have been verified!</h2>
             <p class="text-sm text-gray-500 mt-0.5">You're signed in as <span id="wizard-username-display" class="font-medium text-gray-700"></span></p>
+            <p id="wizard-verified-note" class="hidden text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 mt-3"></p>
           </div>
         </div>
         <p class="text-sm text-gray-600 mb-6">Let's take a minute to set up your account. This only takes a moment and you won't need to do it again.</p>
@@ -3061,7 +3062,7 @@
     // ===== Onboarding Wizard =====
     let wizardRosterLoaded = false;
 
-    function showOnboardingWizard(username) {
+    function showOnboardingWizard(username, aeriesVerified) {
       const wizardEl = document.getElementById('onboarding-wizard');
       loginScreen.classList.add('hidden');
       pinSetupScreen.classList.add('hidden');
@@ -3073,6 +3074,26 @@
       // Display username on step 1
       const usernameDisplay = document.getElementById('wizard-username-display');
       if (usernameDisplay) usernameDisplay.textContent = username || '';
+
+      // Update step 1 header based on Aeries verification
+      const verifiedTitle = document.getElementById('wizard-verified-title');
+      const verifiedNote = document.getElementById('wizard-verified-note');
+      if (verifiedTitle) {
+        if (aeriesVerified) {
+          verifiedTitle.textContent = 'Your Aeries credentials have been verified!';
+        } else {
+          verifiedTitle.textContent = 'Account created!';
+        }
+      }
+      if (verifiedNote) {
+        if (aeriesVerified) {
+          verifiedNote.textContent = '';
+          verifiedNote.classList.add('hidden');
+        } else {
+          verifiedNote.textContent = 'These credentials are not linked to Aeries. To enable automatic roster fetching and attendance sync, update your username and password in Settings to match your Aeries account.';
+          verifiedNote.classList.remove('hidden');
+        }
+      }
 
       // Reset to step 1
       wizardRosterLoaded = false;
@@ -3501,7 +3522,7 @@
         const needsOnboarding = await checkNeedsOnboarding();
         if (needsOnboarding) {
           saveKioskBinding(teacherUid, teacherName, null, remember);
-          showOnboardingWizard(username);
+          showOnboardingWizard(username, result.data.validated);
           return;
         }
 

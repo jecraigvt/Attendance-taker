@@ -2849,7 +2849,7 @@
         exportCsvButton.addEventListener('click', exportCSV);
         hideAdminButton.addEventListener('click', showKioskMode);
         saveExceptionsBtn.addEventListener('click', saveExceptions);
-        studentIdInput.addEventListener('input', () => { signInButton.disabled = studentIdInput.value.trim().length < 4; }); // 4 min: allows short PINs; student IDs are 5 digits
+        studentIdInput.addEventListener('input', () => { signInButton.disabled = studentIdInput.value.trim().length < 3; }); // 3 min: supports 3-digit staff IDs, 4-digit PINs, 5-digit student IDs
         studentIdInput.addEventListener('keyup', e => { if (e.key === 'Enter' && !signInButton.disabled) signInButton.click(); });
         signInButton.addEventListener('click', handleSignIn);
         document.addEventListener('keydown', e => { if (!messageView.classList.contains('hidden') && (e.key === 'Enter' || e.key === 'Escape')) dismissMessage(); });
@@ -4690,7 +4690,7 @@
         const tails = new Map();
         roster.forEach(s => {
           const id = String(s.StudentID || '');
-          const last4 = id.length >= 5 ? id.slice(-5) : id;
+          const last4 = id.replace(/^0+/, '') || '0';
           if (!tails.has(last4)) tails.set(last4, []);
           tails.get(last4).push(`${escHtml((s.FirstName || '') + ' ' + (s.LastName || ''))}`);
         });
@@ -4915,7 +4915,7 @@
     function findPeriodsForStudent(code) {
       const matches = [];
       for (const [period, roster] of Object.entries(allRosters)) {
-        const student = roster.find(s => String(s.StudentID || '').slice(-5) === code);
+        const student = roster.find(s => matchStudentId(s.StudentID, code));
         if (student) matches.push(period);
       }
       return matches;
@@ -4933,7 +4933,7 @@
         const today = nowISODate();
         for (const p of periods) {
           const roster = allRosters[p] || [];
-          const student = roster.find(s => String(s.StudentID || '').slice(-5) === code);
+          const student = roster.find(s => matchStudentId(s.StudentID, code));
           if (!student) continue;
           const ref = doc(db, teacherPath(`attendance/${today}/periods/${p}/students/${student.StudentID}`));
           const snap = await getDoc(ref);
@@ -4958,6 +4958,14 @@
       }, 3000);
     }
 
+    // Match entered ID against stored ID, ignoring leading zeros
+    // e.g. "712" matches "00712", "0712", or "712"
+    function matchStudentId(storedId, enteredCode) {
+      const stored = String(storedId || '').replace(/^0+/, '') || '0';
+      const entered = String(enteredCode || '').replace(/^0+/, '') || '0';
+      return stored === entered;
+    }
+
     async function handleSignIn() {
       try {
         const code = studentIdInput.value.trim();
@@ -4970,7 +4978,7 @@
         }
 
         let p = periodSelect.value;
-        let student = (currentRoster || []).find(s => String(s.StudentID || '').slice(-5) === code);
+        let student = (currentRoster || []).find(s => matchStudentId(s.StudentID, code));
         let wasSmartSwitched = false;
 
         // --- START: SMART SWITCH LOGIC ---
@@ -4985,7 +4993,7 @@
             onPeriodChange();
 
             p = targetPeriod;
-            student = (currentRoster || []).find(s => String(s.StudentID || '').slice(-5) === code);
+            student = (currentRoster || []).find(s => matchStudentId(s.StudentID, code));
             wasSmartSwitched = true;
 
             // Directly fetch attendance for the new period so statusForNow() has accurate data

@@ -94,6 +94,30 @@ async function fetchAeriesFormTokens() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Password hashing (scrypt) — for fallback login when Aeries is unavailable
+// ---------------------------------------------------------------------------
+
+/**
+ * Hash a password with scrypt + random salt.
+ * Returns "salt:hash" (both hex-encoded).
+ */
+function hashPassword(password) {
+  const salt = crypto.randomBytes(32).toString("hex");
+  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
+  return salt + ":" + hash;
+}
+
+/**
+ * Verify a password against a stored "salt:hash" string.
+ */
+function verifyPassword(password, stored) {
+  const [salt, hash] = stored.split(":");
+  if (!salt || !hash) return false;
+  const test = crypto.scryptSync(password, salt, 64).toString("hex");
+  return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(test, "hex"));
+}
+
 /**
  * Attempt to validate Aeries credentials.
  * Returns { valid: boolean, reason: string }.
@@ -502,7 +526,13 @@ exports.authenticateTeacher = onCall(
         }
 
         // ------------------------------------------------------------------
-        // 3. Validate Aeries credentials (graceful degradation on failure)
+        // 3. Resolve Firebase Auth user (check if returning user)
+        // ------------------------------------------------------------------
+        let firebaseUser = await findFirebaseUserByUsername(cleanUsername);
+        const isNewUser = firebaseUser === null;
+
+        // ------------------------------------------------------------------
+        // 4. Try Aeries credentials
         // ------------------------------------------------------------------
         logger.info("Validating Aeries credentials", {username: cleanUsername});
         const validation = await validateAeriesCredentials(
@@ -510,43 +540,67 @@ exports.authenticateTeacher = onCall(
             password,
         );
 
-        const credentialsValidated = validation.valid;
+        let aeriesVerified = validation.valid;
+        let authMethod = "aeries"; // tracks how the user was authenticated
+        let aeriesWarning = null;
 
-        if (!credentialsValidated && validation.reason === "credentials_rejected") {
-          logger.warn("Aeries credential validation failed", {
-            username: cleanUsername,
-            reason: validation.reason,
-          });
-          await recordFailedAttempt(cleanUsername);
-          return {success: false, error: "Invalid Aeries credentials"};
-        }
-
-        // ------------------------------------------------------------------
-        // 4. Resolve Firebase Auth user (create if first login)
-        // ------------------------------------------------------------------
-        let firebaseUser = await findFirebaseUserByUsername(cleanUsername);
-        const isNewUser = firebaseUser === null;
-
-        if (!credentialsValidated && validation.reason === "aeries_unreachable") {
-          if (isNewUser) {
-            // New user + can't validate = reject (don't store unverified creds)
-            logger.warn("Aeries unreachable — rejecting new user signup", {
+        if (!aeriesVerified) {
+          if (isNewUser && validation.reason === "credentials_rejected") {
+            // New user — Aeries explicitly rejected. Try creating as local account.
+            // (Aeries may not know this user at all, e.g. mwilliams)
+            logger.info("Aeries rejected credentials for new user — creating local account", {
               username: cleanUsername,
             });
-            return {
-              success: false,
-              error: "Aeries is currently unreachable. Please try again later.",
-            };
+            authMethod = "local_new";
+          } else if (isNewUser && validation.reason === "aeries_unreachable") {
+            // New user + Aeries down = create local account
+            logger.info("Aeries unreachable for new user — creating local account", {
+              username: cleanUsername,
+            });
+            authMethod = "local_new";
+          } else if (!isNewUser) {
+            // Existing user — Aeries failed. Try password hash fallback.
+            const uid = firebaseUser.uid;
+            const credSnap = await db.collection("teachers").doc(uid)
+                .collection("credentials").doc("aeries").get();
+            const storedHash = credSnap.exists ?
+              credSnap.data().passwordHash : null;
+
+            if (storedHash && verifyPassword(password, storedHash)) {
+              logger.info("Aeries failed but password hash matched — allowing login", {
+                username: cleanUsername,
+                aeriesReason: validation.reason,
+              });
+              authMethod = "hash_fallback";
+              if (validation.reason === "credentials_rejected") {
+                aeriesWarning = "Your Aeries password may have changed. " +
+                  "Update your credentials in Settings to keep roster " +
+                  "fetch and sync working.";
+              }
+            } else {
+              // Hash doesn't match (or no hash stored) — reject
+              logger.warn("Login failed — Aeries rejected and hash mismatch", {
+                username: cleanUsername,
+                aeriesReason: validation.reason,
+                hasHash: !!storedHash,
+              });
+              await recordFailedAttempt(cleanUsername);
+              return {
+                success: false,
+                error: "Invalid credentials. Please check your " +
+                  "username and password.",
+              };
+            }
           }
-          // Existing user + can't validate = proceed with existing credentials
-          logger.warn("Aeries unreachable — using existing credentials for returning user", {
-            username: cleanUsername,
-          });
         }
 
+        // ------------------------------------------------------------------
+        // 5. Create Firebase Auth user if new
+        // ------------------------------------------------------------------
         if (isNewUser) {
           logger.info("Creating new Firebase Auth user", {
             username: cleanUsername,
+            authMethod,
           });
           firebaseUser = await createFirebaseUser(cleanUsername);
         }
@@ -554,7 +608,7 @@ exports.authenticateTeacher = onCall(
         const uid = firebaseUser.uid;
 
         // ------------------------------------------------------------------
-        // 5. Encrypt & store credentials (skip overwrite when unvalidated)
+        // 6. Store credentials + password hash
         // ------------------------------------------------------------------
         const credentialsRef = db
             .collection("teachers")
@@ -562,41 +616,43 @@ exports.authenticateTeacher = onCall(
             .collection("credentials")
             .doc("aeries");
 
-        if (credentialsValidated) {
-          // Validated credentials — safe to overwrite
-          let encryptedPassword;
+        const credUpdate = {
+          passwordHash: hashPassword(password),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+
+        if (aeriesVerified) {
+          // Aeries validated — store encrypted password for sync/fetch
           try {
-            encryptedPassword = fernetEncrypt(password);
+            credUpdate.aeriesUsername = cleanUsername;
+            credUpdate.encryptedPassword = fernetEncrypt(password);
+            credUpdate.validated = true;
           } catch (err) {
             logger.error("Fernet encryption failed", {error: err.message});
-            throw new HttpsError(
-                "internal",
-                "Credential encryption failed. Ensure FERNET_KEY is configured.",
-            );
+            // Non-fatal: hash is still stored, just no Aeries sync
           }
-
-          await credentialsRef.set({
-            aeriesUsername: cleanUsername,
-            encryptedPassword: encryptedPassword,
-            validated: true,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
         }
-        // When Aeries is unreachable for an existing user, we intentionally
-        // do NOT overwrite stored credentials — the previously validated
-        // credentials remain intact.
 
-        // Clear rate-limit record on successful validated login
-        if (credentialsValidated) {
+        if (aeriesVerified || authMethod === "local_new") {
+          await credentialsRef.set(credUpdate, {merge: true});
+        } else {
+          // Hash fallback — only update the hash if password matched
+          await credentialsRef.set({
+            passwordHash: credUpdate.passwordHash,
+            updatedAt: credUpdate.updatedAt,
+          }, {merge: true});
+        }
+
+        // Clear rate-limit record on successful login
+        if (aeriesVerified || authMethod !== "hash_fallback") {
           await clearRateLimit(cleanUsername);
         }
 
         // ------------------------------------------------------------------
-        // 6. Upsert teacher profile
+        // 7. Upsert teacher profile
         // ------------------------------------------------------------------
-        // Ensure parent doc exists so syncAttendance can discover teachers
         await db.collection("teachers").doc(uid).set({
-          aeriesUsername: cleanUsername,
+          username: cleanUsername,
           lastLogin: admin.firestore.FieldValue.serverTimestamp(),
         }, {merge: true});
 
@@ -609,39 +665,41 @@ exports.authenticateTeacher = onCall(
         if (isNewUser) {
           await profileRef.set({
             displayName: cleanUsername,
-            aeriesUsername: cleanUsername,
+            username: cleanUsername,
+            aeriesVerified: aeriesVerified,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             lastLogin: admin.firestore.FieldValue.serverTimestamp(),
           });
         } else {
-          await profileRef.set(
-              {
-                lastLogin: admin.firestore.FieldValue.serverTimestamp(),
-                aeriesUsername: cleanUsername,
-              },
-              {merge: true},
-          );
+          const profileUpdate = {
+            lastLogin: admin.firestore.FieldValue.serverTimestamp(),
+          };
+          if (aeriesVerified) profileUpdate.aeriesVerified = true;
+          await profileRef.set(profileUpdate, {merge: true});
         }
 
         // ------------------------------------------------------------------
-        // 7. Generate Firebase custom auth token
+        // 8. Generate Firebase custom auth token
         // ------------------------------------------------------------------
         const customToken = await admin.auth().createCustomToken(uid);
 
         logger.info("Authentication successful", {
           uid: uid,
           username: cleanUsername,
-          validated: credentialsValidated,
+          authMethod,
+          aeriesVerified,
           isNewUser: isNewUser,
         });
 
-        return {
+        const result = {
           success: true,
           token: customToken,
           uid: uid,
           displayName: cleanUsername,
-          validated: credentialsValidated,
+          validated: aeriesVerified,
         };
+        if (aeriesWarning) result.aeriesWarning = aeriesWarning;
+        return result;
       } catch (err) {
         // Re-throw HttpsErrors (already structured)
         if (err instanceof HttpsError) {

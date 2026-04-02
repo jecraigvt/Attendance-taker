@@ -944,15 +944,21 @@
         <!-- Kiosk Prompt -->
         <div class="bg-white rounded-xl border border-gray-200 p-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-1">Kiosk Prompt</h2>
-          <p class="text-sm text-gray-500 mb-3">Customize the sign-in message shown on the kiosk screen.</p>
-          <div class="flex gap-2">
+          <p class="text-sm text-gray-500 mb-3">Customize the sign-in message and input placeholder on the kiosk screen.</p>
+          <div class="space-y-2">
             <input type="text" id="settings-kiosk-prompt"
-              class="flex-1 p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+              class="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
               placeholder="Enter your 5-digit student ID or teacher PIN." />
-            <button id="settings-save-kiosk-prompt"
-              class="bg-red-700 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-red-800 transition-all disabled:opacity-50">
-              Save
-            </button>
+            <div class="flex gap-2">
+              <input type="text" id="settings-kiosk-placeholder"
+                class="flex-1 p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                placeholder="_ _ _ _ _" />
+              <button id="settings-save-kiosk-prompt"
+                class="bg-red-700 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-red-800 transition-all disabled:opacity-50">
+                Save
+              </button>
+            </div>
+            <p class="text-xs text-gray-400">Placeholder examples: _ _ _ _ _ (5 digits) or _ _ _ _ (4 digits)</p>
           </div>
           <p id="settings-kiosk-prompt-status" class="hidden text-xs mt-2 font-medium"></p>
         </div>
@@ -3661,6 +3667,10 @@
             const promptEl = document.getElementById('kiosk-prompt-text');
             if (promptEl) promptEl.textContent = cfgSnap.data().kioskPrompt;
           }
+          if (cfgSnap.exists() && cfgSnap.data().kioskPlaceholder) {
+            const idInput = document.getElementById('student-id-input');
+            if (idInput) idInput.placeholder = cfgSnap.data().kioskPlaceholder;
+          }
           if (cfgSnap.exists() && cfgSnap.data().teacherDisplayName) {
             teacherDisplayName = cfgSnap.data().teacherDisplayName;
           }
@@ -6037,6 +6047,12 @@
               const promptEl = document.getElementById('kiosk-prompt-text');
               if (promptEl) promptEl.textContent = snap.data().kioskPrompt;
             }
+            if (snap.data().kioskPlaceholder) {
+              const phInput = document.getElementById('settings-kiosk-placeholder');
+              if (phInput) phInput.value = snap.data().kioskPlaceholder;
+              const idInput = document.getElementById('student-id-input');
+              if (idInput) idInput.placeholder = snap.data().kioskPlaceholder;
+            }
           }
         }).catch(() => {});
       }
@@ -6067,17 +6083,24 @@
         });
       }
 
-      // Save kiosk prompt
+      // Save kiosk prompt + placeholder
       const saveKioskPromptBtn = document.getElementById('settings-save-kiosk-prompt');
+      const kioskPlaceholderInput = document.getElementById('settings-kiosk-placeholder');
       if (saveKioskPromptBtn && kioskPromptInput) {
         saveKioskPromptBtn.addEventListener('click', async () => {
           const prompt = kioskPromptInput.value.trim();
-          if (!prompt) { kioskPromptInput.focus(); return; }
+          const placeholder = kioskPlaceholderInput ? kioskPlaceholderInput.value.trim() : '';
           const statusEl = document.getElementById('settings-kiosk-prompt-status');
           try {
-            await setDoc(doc(db, teacherPath('config/main')), { kioskPrompt: prompt }, { merge: true });
+            const update = {};
+            if (prompt) update.kioskPrompt = prompt;
+            if (placeholder) update.kioskPlaceholder = placeholder;
+            if (Object.keys(update).length === 0) { kioskPromptInput.focus(); return; }
+            await setDoc(doc(db, teacherPath('config/main')), update, { merge: true });
             const promptEl = document.getElementById('kiosk-prompt-text');
-            if (promptEl) promptEl.textContent = prompt;
+            if (promptEl && prompt) promptEl.textContent = prompt;
+            const idInput = document.getElementById('student-id-input');
+            if (idInput && placeholder) idInput.placeholder = placeholder;
             statusEl.textContent = 'Saved!';
             statusEl.className = 'text-xs mt-2 font-medium text-green-600';
             statusEl.classList.remove('hidden');

@@ -2603,7 +2603,7 @@
     // ===== Config & Constants =====
     const MAX_GROUP = 13;                    // groups 1..13
     const GROUP_CAP = g => g === 6 ? 2 : 3;    // cap 2 for group 6, else 3
-    const FRONT_SET = new Set([1, 2, 12, 13]);  // "front of room" groups
+    // Front-of-room groups are configured per-period in the Seating tab (no hardcoded default)
     const LATE_TO_THIRD = new Set([9, 10]);   // groups that should be last to receive a 3rd person
     const TARDY_AFTER_NTH = 5;              // Start marking tardy after Nth sign-in for the period
     const TARDY_GRACE_MINUTES = 8;           // Minutes after Nth sign-in before marking late
@@ -4883,16 +4883,17 @@
         if (counts[g] < cap(g) && !avoid.has(g)) pool.push(g);
       }
 
-      if (needsFront) {
-        const frontPool = pool.filter(g => FRONT_SET.has(g));
+      const cfgFront = new Set((currentSeatingConfig.frontGroups || []).map(Number));
+      if (needsFront && cfgFront.size > 0) {
+        const frontPool = pool.filter(g => cfgFront.has(g));
         if (frontPool.length) pool = frontPool;
       }
 
       if (pool.length === 0) {
         let alt = [];
         for (let g = 1; g <= MAX_GROUP; g++) if (isAllowed(g) && counts[g] < cap(g)) alt.push(g);
-        if (needsFront) {
-          const frontAlt = alt.filter(g => FRONT_SET.has(g));
+        if (needsFront && cfgFront.size > 0) {
+          const frontAlt = alt.filter(g => cfgFront.has(g));
           pool = frontAlt.length ? frontAlt : alt;
         } else {
           pool = alt;

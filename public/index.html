@@ -3096,6 +3096,8 @@
       studentIdInput.value = '';
       signInButton.disabled = true;
       studentIdInput.focus();
+      // Restart QR if enabled (canvas needs visible parent to render)
+      if (qrInterval) { stopQrSession(); startQrSession(); }
     }
 
     function showDashboard() {
@@ -5516,9 +5518,9 @@
     }
 
     async function writeQrSession(code) {
-      if (!db || !teacherUid) return;
+      if (!db || !teacherUid) return false;
       const period = periodSelect ? periodSelect.value : '';
-      if (!period) return;
+      if (!period) return false;
       const kioskId = getKioskId();
       const sessionRef = doc(db, teacherPath('config/main/qrSessions/' + kioskId));
       await setDoc(sessionRef, {
@@ -5526,6 +5528,7 @@
         period,
         createdAt: serverTimestamp(),
       });
+      return true;
     }
 
     async function renderQrCode(code) {

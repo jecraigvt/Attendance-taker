@@ -1691,3 +1691,353 @@ async function syncTeacher(uid, dateStr) {
 
   logger.info("Sync log written", {uid, results: syncResults});
 }
+
+// ---------------------------------------------------------------------------
+// Cloud Function: qrSignIn
+// ---------------------------------------------------------------------------
+
+/**
+ * HTTPS Callable: qrSignIn
+ * Validates a QR session code, finds the student on the roster,
+ * determines tardy status, runs seating algorithm, and writes the
+ * attendance record. Returns name, group, seat, and status.
+ *
+ * No auth required — called from the anonymous mobile sign-in page.
+ * Security relies on the rotating QR code being valid and unexpired.
+ */
+exports.qrSignIn = onCall(
+    {
+      region: "us-central1",
+    },
+    async (request) => {
+      const {teacherUid, code, studentId, deviceId, previousStudentId} =
+        request.data || {};
+
+      // Input validation
+      if (!teacherUid || !code || !studentId) {
+        return {success: false, error: "invalid_input",
+          message: "Missing required fields."};
+      }
+
+      const sid = String(studentId).trim();
+      const cleanDeviceId = deviceId ? String(deviceId).trim() : null;
+
+      try {
+        // 1. Check QR sign-in is enabled for this teacher
+        const configSnap = await db.collection("teachers").doc(teacherUid)
+            .collection("config").doc("main").get();
+        if (!configSnap.exists ||
+            configSnap.data().qrSignInEnabled !== true) {
+          return {success: false, error: "qr_disabled",
+            message: "QR sign-in is not enabled for this class."};
+        }
+
+        // 2. Find a valid QR session matching this code
+        const sessionsSnap = await db.collection("teachers").doc(teacherUid)
+            .collection("config").doc("main")
+            .collection("qrSessions").get();
+
+        let matchedSession = null;
+        const serverNow = Date.now();
+        sessionsSnap.forEach((doc) => {
+          const data = doc.data();
+          if (data.code !== code) return;
+          const createdMs = data.createdAt && data.createdAt.toMillis ?
+            data.createdAt.toMillis() : 0;
+          // 150 seconds = 2 min + 30s grace
+          if (serverNow - createdMs <= 150000) {
+            matchedSession = data;
+          }
+        });
+
+        if (!matchedSession) {
+          return {success: false, error: "expired",
+            message: "This code has expired. Scan the QR code again."};
+        }
+
+        const period = matchedSession.period;
+        if (!period) {
+          return {success: false, error: "no_period",
+            message: "No period is active. Please wait for your teacher."};
+        }
+
+        const dateStr = toPacific(new Date()).toLocaleDateString("en-CA");
+
+        // 3. Find student on roster (check matched period + others)
+        const rostersSnap = await db.collection("teachers").doc(teacherUid)
+            .collection("rosters").get();
+        let foundPeriod = null;
+        let foundStudent = null;
+        const cleanSid = sid.replace(/^0+/, "") || "0";
+
+        // Check matched period first
+        rostersSnap.forEach((doc) => {
+          const roster = doc.data().roster || [];
+          const p = doc.id;
+          const match = roster.find((s) =>
+            (String(s.StudentID || "").replace(/^0+/, "") || "0") === cleanSid,
+          );
+          if (match) {
+            if (p === period && !foundStudent) {
+              foundPeriod = p;
+              foundStudent = match;
+            } else if (!foundStudent) {
+              foundPeriod = p;
+              foundStudent = match;
+            }
+          }
+        });
+
+        if (!foundStudent) {
+          return {success: false, error: "not_found",
+            message: "Student ID not found on the roster."};
+        }
+
+        const displayName =
+          (foundStudent.preferredName || foundStudent.FirstName || "") +
+          " " + (foundStudent.LastName || "");
+        const studentName = displayName.trim();
+
+        // 4-10. Use a Firestore transaction for the read-check-write
+        const basePath =
+          `teachers/${teacherUid}/attendance/${dateStr}/periods/${foundPeriod}`;
+        const studentDocRef = db.doc(`${basePath}/students/${sid}`);
+
+        const result = await db.runTransaction(async (txn) => {
+          const existingDoc = await txn.get(studentDocRef);
+
+          // 4. Already signed in? Return existing record
+          if (existingDoc.exists) {
+            const d = existingDoc.data();
+            return {
+              success: true, recheck: true,
+              name: d.Name || studentName,
+              group: d.Group || null,
+              seat: d.Seat || null,
+              status: d.Status || "On Time",
+              period: foundPeriod,
+              message: "Already signed in.",
+            };
+          }
+
+          // 5. Determine tardy status
+          const studentsSnap = await txn.get(
+              db.collection(`${basePath}/students`),
+          );
+          const signedInCount = studentsSnap.size;
+          let status = "On Time";
+
+          if (signedInCount >= 5) {
+            // TARDY_AFTER_NTH = 5, TARDY_GRACE_MINUTES = 8
+            const timestamps = [];
+            studentsSnap.forEach((doc) => {
+              const ts = doc.data().Timestamp;
+              if (ts && ts.toMillis) timestamps.push(ts.toMillis());
+            });
+            timestamps.sort((a, b) => a - b);
+            if (timestamps.length >= 5) {
+              const nthTs = timestamps[4]; // 0-indexed, 5th student
+              const graceEnd = nthTs + 8 * 60 * 1000;
+              if (Date.now() > graceEnd) status = "Late";
+            }
+          }
+
+          // 6. Run seating algorithm
+          let group = null;
+          let seat = null;
+          const seatingConfig = configSnap.data().seatingConfig;
+
+          if (seatingConfig && seatingConfig.enabled !== false) {
+            const cfg = seatingConfig;
+            const override = foundPeriod && cfg.perPeriodOverrides &&
+              cfg.perPeriodOverrides[String(foundPeriod)];
+            let effectiveCfg;
+            if (override) {
+              if (override.enabled === false) {
+                effectiveCfg = null; // seating disabled for this period
+              } else {
+                effectiveCfg = {
+                  numGroups: override.numGroups || cfg.numGroups || 6,
+                  defaultSeatsPerGroup:
+                    override.defaultSeatsPerGroup ||
+                    cfg.defaultSeatsPerGroup || 4,
+                  perGroupOverrides: cfg.perGroupOverrides || {},
+                  frontGroups: override.frontGroups ||
+                    cfg.frontGroups || [],
+                };
+              }
+            } else {
+              effectiveCfg = {
+                numGroups: cfg.numGroups || 6,
+                defaultSeatsPerGroup: cfg.defaultSeatsPerGroup || 4,
+                perGroupOverrides: cfg.perGroupOverrides || {},
+                frontGroups: cfg.frontGroups || [],
+              };
+            }
+
+            if (effectiveCfg) {
+              const numGroups = effectiveCfg.numGroups;
+              const getCap = (g) => {
+                const key = String(g);
+                if (effectiveCfg.perGroupOverrides &&
+                    effectiveCfg.perGroupOverrides[key] != null) {
+                  return effectiveCfg.perGroupOverrides[key];
+                }
+                return effectiveCfg.defaultSeatsPerGroup;
+              };
+
+              // Count occupancy
+              const counts = {};
+              for (let g = 1; g <= numGroups; g++) counts[g] = 0;
+              studentsSnap.forEach((doc) => {
+                const g = doc.data().Group;
+                if (typeof g === "number" && g >= 1 && g <= numGroups) {
+                  counts[g] = (counts[g] || 0) + 1;
+                }
+              });
+
+              // Front-row logic
+              const frontRow = configSnap.data().frontRow || [];
+              const frontRowSet = new Set(
+                  Array.isArray(frontRow) ? frontRow.map(String) : [],
+              );
+              const needsFront = frontRowSet.has(sid);
+              const frontGroups = new Set(
+                  (effectiveCfg.frontGroups || [])
+                      .map(Number).filter((g) => g >= 1 && g <= numGroups),
+              );
+
+              // Avoid pairs
+              const avoidPairs = configSnap.data().avoidPairs || [];
+              const avoid = new Set();
+              if (Array.isArray(avoidPairs)) {
+                for (const pair of avoidPairs) {
+                  if (!Array.isArray(pair) || pair.length < 2) continue;
+                  if (pair.includes(sid)) {
+                    const other = pair.find((x) => x !== sid);
+                    studentsSnap.forEach((doc) => {
+                      if (String(doc.data().StudentID) === other &&
+                          typeof doc.data().Group === "number") {
+                        avoid.add(doc.data().Group);
+                      }
+                    });
+                  }
+                }
+              }
+
+              // Reserve seats for unsigned front-row students
+              const signedInIds = new Set();
+              studentsSnap.forEach((doc) =>
+                signedInIds.add(String(doc.data().StudentID)));
+              const unsignedFront = [...frontRowSet]
+                  .filter((id) => !signedInIds.has(id)).length;
+              const reservedPerGroup = frontGroups.size > 0 ?
+                Math.ceil(unsignedFront / frontGroups.size) : 0;
+
+              // Build pool
+              let pool = [];
+              for (let g = 1; g <= numGroups; g++) {
+                const effCap = (frontGroups.has(g) && !needsFront) ?
+                  Math.max(0, getCap(g) - reservedPerGroup) : getCap(g);
+                if (counts[g] < effCap && !avoid.has(g)) pool.push(g);
+              }
+
+              // Front preference
+              if (needsFront && frontGroups.size > 0) {
+                const fp = [];
+                for (let g = 1; g <= numGroups; g++) {
+                  if (frontGroups.has(g) && counts[g] < getCap(g) &&
+                      !avoid.has(g)) fp.push(g);
+                }
+                if (fp.length) pool = fp;
+              }
+
+              // Retry without avoid
+              if (pool.length === 0) {
+                for (let g = 1; g <= numGroups; g++) {
+                  if (counts[g] < getCap(g)) pool.push(g);
+                }
+              }
+
+              if (pool.length > 0) {
+                // Pick least-full, random among ties
+                const minOcc = Math.min(...pool.map((g) => counts[g]));
+                const leastFull = pool.filter((g) => counts[g] === minOcc);
+                group = leastFull[
+                    Math.floor(Math.random() * leastFull.length)];
+                // Seat = next seat number in that group
+                seat = (counts[group] || 0) + 1;
+              }
+            }
+          }
+
+          // 7. Write attendance record
+          const record = {
+            StudentID: sid,
+            Name: studentName,
+            Date: new Date().toLocaleDateString(),
+            SignInTime: new Date().toLocaleTimeString(),
+            Status: status,
+            Period: foundPeriod,
+            Group: group,
+            Timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            signInMethod: "qr",
+          };
+          if (seat != null) record.Seat = seat;
+          if (cleanDeviceId) record.deviceId = cleanDeviceId;
+
+          // Check for device alert
+          let deviceAlert = false;
+          if (cleanDeviceId && previousStudentId &&
+              String(previousStudentId) !== sid) {
+            deviceAlert = true;
+            record.deviceAlert = true;
+          }
+
+          txn.set(studentDocRef, record);
+
+          return {
+            success: true, recheck: false,
+            name: studentName,
+            group, seat, status,
+            period: foundPeriod,
+            deviceAlert,
+          };
+        });
+
+        // Write device alert outside transaction (non-critical)
+        if (result.deviceAlert && cleanDeviceId) {
+          try {
+            const alertRef = db.doc(
+                `teachers/${teacherUid}/attendance/${dateStr}` +
+                `/deviceAlerts/${cleanDeviceId}`);
+            const alertSnap = await alertRef.get();
+            const existing = alertSnap.exists ?
+              (alertSnap.data().students || []) : [];
+            const prevName = previousStudentId || "Unknown";
+            const names = [...new Set([...existing, prevName, studentName])];
+            await alertRef.set({
+              students: names,
+              period: result.period,
+              timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          } catch (e) {
+            logger.warn("Device alert write failed", {error: e.message});
+          }
+        }
+
+        logger.info("QR sign-in successful", {
+          teacherUid, studentId: sid, period: result.period,
+          recheck: result.recheck, deviceAlert: result.deviceAlert,
+        });
+
+        return result;
+      } catch (err) {
+        logger.error("qrSignIn error", {
+          teacherUid, studentId: sid, error: err.message,
+        });
+        return {success: false, error: "server_error",
+          message: "Sign-in failed. Please try again."};
+      }
+    },
+);

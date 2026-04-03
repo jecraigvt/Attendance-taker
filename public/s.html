@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Sign In</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background: #111827; min-height: 100dvh; display: flex; align-items: center; justify-content: center; }
+    .card { max-width: 380px; width: 100%; }
+  </style>
+</head>
+<body class="p-4">
+  <div class="card">
+    <!-- Loading state -->
+    <div id="state-loading" class="text-center">
+      <div class="animate-spin w-8 h-8 border-4 border-white border-t-transparent rounded-full mx-auto mb-3"></div>
+      <p class="text-gray-400 text-sm">Signing in...</p>
+    </div>
+
+    <!-- ID entry (first time) -->
+    <div id="state-entry" class="hidden text-center">
+      <h1 class="text-2xl font-bold text-white mb-2">Sign In</h1>
+      <p class="text-gray-400 text-sm mb-6">Enter your student ID</p>
+      <input type="text" id="id-input" inputmode="numeric" maxlength="10" autocomplete="off"
+        class="w-full text-center text-4xl font-mono p-4 rounded-lg border-2 border-gray-600 bg-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 mb-4"
+        placeholder="_ _ _ _ _" />
+      <button id="submit-btn" disabled
+        class="w-full bg-red-700 text-white font-bold text-lg py-3 rounded-lg hover:bg-red-800 transition-all disabled:opacity-40">
+        Sign In
+      </button>
+      <p id="entry-error" class="hidden text-red-400 text-sm mt-3"></p>
+    </div>
+
+    <!-- Device warning -->
+    <div id="state-warning" class="hidden text-center">
+      <div class="text-4xl mb-3">&#9888;&#65039;</div>
+      <p class="text-white font-semibold mb-1">This device is registered to</p>
+      <p id="warning-name" class="text-xl font-bold text-red-400 mb-4"></p>
+      <p class="text-gray-400 text-sm mb-6">Signing in as a different student will be flagged.</p>
+      <button id="warning-continue"
+        class="w-full bg-gray-700 text-white font-bold py-3 rounded-lg hover:bg-gray-600 transition-all mb-3">
+        Continue Anyway
+      </button>
+      <button id="warning-cancel"
+        class="w-full bg-red-700 text-white font-bold py-3 rounded-lg hover:bg-red-800 transition-all">
+        Sign in as <span id="warning-cancel-name"></span>
+      </button>
+    </div>
+
+    <!-- Success -->
+    <div id="state-success" class="hidden text-center">
+      <div class="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+        <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+        </svg>
+      </div>
+      <p class="text-gray-400 text-sm">Welcome,</p>
+      <h2 id="success-name" class="text-3xl font-bold text-white mb-2"></h2>
+      <div id="success-seat" class="hidden bg-gray-800 rounded-xl p-4 mb-3">
+        <p id="success-group" class="text-xl font-bold text-red-400"></p>
+        <p id="success-seat-num" class="text-gray-400"></p>
+      </div>
+      <p id="success-period" class="text-gray-500 text-sm mb-1"></p>
+      <p id="success-time" class="text-gray-500 text-sm mb-1"></p>
+      <p id="success-status" class="text-sm font-semibold mb-4"></p>
+      <p id="success-recheck" class="hidden text-gray-500 text-xs italic mb-3">You were already signed in.</p>
+      <button id="not-me-btn" class="text-gray-500 text-xs underline hover:text-gray-300">Not you? Tap here.</button>
+    </div>
+
+    <!-- Error -->
+    <div id="state-error" class="hidden text-center">
+      <div class="text-4xl mb-3">&#10060;</div>
+      <p id="error-message" class="text-white font-semibold mb-4"></p>
+      <button id="error-retry"
+        class="w-full bg-gray-700 text-white font-bold py-3 rounded-lg hover:bg-gray-600 transition-all">
+        Try Again
+      </button>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDelYxA0NGfGakd3T8wd8PxfZu2sFJZrDA",
+      authDomain: "attendance-taker-56916.firebaseapp.com",
+      projectId: "attendance-taker-56916",
+      storageBucket: "attendance-taker-56916.firebasestorage.app",
+      messagingSenderId: "709493952046",
+      appId: "1:709493952046:web:3266a6e1d706bdfe9059bf"
+    };
+    const app = initializeApp(firebaseConfig);
+    const functions = getFunctions(app, 'us-central1');
+
+    // Parse URL params
+    const params = new URLSearchParams(window.location.search);
+    const teacherUid = params.get('t');
+    const code = params.get('c');
+
+    // DOM refs
+    const stateLoading = document.getElementById('state-loading');
+    const stateEntry = document.getElementById('state-entry');
+    const stateWarning = document.getElementById('state-warning');
+    const stateSuccess = document.getElementById('state-success');
+    const stateError = document.getElementById('state-error');
+    const idInput = document.getElementById('id-input');
+    const submitBtn = document.getElementById('submit-btn');
+
+    function showState(state) {
+      [stateLoading, stateEntry, stateWarning, stateSuccess, stateError]
+        .forEach(el => el.classList.add('hidden'));
+      state.classList.remove('hidden');
+    }
+
+    // Device ID (persistent)
+    function getDeviceId() {
+      let id = localStorage.getItem('qr_device_id');
+      if (!id) {
+        id = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36);
+        localStorage.setItem('qr_device_id', id);
+      }
+      return id;
+    }
+
+    // Stored student info
+    function getStoredStudent() {
+      const id = localStorage.getItem('qr_student_id');
+      const name = localStorage.getItem('qr_student_name');
+      return id ? { id, name } : null;
+    }
+    function storeStudent(id, name) {
+      localStorage.setItem('qr_student_id', id);
+      localStorage.setItem('qr_student_name', name || '');
+    }
+    function clearStoredStudent() {
+      localStorage.removeItem('qr_student_id');
+      localStorage.removeItem('qr_student_name');
+    }
+
+    // Sign in via Cloud Function
+    async function doSignIn(studentId, previousStudentId) {
+      const qrSignIn = httpsCallable(functions, 'qrSignIn');
+      const result = await qrSignIn({
+        teacherUid,
+        code,
+        studentId,
+        deviceId: getDeviceId(),
+        previousStudentId: previousStudentId || null,
+      });
+      return result.data;
+    }
+
+    function showSuccess(data) {
+      document.getElementById('success-name').textContent = data.name;
+      if (data.group) {
+        document.getElementById('success-group').textContent = 'Group ' + data.group;
+        document.getElementById('success-seat-num').textContent = data.seat ? 'Seat ' + data.seat : '';
+        document.getElementById('success-seat').classList.remove('hidden');
+      } else {
+        document.getElementById('success-seat').classList.add('hidden');
+      }
+      document.getElementById('success-period').textContent = 'Period ' + data.period;
+      document.getElementById('success-time').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const statusEl = document.getElementById('success-status');
+      statusEl.textContent = data.status;
+      statusEl.className = 'text-sm font-semibold mb-4 ' + (data.status === 'Late' ? 'text-yellow-400' : 'text-green-400');
+      document.getElementById('success-recheck').classList.toggle('hidden', !data.recheck);
+      storeStudent(data.studentId || idInput.value.trim(), data.name);
+      showState(stateSuccess);
+    }
+
+    function showError(msg) {
+      document.getElementById('error-message').textContent = msg;
+      showState(stateError);
+    }
+
+    // Entry form handlers
+    idInput.addEventListener('input', () => {
+      submitBtn.disabled = idInput.value.trim().length < 3;
+    });
+    idInput.addEventListener('keyup', (e) => {
+      if (e.key === 'Enter' && !submitBtn.disabled) submitBtn.click();
+    });
+
+    submitBtn.addEventListener('click', async () => {
+      const sid = idInput.value.trim();
+      if (!sid) return;
+      const stored = getStoredStudent();
+
+      // If device is registered to someone else, show warning
+      if (stored && stored.id !== sid) {
+        document.getElementById('warning-name').textContent = stored.name || stored.id;
+        document.getElementById('warning-cancel-name').textContent = stored.name || stored.id;
+
+        document.getElementById('warning-continue').onclick = async () => {
+          showState(stateLoading);
+          try {
+            const data = await doSignIn(sid, stored.id);
+            if (data.success) { showSuccess(data); }
+            else { showError(data.message || 'Sign-in failed.'); }
+          } catch (e) { showError('Connection error. Try again.'); }
+        };
+
+        document.getElementById('warning-cancel').onclick = async () => {
+          showState(stateLoading);
+          try {
+            const data = await doSignIn(stored.id, null);
+            if (data.success) { showSuccess(data); }
+            else { showError(data.message || 'Sign-in failed.'); }
+          } catch (e) { showError('Connection error. Try again.'); }
+        };
+
+        showState(stateWarning);
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Signing in...';
+      try {
+        const data = await doSignIn(sid, null);
+        if (data.success) { showSuccess(data); }
+        else {
+          document.getElementById('entry-error').textContent = data.message || 'Sign-in failed.';
+          document.getElementById('entry-error').classList.remove('hidden');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Sign In';
+        }
+      } catch (e) {
+        showError('Connection error. Try again.');
+      }
+    });
+
+    // Not-me button
+    document.getElementById('not-me-btn').addEventListener('click', () => {
+      clearStoredStudent();
+      idInput.value = '';
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Sign In';
+      document.getElementById('entry-error').classList.add('hidden');
+      showState(stateEntry);
+      idInput.focus();
+    });
+
+    // Retry button
+    document.getElementById('error-retry').addEventListener('click', () => {
+      showState(stateEntry);
+      idInput.focus();
+    });
+
+    // ===== Init =====
+    async function init() {
+      if (!teacherUid || !code) {
+        showError('Invalid QR code. Scan the code on the screen.');
+        return;
+      }
+
+      const stored = getStoredStudent();
+      if (stored) {
+        // Auto-sign-in for returning student
+        try {
+          const data = await doSignIn(stored.id, null);
+          if (data.success) {
+            showSuccess(data);
+          } else if (data.error === 'not_found') {
+            // Stored ID no longer on roster
+            clearStoredStudent();
+            showState(stateEntry);
+            idInput.focus();
+          } else {
+            showError(data.message || 'Sign-in failed.');
+          }
+        } catch (e) {
+          showError('Connection error. Try again.');
+        }
+      } else {
+        // First time — show ID entry
+        showState(stateEntry);
+        idInput.focus();
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

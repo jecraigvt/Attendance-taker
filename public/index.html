@@ -7,6 +7,7 @@
   <title>Attendance & Group Assigner — Ultimate Edition</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet" />
   <style>
     body {
@@ -955,6 +956,18 @@
           <p id="settings-display-name-status" class="hidden text-xs mt-2 font-medium"></p>
         </div>
 
+        <!-- QR Sign-In Toggle -->
+        <div class="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-1">QR Code Sign-In</h2>
+          <p class="text-sm text-gray-500 mb-3">Allow students to sign in by scanning a QR code with their phone.</p>
+          <label class="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" id="settings-qr-enabled"
+              class="w-5 h-5 rounded border-gray-300 text-red-600 focus:ring-red-500" />
+            <span class="text-sm font-medium text-gray-700">Enable QR Sign-In</span>
+          </label>
+          <p id="settings-qr-status" class="hidden text-xs mt-2 font-medium"></p>
+        </div>
+
         <!-- Kiosk Prompt -->
         <div class="bg-white rounded-xl border border-gray-200 p-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-1">Kiosk Prompt</h2>
@@ -1149,6 +1162,12 @@
         </div>
 
         <div id="message-view" class="w-full max-w-md text-center hidden"></div>
+
+        <!-- QR Code for mobile sign-in -->
+        <div id="kiosk-qr-container" class="hidden fixed bottom-6 right-6 flex flex-col items-center z-30">
+          <canvas id="kiosk-qr-canvas" width="120" height="120" class="rounded-lg bg-white p-1"></canvas>
+          <p class="text-xs text-gray-400 mt-1">Scan to sign in</p>
+        </div>
       </div><!-- kiosk-panel -->
 
     </div><!-- flex -->
@@ -3693,6 +3712,7 @@
       if (unsubAttendance) { unsubAttendance(); unsubAttendance = null; }
       if (unsubCurrentPeriod) { unsubCurrentPeriod(); unsubCurrentPeriod = null; }
       if (unsubSyncStatus) { unsubSyncStatus(); unsubSyncStatus = null; }
+      stopQrSession();
       if (auth) { try { await signOut(auth); } catch { } }
       // Reset UI
       teacherNameDisplay.classList.add('hidden');
@@ -3721,6 +3741,9 @@
           }
           if (cfgSnap.exists() && cfgSnap.data().teacherDisplayName) {
             teacherDisplayName = cfgSnap.data().teacherDisplayName;
+          }
+          if (cfgSnap.exists() && cfgSnap.data().qrSignInEnabled === true) {
+            startQrSession();
           }
         } catch (e) { console.warn('[onTeacherAuthenticated] config load failed', e); }
       }
@@ -5470,6 +5493,82 @@
     }
     window.manualCheckIn = manualCheckIn;
 
+    // ===== QR Code Session Management =====
+    let qrInterval = null;
+    let qrKioskId = null;
+
+    function getKioskId() {
+      if (qrKioskId) return qrKioskId;
+      let id = localStorage.getItem('kioskInstanceId');
+      if (!id) {
+        id = crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36) + Date.now().toString(36)).slice(0, 16);
+        localStorage.setItem('kioskInstanceId', id);
+      }
+      qrKioskId = id;
+      return id;
+    }
+
+    function generateQrCode() {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      let code = '';
+      for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)];
+      return code;
+    }
+
+    async function writeQrSession(code) {
+      if (!db || !teacherUid) return;
+      const period = periodSelect ? periodSelect.value : '';
+      if (!period) return;
+      const kioskId = getKioskId();
+      const sessionRef = doc(db, teacherPath('config/main/qrSessions/' + kioskId));
+      await setDoc(sessionRef, {
+        code,
+        period,
+        createdAt: serverTimestamp(),
+      });
+    }
+
+    async function renderQrCode(code) {
+      const container = document.getElementById('kiosk-qr-container');
+      const canvas = document.getElementById('kiosk-qr-canvas');
+      if (!container || !canvas || typeof QRCode === 'undefined') return;
+      const url = window.location.origin + '/s.html?t=' + teacherUid + '&c=' + code;
+      try {
+        await QRCode.toCanvas(canvas, url, { width: 120, margin: 1 });
+        container.classList.remove('hidden');
+      } catch (e) {
+        console.error('[QR] render failed', e);
+      }
+    }
+
+    async function rotateQrCode() {
+      try {
+        const code = generateQrCode();
+        await writeQrSession(code);
+        await renderQrCode(code);
+      } catch (e) {
+        console.error('[QR] rotation failed', e);
+      }
+    }
+
+    function startQrSession() {
+      if (qrInterval) return; // already running
+      rotateQrCode(); // immediate first render
+      qrInterval = setInterval(rotateQrCode, 120000); // every 2 minutes
+    }
+
+    function stopQrSession() {
+      if (qrInterval) { clearInterval(qrInterval); qrInterval = null; }
+      const container = document.getElementById('kiosk-qr-container');
+      if (container) container.classList.add('hidden');
+      // Clean up session doc
+      if (db && teacherUid) {
+        const kioskId = getKioskId();
+        const sessionRef = doc(db, teacherPath('config/main/qrSessions/' + kioskId));
+        deleteDoc(sessionRef).catch(() => {});
+      }
+    }
+
     // ===== Attendance Insights Engine =====
     let insightsTimer = null;
     let lastInsightsPeriod = null;
@@ -6160,6 +6259,9 @@
               const idInput = document.getElementById('student-id-input');
               if (idInput) idInput.placeholder = snap.data().kioskPlaceholder;
             }
+            // QR sign-in toggle
+            const qrToggle = document.getElementById('settings-qr-enabled');
+            if (qrToggle) qrToggle.checked = snap.data().qrSignInEnabled === true;
           }
         }).catch(() => {});
       }
@@ -6167,6 +6269,27 @@
       // Event listeners — only attach once to prevent stacking on repeated showDashboard() calls
       if (_settingsListenersAttached) return;
       _settingsListenersAttached = true;
+
+      // QR sign-in toggle
+      const qrToggle = document.getElementById('settings-qr-enabled');
+      if (qrToggle) {
+        qrToggle.addEventListener('change', async () => {
+          const enabled = qrToggle.checked;
+          const statusEl = document.getElementById('settings-qr-status');
+          try {
+            await setDoc(doc(db, teacherPath('config/main')), { qrSignInEnabled: enabled }, { merge: true });
+            if (enabled) { startQrSession(); } else { stopQrSession(); }
+            statusEl.textContent = enabled ? 'QR sign-in enabled!' : 'QR sign-in disabled.';
+            statusEl.className = 'text-xs mt-2 font-medium ' + (enabled ? 'text-green-600' : 'text-gray-500');
+            statusEl.classList.remove('hidden');
+            setTimeout(() => statusEl.classList.add('hidden'), 2000);
+          } catch (err) {
+            statusEl.textContent = 'Failed: ' + err.message;
+            statusEl.className = 'text-xs mt-2 font-medium text-red-600';
+            statusEl.classList.remove('hidden');
+          }
+        });
+      }
 
       // Save teacher display name
       const saveDisplayNameBtn = document.getElementById('settings-save-display-name');

@@ -65,7 +65,6 @@
       <p id="success-time" class="text-gray-500 text-sm mb-1"></p>
       <p id="success-status" class="text-sm font-semibold mb-4"></p>
       <p id="success-recheck" class="hidden text-gray-500 text-xs italic mb-3">You were already signed in.</p>
-      <button id="not-me-btn" class="text-gray-500 text-xs underline hover:text-gray-300">Not you? Tap here.</button>
     </div>
 
     <!-- Error -->
@@ -232,16 +231,6 @@
       }
     });
 
-    // Not-me button — shows ID entry but keeps stored student for device tracking
-    document.getElementById('not-me-btn').addEventListener('click', () => {
-      // Do NOT clear stored student — entering a different ID will trigger the device alert
-      idInput.value = '';
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Sign In';
-      document.getElementById('entry-error').classList.add('hidden');
-      showState(stateEntry);
-      idInput.focus();
-    });
 
     // Retry button
     document.getElementById('error-retry').addEventListener('click', () => {

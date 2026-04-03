@@ -7,7 +7,6 @@
   <title>Attendance & Group Assigner — Ultimate Edition</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet" />
   <style>
     body {
@@ -1165,7 +1164,7 @@
 
         <!-- QR Code for mobile sign-in -->
         <div id="kiosk-qr-container" class="hidden fixed bottom-6 right-6 flex flex-col items-center z-30">
-          <canvas id="kiosk-qr-canvas" width="120" height="120" class="rounded-lg bg-white p-1"></canvas>
+          <img id="kiosk-qr-img" width="130" height="130" class="rounded-lg" alt="QR Code" />
           <p class="text-xs text-gray-400 mt-1">Scan to sign in</p>
         </div>
       </div><!-- kiosk-panel -->
@@ -5531,24 +5530,22 @@
       return true;
     }
 
-    async function renderQrCode(code) {
+    function renderQrCode(code) {
       const container = document.getElementById('kiosk-qr-container');
-      const canvas = document.getElementById('kiosk-qr-canvas');
-      if (!container || !canvas || typeof QRCode === 'undefined') return;
+      const img = document.getElementById('kiosk-qr-img');
+      if (!container || !img) { console.error('[QR] container or img not found'); return; }
       const url = window.location.origin + '/s.html?t=' + teacherUid + '&c=' + code;
-      try {
-        await QRCode.toCanvas(canvas, url, { width: 120, margin: 1 });
-        container.classList.remove('hidden');
-      } catch (e) {
-        console.error('[QR] render failed', e);
-      }
+      const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=' + encodeURIComponent(url);
+      img.src = qrUrl;
+      container.classList.remove('hidden');
+      console.log('[QR] rendered:', url);
     }
 
     async function rotateQrCode() {
       try {
         const code = generateQrCode();
-        await writeQrSession(code);
-        await renderQrCode(code);
+        renderQrCode(code); // show QR immediately
+        await writeQrSession(code); // then persist to Firestore
       } catch (e) {
         console.error('[QR] rotation failed', e);
       }

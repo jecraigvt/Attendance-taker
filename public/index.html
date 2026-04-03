@@ -5517,17 +5517,25 @@
     }
 
     async function writeQrSession(code) {
-      if (!db || !teacherUid) return false;
+      if (!db || !teacherUid) { console.warn('[QR] no db or teacherUid'); return false; }
       const period = periodSelect ? periodSelect.value : '';
-      if (!period) return false;
+      if (!period) { console.warn('[QR] no period selected — writing session without period'); }
       const kioskId = getKioskId();
-      const sessionRef = doc(db, teacherPath('config/main/qrSessions/' + kioskId));
-      await setDoc(sessionRef, {
-        code,
-        period,
-        createdAt: serverTimestamp(),
-      });
-      return true;
+      const path = teacherPath('config/main/qrSessions/' + kioskId);
+      console.log('[QR] writing session to:', path, { code, period });
+      try {
+        const sessionRef = doc(db, path);
+        await setDoc(sessionRef, {
+          code,
+          period: period || '',
+          createdAt: serverTimestamp(),
+        });
+        console.log('[QR] session written successfully');
+        return true;
+      } catch (e) {
+        console.error('[QR] writeQrSession FAILED:', e);
+        return false;
+      }
     }
 
     function renderQrCode(code) {

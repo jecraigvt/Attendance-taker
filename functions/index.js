@@ -1737,6 +1737,16 @@ exports.qrSignIn = onCall(
             .collection("config").doc("main")
             .collection("qrSessions").get();
 
+        logger.info("QR sessions found", {
+          teacherUid, code,
+          count: sessionsSnap.size,
+          sessions: sessionsSnap.docs.map((d) => ({
+            id: d.id, code: d.data().code,
+            period: d.data().period,
+            hasCreatedAt: !!d.data().createdAt,
+          })),
+        });
+
         let matchedSession = null;
         const serverNow = Date.now();
         sessionsSnap.forEach((doc) => {
@@ -1744,6 +1754,10 @@ exports.qrSignIn = onCall(
           if (data.code !== code) return;
           const createdMs = data.createdAt && data.createdAt.toMillis ?
             data.createdAt.toMillis() : 0;
+          logger.info("QR code match candidate", {
+            code: data.code, createdMs, serverNow,
+            ageSeconds: Math.round((serverNow - createdMs) / 1000),
+          });
           // 150 seconds = 2 min + 30s grace
           if (serverNow - createdMs <= 150000) {
             matchedSession = data;

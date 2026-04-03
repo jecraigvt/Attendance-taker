@@ -232,9 +232,9 @@
       }
     });
 
-    // Not-me button
+    // Not-me button — shows ID entry but keeps stored student for device tracking
     document.getElementById('not-me-btn').addEventListener('click', () => {
-      clearStoredStudent();
+      // Do NOT clear stored student — entering a different ID will trigger the device alert
       idInput.value = '';
       submitBtn.disabled = true;
       submitBtn.textContent = 'Sign In';

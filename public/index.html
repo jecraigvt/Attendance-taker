@@ -1176,28 +1176,35 @@
       <!-- ================== KIOSK ================== -->
       <div id="kiosk-panel"
         class="w-full p-8 md:p-12 flex flex-col items-center justify-center bg-gray-900 text-white min-h-[80vh] md:min-h-0">
-        <div id="kiosk-view" class="w-full max-w-sm text-center">
+        <div id="kiosk-view" class="w-full max-w-lg text-center">
           <h1 class="text-4xl font-bold mb-2">Welcome Warriors!</h1>
           <p id="kiosk-teacher-name" class="text-sm text-red-400 font-semibold mb-1 hidden"></p>
           <p id="kiosk-prompt-text" class="text-lg text-gray-400">Enter your 5-digit student ID or teacher PIN.</p>
           <p id="period-indicator" class="mt-2 text-sm text-white/90"></p>
 
-          <input type="text" id="student-id-input" maxlength="10"
-            class="w-full mt-6 text-center text-5xl font-mono p-4 rounded-lg border-4 border-gray-600 bg-white text-gray-900 focus:outline-none focus:ring-4 focus:ring-red-500"
-            placeholder="_ _ _ _ _" />
-          <button id="sign-in-button"
-            class="w-full mt-6 bg-red-700 text-white font-bold text-xl py-4 rounded-lg shadow-md hover:bg-red-800 transform hover:-translate-y-1 transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-white disabled:opacity-50 disabled:transform-none"
-            disabled>Sign In</button>
+          <div class="flex items-start gap-5 mt-6">
+            <!-- Sign-in input -->
+            <div class="flex-1">
+              <input type="text" id="student-id-input" maxlength="10"
+                class="w-full text-center text-5xl font-mono p-4 rounded-lg border-4 border-gray-600 bg-white text-gray-900 focus:outline-none focus:ring-4 focus:ring-red-500"
+                placeholder="_ _ _ _ _" />
+              <button id="sign-in-button"
+                class="w-full mt-4 bg-red-700 text-white font-bold text-xl py-4 rounded-lg shadow-md hover:bg-red-800 transform hover:-translate-y-1 transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-white disabled:opacity-50 disabled:transform-none"
+                disabled>Sign In</button>
+            </div>
+
+            <!-- QR Code (inline, hidden when disabled) -->
+            <div id="kiosk-qr-container" class="hidden flex flex-col items-center flex-shrink-0">
+              <div class="rounded-xl border-2 border-gray-600 bg-white p-2">
+                <img id="kiosk-qr-img" width="130" height="130" class="rounded-lg" alt="QR Code" />
+              </div>
+              <p class="text-xs text-gray-500 mt-2">Scan to sign in</p>
+            </div>
+          </div>
 
         </div>
 
         <div id="message-view" class="w-full max-w-md text-center hidden"></div>
-
-        <!-- QR Code for mobile sign-in -->
-        <div id="kiosk-qr-container" class="hidden fixed bottom-6 right-6 flex flex-col items-center z-30">
-          <img id="kiosk-qr-img" width="130" height="130" class="rounded-lg" alt="QR Code" />
-          <p class="text-xs text-gray-400 mt-1">Scan to sign in</p>
-        </div>
       </div><!-- kiosk-panel -->
 
     </div><!-- flex -->

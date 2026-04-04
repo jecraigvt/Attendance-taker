@@ -967,6 +967,37 @@
           <p id="settings-qr-status" class="hidden text-xs mt-2 font-medium"></p>
         </div>
 
+        <!-- Tardy Settings -->
+        <div class="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-1">Tardy Marking</h2>
+          <p class="text-sm text-gray-500 mb-3">Tardies start after a set number of students sign in. Once that threshold is reached, a grace period begins. Anyone signing in after the grace period is marked late.</p>
+          <div class="space-y-3">
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" id="settings-tardy-enabled" checked
+                class="w-5 h-5 rounded border-gray-300 text-red-600 focus:ring-red-500" />
+              <span class="text-sm font-medium text-gray-700">Enable tardy marking</span>
+            </label>
+            <div id="tardy-options" class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Students before tardy starts</label>
+                <input type="number" id="settings-tardy-nth" min="1" max="30" value="5"
+                  class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Grace period (minutes)</label>
+                <input type="number" id="settings-tardy-grace" min="1" max="30" value="8"
+                  class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500" />
+              </div>
+            </div>
+            <p class="text-xs text-gray-400">Example: With 5 students and 8 min grace, once the 5th student signs in, anyone arriving more than 8 minutes later is marked tardy.</p>
+            <button id="settings-save-tardy"
+              class="bg-red-700 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-red-800 transition-all disabled:opacity-50">
+              Save
+            </button>
+            <p id="settings-tardy-status" class="hidden text-xs font-medium"></p>
+          </div>
+        </div>
+
         <!-- Kiosk Prompt -->
         <div class="bg-white rounded-xl border border-gray-200 p-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-1">Kiosk Prompt</h2>
@@ -2636,8 +2667,9 @@
     const GROUP_CAP = g => g === 6 ? 2 : 3;    // cap 2 for group 6, else 3
     // Front-of-room groups are configured per-period in the Seating tab (no hardcoded default)
     const LATE_TO_THIRD = new Set([9, 10]);   // groups that should be last to receive a 3rd person
-    const TARDY_AFTER_NTH = 5;              // Start marking tardy after Nth sign-in for the period
-    const TARDY_GRACE_MINUTES = 8;           // Minutes after Nth sign-in before marking late
+    let TARDY_ENABLED = true;                // Can be toggled off in Settings
+    let TARDY_AFTER_NTH = 5;                // Start marking tardy after Nth sign-in for the period
+    let TARDY_GRACE_MINUTES = 8;            // Minutes after Nth sign-in before marking late
     const PERIOD_SWITCH_NTH = 2;             // Switch global period after Nth student from new period
 
     // CSV RFC 4180 quoting — doubles internal quotes
@@ -3745,6 +3777,12 @@
           }
           if (cfgSnap.exists() && cfgSnap.data().qrSignInEnabled === true) {
             startQrSession();
+          }
+          // Tardy settings
+          if (cfgSnap.exists()) {
+            if (cfgSnap.data().tardyEnabled === false) TARDY_ENABLED = false;
+            if (cfgSnap.data().tardyAfterNth != null) TARDY_AFTER_NTH = cfgSnap.data().tardyAfterNth;
+            if (cfgSnap.data().tardyGraceMinutes != null) TARDY_GRACE_MINUTES = cfgSnap.data().tardyGraceMinutes;
           }
         } catch (e) { console.warn('[onTeacherAuthenticated] config load failed', e); }
       }
@@ -5014,6 +5052,7 @@
 
     function statusForNow() {
       if (!periodSelect.value) return 'On Time';
+      if (!TARDY_ENABLED) return 'On Time';
 
       // Need at least TARDY_AFTER_NTH students signed in before anyone can be late
       if (periodAttendanceLog.length < TARDY_AFTER_NTH) return 'On Time';
@@ -6001,7 +6040,7 @@
         return;
       }
 
-      const tardyInfo = count >= TARDY_AFTER_NTH ? 'tardy active' : `${TARDY_AFTER_NTH - count} more before tardy`;
+      const tardyInfo = !TARDY_ENABLED ? 'tardies off' : count >= TARDY_AFTER_NTH ? 'tardy active' : `${TARDY_AFTER_NTH - count} more before tardy`;
       periodIndicator.textContent = `Period ${p} \u2022 ${how} \u2022 ${count} signed in (${tardyInfo}) \u2022 ${nowStr}`;
     }
 
@@ -6270,6 +6309,18 @@
             // QR sign-in toggle
             const qrToggle = document.getElementById('settings-qr-enabled');
             if (qrToggle) qrToggle.checked = snap.data().qrSignInEnabled === true;
+            // Tardy settings
+            const tardyToggle = document.getElementById('settings-tardy-enabled');
+            const tardyNthInput = document.getElementById('settings-tardy-nth');
+            const tardyGraceInput = document.getElementById('settings-tardy-grace');
+            const tardyOptions = document.getElementById('tardy-options');
+            if (tardyToggle) {
+              const enabled = snap.data().tardyEnabled !== false;
+              tardyToggle.checked = enabled;
+              if (tardyOptions) tardyOptions.style.opacity = enabled ? '1' : '0.4';
+            }
+            if (tardyNthInput && snap.data().tardyAfterNth != null) tardyNthInput.value = snap.data().tardyAfterNth;
+            if (tardyGraceInput && snap.data().tardyGraceMinutes != null) tardyGraceInput.value = snap.data().tardyGraceMinutes;
           }
         }).catch(() => {});
       }
@@ -6294,6 +6345,42 @@
           } catch (err) {
             statusEl.textContent = 'Failed: ' + err.message;
             statusEl.className = 'text-xs mt-2 font-medium text-red-600';
+            statusEl.classList.remove('hidden');
+          }
+        });
+      }
+
+      // Tardy settings
+      const tardyToggle = document.getElementById('settings-tardy-enabled');
+      const tardyOptions = document.getElementById('tardy-options');
+      if (tardyToggle && tardyOptions) {
+        tardyToggle.addEventListener('change', () => {
+          tardyOptions.style.opacity = tardyToggle.checked ? '1' : '0.4';
+        });
+      }
+      const saveTardyBtn = document.getElementById('settings-save-tardy');
+      if (saveTardyBtn) {
+        saveTardyBtn.addEventListener('click', async () => {
+          const enabled = document.getElementById('settings-tardy-enabled').checked;
+          const nth = Math.max(1, Math.min(30, parseInt(document.getElementById('settings-tardy-nth').value) || 5));
+          const grace = Math.max(1, Math.min(30, parseInt(document.getElementById('settings-tardy-grace').value) || 8));
+          const statusEl = document.getElementById('settings-tardy-status');
+          try {
+            await setDoc(doc(db, teacherPath('config/main')), {
+              tardyEnabled: enabled,
+              tardyAfterNth: nth,
+              tardyGraceMinutes: grace,
+            }, { merge: true });
+            TARDY_ENABLED = enabled;
+            TARDY_AFTER_NTH = nth;
+            TARDY_GRACE_MINUTES = grace;
+            statusEl.textContent = 'Saved!';
+            statusEl.className = 'text-xs font-medium text-green-600';
+            statusEl.classList.remove('hidden');
+            setTimeout(() => statusEl.classList.add('hidden'), 2000);
+          } catch (err) {
+            statusEl.textContent = 'Failed: ' + err.message;
+            statusEl.className = 'text-xs font-medium text-red-600';
             statusEl.classList.remove('hidden');
           }
         });

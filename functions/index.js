@@ -1225,21 +1225,26 @@ exports.syncAttendance = onSchedule(
       }
 
       // 2. Check which teachers are due for sync this invocation
-      const dueTeachers = [];
-      for (const uid of teacherUids) {
+      // Filter by schedule first (no I/O), then batch-read configs
+      const scheduleDue = teacherUids.filter((uid) => {
         const check = shouldSyncNow(uid, now);
-        if (!check.sync) continue;
+        return check.sync;
+      });
 
-        // Skip teachers who haven't enabled sync
-        const configSnap = await db
-            .collection("teachers").doc(uid)
-            .collection("config").doc("main").get();
-        if (!configSnap.exists || configSnap.data().syncEnabled !== true) {
-          continue;
-        }
-
-        dueTeachers.push(uid);
-      }
+      // Parallel config reads for schedule-due teachers
+      const configResults = await Promise.allSettled(
+          scheduleDue.map(async (uid) => {
+            const configSnap = await db
+                .collection("teachers").doc(uid)
+                .collection("config").doc("main").get();
+            const enabled = configSnap.exists &&
+              configSnap.data().syncEnabled === true;
+            return {uid, enabled};
+          }),
+      );
+      const dueTeachers = configResults
+          .filter((r) => r.status === "fulfilled" && r.value.enabled)
+          .map((r) => r.value.uid);
 
       if (dueTeachers.length === 0) {
         logger.info("No teachers due for sync this cycle", {
@@ -1254,19 +1259,32 @@ exports.syncAttendance = onSchedule(
         totalTeachers: teacherUids.length,
       });
 
-      // 3. Process each due teacher
-      for (const uid of dueTeachers) {
-        try {
-          await syncTeacher(uid, dateStr);
-        } catch (err) {
-          logger.error("syncAttendance failed for teacher", {
-            uid, error: err.message,
-          });
+      // 3. Process due teachers in batches of 2
+      // (each syncTeacher launches Puppeteer — ~300-400MB per browser,
+      //  peaks higher during navigation; 2 is safe within 2GiB)
+      const SYNC_BATCH_SIZE = 2;
+      let syncedCount = 0;
+      let failedCount = 0;
+      for (let i = 0; i < dueTeachers.length; i += SYNC_BATCH_SIZE) {
+        const batch = dueTeachers.slice(i, i + SYNC_BATCH_SIZE);
+        const results = await Promise.allSettled(
+            batch.map((uid) => syncTeacher(uid, dateStr)),
+        );
+        for (let j = 0; j < results.length; j++) {
+          if (results[j].status === "rejected") {
+            failedCount++;
+            logger.error("syncAttendance failed for teacher", {
+              uid: batch[j], error: results[j].reason?.message || "unknown",
+            });
+          } else {
+            syncedCount++;
+          }
         }
       }
 
       logger.info("syncAttendance complete", {
-        dateStr, synced: dueTeachers.length,
+        dateStr, synced: syncedCount, failed: failedCount,
+        total: dueTeachers.length,
       });
     },
 );
@@ -1304,78 +1322,86 @@ async function syncTeacher(uid, dateStr) {
     return;
   }
 
-  // --- Read attendance data from Firestore ---
+  // --- Read attendance data from Firestore (parallel period reads) ---
   const periods = ["0", "1", "2", "2A", "2B", "3", "4", "5", "6", "7"];
-  const settledPeriods = []; // { period, students: [{StudentID, status}] }
 
-  for (const period of periods) {
-    const basePath =
-      `teachers/${uid}/attendance/${dateStr}/periods/${period}`;
+  const periodResults = await Promise.all(periods.map(async (period) => {
+    try {
+      const basePath =
+        `teachers/${uid}/attendance/${dateStr}/periods/${period}`;
 
-    const periodDoc = await db.doc(basePath).get();
-    if (!periodDoc.exists) continue;
+      const periodDoc = await db.doc(basePath).get();
+      if (!periodDoc.exists) return null;
 
-    const roster = (periodDoc.data().roster_snapshot || []);
-    if (roster.length === 0) continue;
+      const roster = (periodDoc.data().roster_snapshot || []);
+      if (roster.length === 0) return null;
 
-    // Get signed-in students
-    const studentsSnap = await db.collection(`${basePath}/students`).get();
-    const signedIn = {};
-    studentsSnap.forEach((doc) => {
-      signedIn[doc.id] = doc.data();
-    });
-
-    // --- Settle logic ---
-    const timestamps = [];
-    for (const data of Object.values(signedIn)) {
-      const ts = data.Timestamp;
-      if (ts && ts.toDate) {
-        timestamps.push(ts.toDate());
-      }
-    }
-
-    if (timestamps.length < MIN_STUDENTS_BEFORE_SYNC) {
-      logger.info("Period not settled — too few sign-ins", {
-        uid, period, count: timestamps.length,
+      // Get signed-in students
+      const studentsSnap = await db.collection(`${basePath}/students`).get();
+      const signedIn = {};
+      studentsSnap.forEach((doc) => {
+        signedIn[doc.id] = doc.data();
       });
-      continue;
-    }
 
-    timestamps.sort((a, b) => a - b);
-    const nthTimestamp = timestamps[MIN_STUDENTS_BEFORE_SYNC - 1];
-    const minutesElapsed = (Date.now() - nthTimestamp.getTime()) / 60000;
-
-    if (minutesElapsed < PERIOD_SETTLE_MINUTES) {
-      logger.info("Period not settled — too recent", {
-        uid, period, minutesElapsed: Math.round(minutesElapsed),
-      });
-      continue;
-    }
-
-    // --- Build student list for this period ---
-    const students = [];
-    for (const student of roster) {
-      const sid = student.StudentID;
-      if (!sid) continue;
-
-      if (signedIn[sid]) {
-        const rawStatus = signedIn[sid].Status || "On Time";
-        students.push({
-          StudentID: sid,
-          status: normalizeStatus(rawStatus),
-          rawStatus,
-        });
-      } else {
-        students.push({
-          StudentID: sid,
-          status: "Absent",
-          rawStatus: "Absent",
-        });
+      // --- Settle logic ---
+      const timestamps = [];
+      for (const data of Object.values(signedIn)) {
+        const ts = data.Timestamp;
+        if (ts && ts.toDate) {
+          timestamps.push(ts.toDate());
+        }
       }
-    }
 
-    settledPeriods.push({period, students});
-  }
+      if (timestamps.length < MIN_STUDENTS_BEFORE_SYNC) {
+        logger.info("Period not settled — too few sign-ins", {
+          uid, period, count: timestamps.length,
+        });
+        return null;
+      }
+
+      timestamps.sort((a, b) => a - b);
+      const nthTimestamp = timestamps[MIN_STUDENTS_BEFORE_SYNC - 1];
+      const minutesElapsed = (Date.now() - nthTimestamp.getTime()) / 60000;
+
+      if (minutesElapsed < PERIOD_SETTLE_MINUTES) {
+        logger.info("Period not settled — too recent", {
+          uid, period, minutesElapsed: Math.round(minutesElapsed),
+        });
+        return null;
+      }
+
+      // --- Build student list for this period ---
+      const students = [];
+      for (const student of roster) {
+        const sid = student.StudentID;
+        if (!sid) continue;
+
+        if (signedIn[sid]) {
+          const rawStatus = signedIn[sid].Status || "On Time";
+          students.push({
+            StudentID: sid,
+            status: normalizeStatus(rawStatus),
+            rawStatus,
+          });
+        } else {
+          students.push({
+            StudentID: sid,
+            status: "Absent",
+            rawStatus: "Absent",
+          });
+        }
+      }
+
+      return {period, students};
+    } catch (err) {
+      logger.warn("Period read failed — skipping", {
+        uid, period, error: err.message,
+      });
+      return null;
+    }
+  }));
+
+  const settledPeriods = periodResults.filter((r) => r !== null);
 
   if (settledPeriods.length === 0) {
     logger.info("No settled periods to sync", {uid});
@@ -1777,30 +1803,44 @@ exports.qrSignIn = onCall(
 
         const dateStr = toPacific(new Date()).toLocaleDateString("en-CA");
 
-        // 3. Find student on roster (check matched period + others)
-        const rostersSnap = await db.collection("teachers").doc(teacherUid)
-            .collection("rosters").get();
+        // 3. Find student on roster (check matched period first, then others)
         let foundPeriod = null;
         let foundStudent = null;
         const cleanSid = sid.replace(/^0+/, "") || "0";
 
-        // Check matched period first
-        rostersSnap.forEach((doc) => {
-          const roster = doc.data().roster || [];
-          const p = doc.id;
+        // Try matched period first (single doc read instead of full collection)
+        const periodRosterSnap = await db.collection("teachers")
+            .doc(teacherUid).collection("rosters").doc(period).get();
+        if (periodRosterSnap.exists) {
+          const roster = periodRosterSnap.data().roster || [];
           const match = roster.find((s) =>
             (String(s.StudentID || "").replace(/^0+/, "") || "0") === cleanSid,
           );
           if (match) {
-            if (p === period && !foundStudent) {
-              foundPeriod = p;
-              foundStudent = match;
-            } else if (!foundStudent) {
+            foundPeriod = period;
+            foundStudent = match;
+          }
+        }
+
+        // Fall back to all rosters only if not found in matched period
+        if (!foundStudent) {
+          const rostersSnap = await db.collection("teachers").doc(teacherUid)
+              .collection("rosters").get();
+          rostersSnap.forEach((doc) => {
+            if (foundStudent) return;
+            const roster = doc.data().roster || [];
+            const p = doc.id;
+            if (p === period) return; // Already checked
+            const match = roster.find((s) =>
+              (String(s.StudentID || "").replace(/^0+/, "") || "0") ===
+                cleanSid,
+            );
+            if (match) {
               foundPeriod = p;
               foundStudent = match;
             }
-          }
-        });
+          });
+        }
 
         if (!foundStudent) {
           return {success: false, error: "not_found",

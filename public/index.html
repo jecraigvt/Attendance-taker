@@ -1175,7 +1175,7 @@
 
       <!-- ================== KIOSK ================== -->
       <div id="kiosk-panel"
-        class="w-full p-8 md:p-12 flex flex-col items-center justify-center bg-gray-900 text-white min-h-[80vh] md:min-h-0">
+        class="relative w-full p-8 md:p-12 flex flex-col items-center justify-center bg-gray-900 text-white min-h-[80vh] md:min-h-0">
         <div id="kiosk-view" class="w-full max-w-lg text-center">
           <h1 class="text-4xl font-bold mb-2">Welcome Warriors!</h1>
           <p id="kiosk-teacher-name" class="text-sm text-red-400 font-semibold mb-1 hidden"></p>
@@ -1195,20 +1195,32 @@
 
             <!-- QR Code (inline, hidden when disabled) -->
             <div id="kiosk-qr-container" class="hidden flex flex-col items-center flex-shrink-0">
-              <div class="rounded-xl border-2 border-gray-600 bg-white p-2">
+              <div id="kiosk-qr-clickable" class="rounded-xl border-2 border-gray-600 bg-white p-2 cursor-pointer hover:border-red-500 transition-colors" title="Click to enlarge">
                 <img id="kiosk-qr-img" width="130" height="130" class="rounded-lg" alt="QR Code" />
               </div>
-              <p class="text-xs text-gray-500 mt-2">Scan to sign in</p>
+              <p class="text-xs text-gray-500 mt-2">Tap to enlarge</p>
             </div>
           </div>
 
         </div>
 
         <div id="message-view" class="w-full max-w-md text-center hidden"></div>
+
+        <!-- Forgot PIN link — subtle, bottom-right -->
+        <button id="kiosk-forgot-pin" class="absolute bottom-3 right-4 text-xs text-gray-600 hover:text-gray-400 transition-colors">Forgot PIN?</button>
       </div><!-- kiosk-panel -->
 
     </div><!-- flex -->
   </div><!-- container -->
+
+  <!-- Enlarged QR Code Overlay -->
+  <div id="qr-enlarged-overlay" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center cursor-pointer" style="backdrop-filter:blur(4px)">
+    <div class="bg-white rounded-3xl p-8 shadow-2xl text-center" onclick="event.stopPropagation()">
+      <img id="qr-enlarged-img" class="rounded-xl" alt="QR Code" />
+      <p class="text-gray-500 text-sm mt-4">Scan to sign in</p>
+      <button id="qr-enlarged-close" class="mt-4 text-gray-400 hover:text-gray-600 text-sm transition-colors">Close</button>
+    </div>
+  </div>
 
   <!-- Fullscreen Timer Overlay -->
   <div id="timer-fullscreen" class="hidden fixed inset-0 timer-fs-bg text-white z-50 overflow-hidden">
@@ -3011,6 +3023,23 @@
           showLoginScreen();
         });
 
+        // Kiosk forgot-PIN link — clears Firestore PIN so re-auth forces new PIN setup
+        const kioskForgotPin = document.getElementById('kiosk-forgot-pin');
+        if (kioskForgotPin) kioskForgotPin.addEventListener('click', async () => {
+          if (!confirm('Forgot your PIN? You will need to sign in with Aeries to set a new one.')) return;
+          // Clear PIN from Firestore so login flow triggers PIN setup
+          if (db && teacherUid) {
+            try {
+              const configRef = doc(db, teacherPath('config/main'));
+              await setDoc(configRef, { kioskPin: null, updatedAt: serverTimestamp() }, { merge: true });
+            } catch (e) { console.warn('[forgot-pin] failed to clear Firestore PIN', e); }
+          }
+          clearKioskBinding();
+          teacherUid = null; teacherName = null; teacherPin = null;
+          if (auth) signOut(auth).catch(() => {});
+          showLoginScreen();
+        });
+
         // Logout listener
         if (teacherLogoutBtn) teacherLogoutBtn.addEventListener('click', handleTeacherLogout);
 
@@ -3839,6 +3868,12 @@
         periodSelect.appendChild(opt);
       });
 
+      // Auto-select first period if none is set yet
+      if (!periodSelect.value && rosterPeriods.length > 0) {
+        periodSelect.value = rosterPeriods[0];
+        onPeriodChange();
+      }
+
       if (sessionStorage.getItem('periodOverride') === 'true') { isOverride = true; }
       updateUI();
       initSeatingUI();
@@ -3890,12 +3925,15 @@
           opt.textContent = `Period ${p}`;
           periodSelect.appendChild(opt);
         });
-        // Restore previous selection, or apply globalPeriod from Firebase
+        // Restore previous selection, or apply globalPeriod from Firebase, or auto-select first
         if (curVal) {
           periodSelect.value = curVal;
         } else if (globalPeriod && !isOverride) {
           periodSelect.value = globalPeriod;
           if (periodSelect.value === globalPeriod) onPeriodChange();
+        } else if (rosterPeriods.length > 0) {
+          periodSelect.value = rosterPeriods[0];
+          onPeriodChange();
         }
 
         const cur = periodSelect.value;
@@ -5126,12 +5164,15 @@
       }, 3000);
     }
 
-    // Match entered ID against stored ID, ignoring leading zeros
-    // e.g. "712" matches "00712", "0712", or "712"
+    // Match entered ID against stored ID
+    // Supports: leading-zero stripping (712 = 00712), and last-5-digit suffix match
+    // e.g. entered "34567" matches stored "1234567"
     function matchStudentId(storedId, enteredCode) {
       const stored = String(storedId || '').replace(/^0+/, '') || '0';
       const entered = String(enteredCode || '').replace(/^0+/, '') || '0';
-      return stored === entered;
+      if (stored === entered) return true;
+      // Last-5 suffix match: entered code matches the trailing digits of stored ID
+      return stored.length > entered.length && stored.endsWith(entered);
     }
 
     async function handleSignIn() {
@@ -5178,12 +5219,12 @@
         }
         // --- END: SMART SWITCH LOGIC ---
 
-        if (!p) {
-          showMessage('error', 'Period Not Set', 'Open the admin panel and select a period.');
+        if (!student) {
+          showMessage('error', 'ID Not Found', 'Please enter the last 5 digits of your ID.');
           return;
         }
-        if (!student) {
-          showMessage('error', 'ID Not Found', 'Please check your ID and try again.');
+        if (!p) {
+          showMessage('error', 'Period Not Set', 'Open the admin panel and select a period.');
           return;
         }
 
@@ -5584,16 +5625,48 @@
       }
     }
 
+    let currentQrDataUrl = null;
+
     function renderQrCode(code) {
       const container = document.getElementById('kiosk-qr-container');
       const img = document.getElementById('kiosk-qr-img');
       if (!container || !img) { console.error('[QR] container or img not found'); return; }
       const url = window.location.origin + '/s.html?t=' + teacherUid + '&c=' + code;
+      currentQrDataUrl = url;
       const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=' + encodeURIComponent(url);
       img.src = qrUrl;
       container.classList.remove('hidden');
       console.log('[QR] rendered:', url);
+      // Update enlarged overlay if it's currently open
+      const enlargedImg = document.getElementById('qr-enlarged-img');
+      const overlay = document.getElementById('qr-enlarged-overlay');
+      if (enlargedImg && overlay && !overlay.classList.contains('hidden')) {
+        enlargedImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=' + encodeURIComponent(url);
+      }
     }
+
+    // Enlarged QR overlay
+    (function() {
+      const clickTarget = document.getElementById('kiosk-qr-clickable');
+      const overlay = document.getElementById('qr-enlarged-overlay');
+      const enlargedImg = document.getElementById('qr-enlarged-img');
+      const closeBtn = document.getElementById('qr-enlarged-close');
+      if (!clickTarget || !overlay || !enlargedImg) return;
+
+      clickTarget.addEventListener('click', function() {
+        if (!currentQrDataUrl) return;
+        enlargedImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=' + encodeURIComponent(currentQrDataUrl);
+        overlay.classList.remove('hidden');
+      });
+
+      overlay.addEventListener('click', function() {
+        overlay.classList.add('hidden');
+      });
+
+      if (closeBtn) closeBtn.addEventListener('click', function() {
+        overlay.classList.add('hidden');
+      });
+    })();
 
     async function rotateQrCode() {
       try {

@@ -1,18 +1,16 @@
 {
   "student_cell": [
     "td[data-studentid='{student_id}']",
-    "td:has-text('{student_id}')",
+    "td:text-is('{student_id}')",
     "xpath=.//td[contains(@id, '{student_id}')]"
   ],
   "absent_checkbox": [
     "span[data-cd='A'] input",
-    "input[type='checkbox'][name*='Absent']",
-    "span:has-text('A') input[type='checkbox']"
+    "input[type='checkbox'][name*='Absent']"
   ],
   "tardy_checkbox": [
     "span[data-cd='T'] input",
-    "input[type='checkbox'][name*='Tardy']",
-    "span:has-text('T') input[type='checkbox']"
+    "input[type='checkbox'][name*='Tardy']"
   ],
   "period_dropdown": [
     "select",

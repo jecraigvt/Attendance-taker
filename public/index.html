@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Attendance & Group Assigner — Ultimate Edition</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet" />
   <style>
     body {
@@ -119,8 +120,8 @@
 
     .picker-tile.eliminated { opacity: 0 !important; transform: scale(0.3) !important; }
     .picker-tile.winner { background: rgba(185,28,28,0.3) !important; border-color: rgba(185,28,28,0.6) !important; color: white !important; z-index: 10; }
-    .picker-tile.spotlight-dim { opacity: 0.08 !important; }
-    .picker-tile.spotlight-lit { background: rgba(185,28,28,0.25); border-color: rgba(185,28,28,0.5); color: white; }
+    .picker-tile.spotlight-dim { opacity: 0.45 !important; }
+    .picker-tile.spotlight-lit { background: rgba(185,28,28,0.5); border-color: rgba(185,28,28,0.8); color: white; transform: scale(1.15); z-index: 10; text-shadow: 0 0 10px rgba(255,255,255,0.3); }
 
     .picker-slot-strip {
       display: flex;
@@ -158,23 +159,36 @@
   <!-- ================== LOGIN SCREEN ================== -->
   <div id="login-screen" class="hidden fixed inset-0 bg-gray-900 flex items-center justify-center z-50">
     <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm">
-      <h1 class="text-2xl font-bold text-gray-900 mb-1">Attendance Taker</h1>
-      <p class="text-sm text-gray-500 mb-6">Sign in with your Aeries credentials</p>
+      <h1 class="text-2xl font-bold text-gray-900 mb-1">Seat Assigner</h1>
+      <p class="text-sm text-gray-500 mb-6">Use your Aeries credentials for automatic roster fetching</p>
 
       <div id="login-error" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700"></div>
 
       <div class="space-y-4">
         <div>
-          <label for="login-username" class="block text-sm font-medium text-gray-700 mb-1">Aeries Username</label>
+          <label for="login-username" class="block text-sm font-medium text-gray-700 mb-1">Username</label>
           <input type="text" id="login-username" autocomplete="username"
             class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
             placeholder="username" />
         </div>
         <div>
           <label for="login-password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
-          <input type="password" id="login-password" autocomplete="current-password"
-            class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-            placeholder="password" />
+          <div class="relative">
+            <input type="password" id="login-password" autocomplete="current-password"
+              class="w-full p-3 pr-11 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+              placeholder="password" />
+            <button type="button" id="login-toggle-password"
+              class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+              tabindex="-1" aria-label="Toggle password visibility">
+              <svg id="login-eye-open" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+              </svg>
+              <svg id="login-eye-closed" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a9.97 9.97 0 014.306-5.394M6.228 6.228A9.96 9.96 0 0112 5c4.478 0 8.268 2.943 9.542 7a10.05 10.05 0 01-4.132 5.411M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/>
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="flex items-center gap-2">
           <input type="checkbox" id="login-remember" class="rounded" />
@@ -195,7 +209,7 @@
       <!-- Wizard Header / Progress -->
       <div class="px-8 pt-8 pb-4">
         <div class="flex items-center justify-between mb-1">
-          <h1 class="text-xl font-bold text-gray-900">Welcome to Attendance Taker</h1>
+          <h1 class="text-xl font-bold text-gray-900">Welcome to Seat Assigner</h1>
           <span id="wizard-step-label" class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Step 1 of 3</span>
         </div>
         <!-- Progress bar -->
@@ -222,8 +236,9 @@
             </svg>
           </div>
           <div>
-            <h2 class="text-lg font-semibold text-gray-900">Your Aeries credentials have been verified!</h2>
+            <h2 id="wizard-verified-title" class="text-lg font-semibold text-gray-900">Your Aeries credentials have been verified!</h2>
             <p class="text-sm text-gray-500 mt-0.5">You're signed in as <span id="wizard-username-display" class="font-medium text-gray-700"></span></p>
+            <p id="wizard-verified-note" class="hidden text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 mt-3"></p>
           </div>
         </div>
         <p class="text-sm text-gray-600 mb-6">Let's take a minute to set up your account. This only takes a moment and you won't need to do it again.</p>
@@ -262,7 +277,7 @@
             class="file-input-button flex items-center justify-center w-full bg-gray-100 text-gray-700 font-semibold py-2.5 rounded-lg hover:bg-gray-200 transition-all cursor-pointer text-sm">
             Upload CSV File
           </label>
-          <input type="file" id="wizard-roster-upload" accept=".csv" class="hidden" multiple />
+          <input type="file" id="wizard-roster-upload" accept=".csv,.xlsx,.xls" class="hidden" multiple />
         </div>
 
         <!-- Status message -->
@@ -398,8 +413,8 @@
       <input type="text" id="pin-entry-input" maxlength="10" autocomplete="off"
         class="w-full text-center text-4xl font-mono p-4 border-4 border-gray-300 rounded-lg focus:ring-4 focus:ring-red-500 focus:border-red-500 mb-4"
         placeholder="PIN" />
-      <button id="pin-entry-submit"
-        class="w-full bg-red-700 text-white font-bold py-3 rounded-lg hover:bg-red-800 transition-all mb-3">
+      <button id="pin-entry-submit" type="button"
+        class="w-full bg-red-600 text-white font-bold py-3 rounded-lg hover:bg-red-700 active:bg-red-800 transition-all mb-3 shadow-lg">
         Unlock
       </button>
       <button id="pin-forgot-link" class="text-sm text-red-600 hover:underline">Forgot PIN? Re-authenticate with Aeries</button>
@@ -501,27 +516,121 @@
               </div>
             </div>
 
-            <!-- Seating Exceptions (kept here for layout, also shown in Seating tab) -->
-            <div class="pt-6 border-t" id="attendance-exceptions-note">
-              <p class="text-xs text-gray-500 italic">Seating exceptions (front row / avoid pairs) have moved to the <button onclick="switchDashboardSection('seating')" class="text-red-600 underline hover:text-red-800">Seating tab</button>.</p>
-              <!-- Hidden inputs kept for JS compatibility -->
-              <textarea id="front-row-input" class="hidden"></textarea>
-              <textarea id="avoid-pairs-input" class="hidden"></textarea>
-              <button id="save-exceptions" class="hidden"></button>
-              <span id="exceptions-status" class="hidden"></span>
+            <!-- Sync to Aeries -->
+            <div class="pt-6 border-t">
+              <button id="attendance-sync-btn"
+                class="w-full flex items-center justify-center gap-2 text-sm font-bold py-2 px-4 rounded-lg bg-red-700 text-white hover:bg-red-800 transition-all disabled:opacity-50">
+                <svg id="attendance-sync-spinner" class="hidden animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                </svg>
+                Sync to Aeries
+              </button>
+              <p id="attendance-sync-status" class="hidden text-xs mt-1 text-center font-medium"></p>
             </div>
 
-            <!-- Quick launch -->
+            <!-- Attendance Corrections -->
             <div class="pt-6 border-t">
-              <p class="text-xs text-gray-500 italic">Timer, Name Picker, and more tools are in the <button onclick="switchDashboardSection('apps')" class="text-red-600 underline hover:text-red-800">Apps tab</button>.</p>
-              <!-- Hidden timer elements kept for JS compatibility -->
-              <input type="time" id="timer-target-input" class="hidden" />
-              <input type="number" id="timer-minutes-input" class="hidden" />
-              <div id="timer-display" class="hidden">00:00:00</div>
-              <p id="timer-status" class="hidden"></p>
-              <button id="timer-test-audio" class="hidden"></button>
-              <button id="timer-fullscreen-btn" class="hidden"></button>
+              <h3 class="text-sm font-semibold text-gray-700 mb-2">Attendance Corrections</h3>
+
+              <!-- Single student correction -->
+              <div id="correction-single" class="space-y-2 mb-3">
+                <select id="correction-student" class="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <option value="">Select a student...</option>
+                </select>
+                <select id="correction-date" class="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <option value="">Select a date...</option>
+                </select>
+                <p id="correction-date-loading" class="hidden text-xs text-gray-400 italic">Loading attendance history...</p>
+                <select id="correction-reason" class="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <option value="">Select correction reason...</option>
+                  <option value="Student was marked absent but was tardy.">Marked absent but was tardy</option>
+                  <option value="Student was marked absent by mistake.">Marked absent by mistake</option>
+                  <option value="Student was not marked absent but was absent.">Not marked absent but was absent</option>
+                  <option value="Student needs to be cleared for reasons provided in notes/comments.">Needs to be cleared (see notes)</option>
+                  <option value="Student was marked absent by substitue, I have verified that the student was present.">Sub marked absent, student was present</option>
+                </select>
+                <button id="correction-submit-btn"
+                  class="w-full text-center text-sm font-bold py-2 px-4 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all cursor-pointer">
+                  Single Student Correction
+                </button>
+              </div>
+
+              <!-- Entire period correction -->
+              <div class="pt-3 mt-3 border-t space-y-2">
+                <h4 class="text-xs font-semibold text-gray-600">Entire Period Correction</h4>
+                <div class="flex gap-2">
+                  <input type="date" id="period-correction-date" class="flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                  <select id="period-correction-period" class="flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    <option value="">Period...</option>
+                    <option value="0">0</option><option value="1">1</option><option value="2">2</option>
+                    <option value="3">3</option><option value="4">4</option><option value="5">5</option>
+                    <option value="6">6</option><option value="7">7</option>
+                  </select>
+                </div>
+                <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                  <input type="checkbox" id="period-correction-fullday" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                  Full day (opens a form for each period)
+                </label>
+                <button id="period-correction-btn"
+                  class="w-full text-center text-sm font-bold py-2 px-4 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all cursor-pointer">
+                  Period Correction
+                </button>
+                <p id="period-correction-status" class="hidden text-xs text-gray-400 italic"></p>
+              </div>
+
+              <!-- Plain form links -->
+              <div class="flex gap-2 pt-3 mt-3 border-t">
+                <a href="https://docs.google.com/forms/d/e/1FAIpQLSevvK08WkMZnrVvSACsW5PEid53rOoUvOqZPWA0S9heHdnNng/viewform"
+                  target="_blank" rel="noopener"
+                  class="flex-1 text-center text-xs py-1.5 px-3 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 transition-all">
+                  Blank Student Form
+                </a>
+                <a href="https://docs.google.com/forms/d/e/1FAIpQLSdvGPsETs-jY5iity2O3-jDEnIEhF-liLwQ2eWiKcXTIcHMYg/viewform"
+                  target="_blank" rel="noopener"
+                  class="flex-1 text-center text-xs py-1.5 px-3 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 transition-all">
+                  Blank Period Form
+                </a>
+              </div>
             </div>
+
+            <!-- Export (collapsed) -->
+            <details class="pt-4 border-t">
+              <summary class="text-xs font-semibold text-gray-500 cursor-pointer hover:text-gray-800">Export Attendance</summary>
+              <div class="mt-3 space-y-2">
+                <button id="export-csv"
+                  class="w-full bg-gray-600 text-white font-bold py-1.5 px-3 rounded-lg hover:bg-gray-700 transition-all text-xs">Download
+                  Today's Full Log</button>
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label for="start-date" class="block text-xs font-medium text-gray-600">Start</label>
+                    <input type="date" id="start-date"
+                      class="mt-1 block w-full p-1 text-xs border border-gray-300 rounded-md">
+                  </div>
+                  <div>
+                    <label for="end-date" class="block text-xs font-medium text-gray-600">End</label>
+                    <input type="date" id="end-date"
+                      class="mt-1 block w-full p-1 text-xs border border-gray-300 rounded-md">
+                  </div>
+                </div>
+                <button id="export-range-csv"
+                  class="w-full bg-blue-600 text-white font-bold py-1.5 px-3 rounded-lg hover:bg-blue-700 transition-all text-xs">Export
+                  Range</button>
+                <p id="export-status" class="text-xs mt-1 text-center font-medium"></p>
+              </div>
+            </details>
+
+            <!-- Hidden inputs kept for JS compatibility -->
+            <textarea id="front-row-input" class="hidden"></textarea>
+            <textarea id="avoid-pairs-input" class="hidden"></textarea>
+            <button id="save-exceptions" class="hidden"></button>
+            <span id="exceptions-status" class="hidden"></span>
+            <input type="time" id="timer-target-input" class="hidden" />
+            <input type="number" id="timer-minutes-input" class="hidden" />
+            <div id="timer-display" class="hidden">00:00:00</div>
+            <p id="timer-status" class="hidden"></p>
+            <button id="timer-test-audio" class="hidden"></button>
+            <button id="timer-fullscreen-btn" class="hidden"></button>
 
           </div><!-- End Left Column -->
 
@@ -531,14 +640,14 @@
             <!-- Live Data Panels -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <h3 class="text-xl font-semibold text-gray-800 mb-2">Currently Absent</h3>
+                <h3 class="text-xl font-semibold text-gray-800 mb-2 flex items-center justify-between">Currently Absent <span id="absent-pct" class="text-base font-bold"></span></h3>
                 <ul id="absent-list" class="text-sm space-y-1 h-96 overflow-y-auto bg-gray-100 p-3 rounded-md border">
                   <li class="text-gray-500">Select a period to see list.</li>
                 </ul>
               </div>
 
               <div>
-                <h3 class="text-xl font-semibold text-gray-800 mb-2">Group Assignments</h3>
+                <h3 class="text-xl font-semibold text-gray-800 mb-2 flex items-center justify-between">Currently Present <span id="present-pct" class="text-base font-bold"></span></h3>
                 <div id="group-report" class="space-y-3 h-96 overflow-y-auto bg-gray-100 p-3 rounded-md border">
                   <p class="text-gray-500">Students will appear here as they sign in.</p>
                 </div>
@@ -546,45 +655,24 @@
               </div>
             </div>
 
-            <!-- Actions -->
+            <!-- Attendance Insights -->
             <div class="pt-6 border-t space-y-3">
-              <h3 class="text-lg font-semibold text-gray-800">Export Attendance</h3>
-              <button id="export-csv"
-                class="w-full bg-red-700 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-800 transition-all">Download
-                Today's Full Log</button>
-
-              <div class="pt-2 border-t">
-                <p class="text-xs text-gray-500 my-2 text-center">Or, select a date range to export:</p>
-                <div class="grid grid-cols-2 gap-4">
-                  <div>
-                    <label for="start-date" class="block text-sm font-medium text-gray-700">Start Date</label>
-                    <input type="date" id="start-date"
-                      class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
-                  </div>
-                  <div>
-                    <label for="end-date" class="block text-sm font-medium text-gray-700">End Date</label>
-                    <input type="date" id="end-date"
-                      class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
-                  </div>
-                </div>
-                <button id="export-range-csv"
-                  class="w-full mt-4 bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-all">Export
-                  Selected Range</button>
-                <p id="export-status" class="text-xs mt-2 text-center font-medium"></p>
+              <div class="flex items-center justify-between">
+                <h3 class="text-lg font-semibold text-gray-800">Attendance Insights</h3>
+                <span id="insights-loading" class="hidden text-xs text-gray-400 italic">Analyzing...</span>
+              </div>
+              <div id="insights-list" class="space-y-2">
+                <p class="text-sm text-gray-400 italic">Select a period to see insights.</p>
               </div>
             </div>
 
-            <!-- Roster Management — moved to Roster tab -->
-            <div class="pt-6 border-t">
-              <p class="text-xs text-gray-500 italic">Roster management has moved to the <button onclick="switchDashboardSection('roster')" class="text-red-600 underline hover:text-red-800">Roster tab</button>.</p>
-              <!-- Hidden elements kept for JS compatibility -->
-              <p id="roster-status" class="hidden"></p>
-              <div id="roster-warning" class="hidden"></div>
-              <div id="roster-summary" class="hidden"></div>
-              <div id="roster-debug" class="hidden"></div>
-              <input type="file" id="roster-upload" accept=".csv" class="hidden" multiple />
-              <button id="clear-rosters" class="hidden"></button>
-            </div>
+            <!-- Hidden elements kept for JS compatibility -->
+            <p id="roster-status" class="hidden"></p>
+            <div id="roster-warning" class="hidden"></div>
+            <div id="roster-summary" class="hidden"></div>
+            <div id="roster-debug" class="hidden"></div>
+            <input type="file" id="roster-upload" accept=".csv,.xlsx,.xls" class="hidden" multiple />
+            <button id="clear-rosters" class="hidden"></button>
 
           </div><!-- End Right Column -->
 
@@ -614,7 +702,7 @@
                 class="file-input-button text-center bg-gray-100 text-gray-700 font-semibold text-sm py-2 px-4 rounded-lg hover:bg-gray-200 transition-all cursor-pointer">
                 Upload CSV
               </label>
-              <input type="file" id="roster-upload-tab" accept=".csv" class="hidden" multiple />
+              <input type="file" id="roster-upload-tab" accept=".csv,.xlsx,.xls" class="hidden" multiple />
             </div>
           </div>
           <div id="roster-tab-status" class="mt-3 text-sm font-medium text-gray-600 hidden"></div>
@@ -691,7 +779,8 @@
 
               <!-- Visual preview -->
               <div>
-                <h4 class="text-sm font-semibold text-gray-700 mb-2">Preview</h4>
+                <h4 class="text-sm font-semibold text-gray-700 mb-1">Preview</h4>
+                <p class="text-xs text-gray-400 mb-2">Click a group to mark it as a front-of-room seat (for front-row students).</p>
                 <div id="seating-preview" class="flex flex-wrap gap-2"></div>
               </div>
             </div>
@@ -786,9 +875,22 @@
           <div id="settings-update-password-form" class="hidden mt-4 space-y-3 border-t border-gray-100 pt-4">
             <div>
               <label class="block text-xs font-medium text-gray-700 mb-1">New Password</label>
-              <input type="password" id="settings-new-password" autocomplete="new-password"
-                class="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                placeholder="Enter new Aeries password" />
+              <div class="relative">
+                <input type="password" id="settings-new-password" autocomplete="new-password"
+                  class="w-full p-2.5 pr-10 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  placeholder="Enter new Aeries password" />
+                <button type="button" id="settings-toggle-password"
+                  class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+                  tabindex="-1" aria-label="Toggle password visibility">
+                  <svg id="settings-eye-open" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                  </svg>
+                  <svg id="settings-eye-closed" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a9.97 9.97 0 014.306-5.394M6.228 6.228A9.96 9.96 0 0112 5c4.478 0 8.268 2.943 9.542 7a10.05 10.05 0 01-4.132 5.411M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/>
+                  </svg>
+                </button>
+              </div>
             </div>
             <div id="settings-password-error" class="hidden text-xs text-red-600"></div>
             <div id="settings-password-success" class="hidden text-xs text-green-600 font-medium"></div>
@@ -835,6 +937,87 @@
               </button>
             </div>
           </div>
+        </div>
+
+        <!-- Teacher Display Name (for correction forms) -->
+        <div class="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-1">Teacher Name</h2>
+          <p class="text-sm text-gray-500 mb-3">Used to auto-fill attendance correction forms.</p>
+          <div class="flex gap-2">
+            <input type="text" id="settings-teacher-display-name"
+              class="flex-1 p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+              placeholder="e.g. J. Craig" />
+            <button id="settings-save-display-name"
+              class="bg-red-700 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-red-800 transition-all disabled:opacity-50">
+              Save
+            </button>
+          </div>
+          <p id="settings-display-name-status" class="hidden text-xs mt-2 font-medium"></p>
+        </div>
+
+        <!-- QR Sign-In Toggle -->
+        <div class="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-1">QR Code Sign-In</h2>
+          <p class="text-sm text-gray-500 mb-3">Allow students to sign in by scanning a QR code with their phone.</p>
+          <label class="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" id="settings-qr-enabled"
+              class="w-5 h-5 rounded border-gray-300 text-red-600 focus:ring-red-500" />
+            <span class="text-sm font-medium text-gray-700">Enable QR Sign-In</span>
+          </label>
+          <p id="settings-qr-status" class="hidden text-xs mt-2 font-medium"></p>
+        </div>
+
+        <!-- Tardy Settings -->
+        <div class="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-1">Tardy Marking</h2>
+          <p class="text-sm text-gray-500 mb-3">Tardies start after a set number of students sign in. Once that threshold is reached, a grace period begins. Anyone signing in after the grace period is marked late.</p>
+          <div class="space-y-3">
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" id="settings-tardy-enabled" checked
+                class="w-5 h-5 rounded border-gray-300 text-red-600 focus:ring-red-500" />
+              <span class="text-sm font-medium text-gray-700">Enable tardy marking</span>
+            </label>
+            <div id="tardy-options" class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Students before tardy starts</label>
+                <input type="number" id="settings-tardy-nth" min="1" max="30" value="5"
+                  class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Grace period (minutes)</label>
+                <input type="number" id="settings-tardy-grace" min="1" max="30" value="8"
+                  class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500" />
+              </div>
+            </div>
+            <p class="text-xs text-gray-400">Example: With 5 students and 8 min grace, once the 5th student signs in, anyone arriving more than 8 minutes later is marked tardy.</p>
+            <button id="settings-save-tardy"
+              class="bg-red-700 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-red-800 transition-all disabled:opacity-50">
+              Save
+            </button>
+            <p id="settings-tardy-status" class="hidden text-xs font-medium"></p>
+          </div>
+        </div>
+
+        <!-- Kiosk Prompt -->
+        <div class="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-1">Kiosk Prompt</h2>
+          <p class="text-sm text-gray-500 mb-3">Customize the sign-in message and input placeholder on the kiosk screen.</p>
+          <div class="space-y-2">
+            <input type="text" id="settings-kiosk-prompt"
+              class="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+              placeholder="Enter your 5-digit student ID or teacher PIN." />
+            <div class="flex gap-2">
+              <input type="text" id="settings-kiosk-placeholder"
+                class="flex-1 p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                placeholder="_ _ _ _ _" />
+              <button id="settings-save-kiosk-prompt"
+                class="bg-red-700 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-red-800 transition-all disabled:opacity-50">
+                Save
+              </button>
+            </div>
+            <p class="text-xs text-gray-400">Placeholder examples: _ _ _ _ _ (5 digits) or _ _ _ _ (4 digits)</p>
+          </div>
+          <p id="settings-kiosk-prompt-status" class="hidden text-xs mt-2 font-medium"></p>
         </div>
 
         <!-- Account Info -->
@@ -938,6 +1121,24 @@
           <div id="sync-toggle-status" class="mt-3 text-xs text-gray-400"></div>
         </div>
 
+        <!-- Sync Now Button -->
+        <div id="sync-now-section" class="hidden">
+          <div class="bg-white rounded-xl border border-gray-200 p-6 flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-900">Manual Sync</h2>
+              <p class="text-sm text-gray-500 mt-1">Push attendance to Aeries right now.</p>
+            </div>
+            <button id="sync-now-btn"
+              class="bg-red-700 text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-red-800 transition-all disabled:opacity-50 flex items-center gap-2">
+              <svg id="sync-now-spinner" class="hidden animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+              </svg>
+              Sync Now
+            </button>
+          </div>
+        </div>
+
         <!-- Sync Status Card (moved from Attendance tab) -->
         <div id="sync-status-section" class="hidden">
           <div class="bg-white rounded-xl border border-gray-200 p-6">
@@ -974,27 +1175,53 @@
 
       <!-- ================== KIOSK ================== -->
       <div id="kiosk-panel"
-        class="w-full p-8 md:p-12 flex flex-col items-center justify-center bg-gray-900 text-white min-h-[80vh] md:min-h-0">
-        <div id="kiosk-view" class="w-full max-w-sm text-center">
+        class="relative w-full p-8 md:p-12 flex flex-col items-center justify-center bg-gray-900 text-white min-h-[80vh] md:min-h-0">
+        <div id="kiosk-view" class="w-full max-w-lg text-center">
           <h1 class="text-4xl font-bold mb-2">Welcome Warriors!</h1>
           <p id="kiosk-teacher-name" class="text-sm text-red-400 font-semibold mb-1 hidden"></p>
-          <p class="text-lg text-gray-400">Enter your 5-digit student ID or teacher PIN.</p>
+          <p id="kiosk-prompt-text" class="text-lg text-gray-400">Enter your 5-digit student ID or teacher PIN.</p>
           <p id="period-indicator" class="mt-2 text-sm text-white/90"></p>
 
-          <input type="text" id="student-id-input" maxlength="10"
-            class="w-full mt-6 text-center text-5xl font-mono p-4 rounded-lg border-4 border-gray-600 bg-white text-gray-900 focus:outline-none focus:ring-4 focus:ring-red-500"
-            placeholder="_ _ _ _" />
-          <button id="sign-in-button"
-            class="w-full mt-6 bg-red-700 text-white font-bold text-xl py-4 rounded-lg shadow-md hover:bg-red-800 transform hover:-translate-y-1 transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-white disabled:opacity-50 disabled:transform-none"
-            disabled>Sign In</button>
+          <div class="flex items-start gap-5 mt-6">
+            <!-- Sign-in input -->
+            <div class="flex-1">
+              <input type="text" id="student-id-input" maxlength="10"
+                class="w-full text-center text-5xl font-mono p-4 rounded-lg border-4 border-gray-600 bg-white text-gray-900 focus:outline-none focus:ring-4 focus:ring-red-500"
+                placeholder="_ _ _ _ _" />
+              <button id="sign-in-button"
+                class="w-full mt-4 bg-red-700 text-white font-bold text-xl py-4 rounded-lg shadow-md hover:bg-red-800 transform hover:-translate-y-1 transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-white disabled:opacity-50 disabled:transform-none"
+                disabled>Sign In</button>
+            </div>
+
+            <!-- QR Code (inline, hidden when disabled) -->
+            <div id="kiosk-qr-container" class="hidden flex flex-col items-center flex-shrink-0">
+              <div id="kiosk-qr-clickable" class="rounded-xl border-2 border-gray-600 bg-white p-2 cursor-pointer hover:border-red-500 transition-colors" title="Click to enlarge">
+                <img id="kiosk-qr-img" width="130" height="130" class="rounded-lg" alt="QR Code" />
+              </div>
+              <p class="text-xs text-gray-500 mt-2">Tap to enlarge</p>
+              <p id="kiosk-qr-error" class="hidden text-xs text-red-400 mt-1 font-semibold">QR offline — retrying...</p>
+            </div>
+          </div>
 
         </div>
 
         <div id="message-view" class="w-full max-w-md text-center hidden"></div>
+
+        <!-- Forgot PIN link — subtle, bottom-right -->
+        <button id="kiosk-forgot-pin" class="absolute bottom-3 right-4 text-xs text-gray-600 hover:text-gray-400 transition-colors">Forgot PIN?</button>
       </div><!-- kiosk-panel -->
 
     </div><!-- flex -->
   </div><!-- container -->
+
+  <!-- Enlarged QR Code Overlay -->
+  <div id="qr-enlarged-overlay" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center cursor-pointer" style="backdrop-filter:blur(4px)">
+    <div class="bg-white rounded-3xl p-8 shadow-2xl text-center" onclick="event.stopPropagation()">
+      <img id="qr-enlarged-img" class="rounded-xl" alt="QR Code" />
+      <p class="text-gray-500 text-sm mt-4">Scan to sign in</p>
+      <button id="qr-enlarged-close" class="mt-4 text-gray-400 hover:text-gray-600 text-sm transition-colors">Close</button>
+    </div>
+  </div>
 
   <!-- Fullscreen Timer Overlay -->
   <div id="timer-fullscreen" class="hidden fixed inset-0 timer-fs-bg text-white z-50 overflow-hidden">
@@ -1002,7 +1229,7 @@
     <div class="timer-fs-orb" style="width:600px;height:600px;background:#7f1d1d;bottom:-200px;right:-150px;"></div>
 
     <button id="timer-fs-close"
-      class="absolute top-4 right-6 text-5xl font-bold text-gray-500 hover:text-white transition-colors z-10">&times;</button>
+      class="absolute top-4 right-6 text-5xl font-bold text-gray-500 hover:text-white transition-colors z-20">&times;</button>
 
     <div class="relative z-10 flex flex-col items-center justify-center h-full">
       <!-- Timer mode selector -->
@@ -1013,7 +1240,8 @@
         </div>
         <div id="timer-input-target" class="mb-6">
           <input type="time" id="timer-target-input-fs"
-            class="bg-transparent border border-white/20 rounded-xl px-6 py-3 text-2xl font-mono text-white text-center focus:outline-none focus:border-red-500" />
+            class="bg-transparent border border-white/20 rounded-xl px-6 py-3 text-2xl font-mono text-white text-center focus:outline-none focus:border-red-500"
+            style="color-scheme:dark;" />
         </div>
         <div id="timer-input-minutes" class="hidden mb-6">
           <div class="flex items-center justify-center gap-3">
@@ -1053,7 +1281,7 @@
     <div class="timer-fs-orb" style="width:600px;height:600px;background:#1c3a5c;bottom:-200px;right:-150px;"></div>
 
     <button id="qr-fs-close"
-      class="absolute top-4 right-6 text-5xl font-bold text-gray-500 hover:text-white transition-colors z-10">&times;</button>
+      class="absolute top-4 right-6 text-5xl font-bold text-gray-500 hover:text-white transition-colors z-20">&times;</button>
 
     <div class="relative z-10 flex flex-col items-center justify-center h-full">
       <!-- QR input -->
@@ -1090,7 +1318,7 @@
     <div class="timer-fs-orb" style="width:600px;height:600px;background:#1c3a5c;bottom:-200px;left:-150px;"></div>
 
     <button id="gm-fs-close"
-      class="absolute top-4 right-6 text-5xl font-bold text-gray-500 hover:text-white transition-colors z-10">&times;</button>
+      class="absolute top-4 right-6 text-5xl font-bold text-gray-500 hover:text-white transition-colors z-20">&times;</button>
 
     <div class="relative z-10 flex flex-col items-center justify-center h-full">
       <!-- Setup -->
@@ -1133,7 +1361,7 @@
     <div class="timer-fs-orb" style="width:600px;height:600px;background:#7f1d1d;bottom:-200px;left:-150px;"></div>
 
     <button id="close-group-display-btn"
-      class="absolute top-4 right-6 text-5xl font-bold text-gray-500 hover:text-white transition-colors z-10">&times;</button>
+      class="absolute top-4 right-6 text-5xl font-bold text-gray-500 hover:text-white transition-colors z-20">&times;</button>
 
     <!-- Tab toggle: Groups / Pick Student -->
     <div class="relative z-10 flex justify-center gap-2 pt-6 mb-6">
@@ -1227,13 +1455,26 @@
 
       const period = periodSelect ? periodSelect.value : null;
       const effectiveCfg = getEffectiveSeatingConfig(period);
-      const numGroups = effectiveCfg.enabled ? effectiveCfg.numGroups : MAX_GROUP;
 
-      const map = new Map();
-      for (let g = 1; g <= numGroups; g++) map.set(g, []);
-      periodAttendanceLog.forEach(l => {
-        if (l.Group && map.has(l.Group)) map.get(l.Group).push({ name: l.Name, seat: l.Seat });
-      });
+      // Helper to render a fullscreen student list item
+      function renderFsStudentLi(entry) {
+        const streak = absenceStreaks.get(entry.sid) || 0;
+        const li = document.createElement('li');
+        let liClass = 'text-gray-300 text-base';
+        if (streak === 1) liClass += ' text-amber-300';
+        else if (streak >= 2) liClass += ' text-red-400';
+        li.className = liClass;
+        let text = entry.seat != null ? entry.name + ' \u2014 Seat ' + entry.seat : entry.name;
+        li.textContent = text;
+        if (streak > 0) {
+          const dot = document.createElement('span');
+          dot.className = streak >= 2 ? 'ml-1.5 text-red-400 text-xs' : 'ml-1.5 text-amber-300 text-xs';
+          dot.title = streak === 1 ? 'Absent last class' : 'Absent ' + streak + ' classes in a row';
+          dot.textContent = streak === 1 ? '\u25CF' : '\u25CF' + streak;
+          li.appendChild(dot);
+        }
+        return li;
+      }
 
       fullscreenListEl.replaceChildren();
       if (periodAttendanceLog.length === 0) {
@@ -1241,10 +1482,35 @@
         p.className = 'col-span-full text-center text-gray-500 text-xl mt-20';
         p.textContent = 'Students will appear here as they sign in.';
         fullscreenListEl.appendChild(p);
+      } else if (!effectiveCfg.enabled) {
+        // No seating — single card with all present students
+        const card = document.createElement('div');
+        card.className = 'seat-fs-card rounded-2xl p-5';
+        const h4 = document.createElement('h4');
+        h4.className = 'font-bold text-xl text-red-500 mb-3 seat-fs-card-header';
+        h4.textContent = 'Present';
+        const countBadge = document.createElement('span');
+        countBadge.className = 'text-sm font-normal text-gray-500 ml-2';
+        countBadge.textContent = periodAttendanceLog.length + '';
+        h4.appendChild(countBadge);
+        const ul = document.createElement('ul');
+        ul.className = 'space-y-1.5';
+        periodAttendanceLog.forEach(l => {
+          ul.appendChild(renderFsStudentLi({ name: l.Name, seat: l.Seat, sid: l.StudentID }));
+        });
+        card.append(h4, ul);
+        fullscreenListEl.appendChild(card);
       } else {
+        // Seating enabled — group cards
+        const numGroups = effectiveCfg.numGroups;
+        const map = new Map();
+        for (let g = 1; g <= numGroups; g++) map.set(g, []);
+        periodAttendanceLog.forEach(l => {
+          if (l.Group && map.has(l.Group)) map.get(l.Group).push({ name: l.Name, seat: l.Seat, sid: l.StudentID });
+        });
         map.forEach((arr, grp) => {
           if (arr.length > 0) {
-            const cap = effectiveCfg.enabled ? getGroupCap(grp, effectiveCfg) : 3;
+            const cap = getGroupCap(grp, effectiveCfg);
             const card = document.createElement('div');
             card.className = 'seat-fs-card rounded-2xl p-5';
             const h4 = document.createElement('h4');
@@ -1256,12 +1522,7 @@
             h4.appendChild(countBadge);
             const ul = document.createElement('ul');
             ul.className = 'space-y-1.5';
-            arr.forEach(entry => {
-              const li = document.createElement('li');
-              li.className = 'text-gray-300 text-base';
-              li.textContent = entry.seat != null ? entry.name + ' \u2014 Seat ' + entry.seat : entry.name;
-              ul.appendChild(li);
-            });
+            arr.forEach(entry => ul.appendChild(renderFsStudentLi(entry)));
             card.append(h4, ul);
             fullscreenListEl.appendChild(card);
           }
@@ -1273,7 +1534,7 @@
 
     const pickerWeights = new Map();
     let pickerBusy = false;
-    const ANIM_DURATION = 1500; // ms per animation
+    const ANIM_DURATION = 4000; // ms per animation
 
     function getPickerWeight(id) { return pickerWeights.get(id) || 1.0; }
 
@@ -1304,6 +1565,8 @@
       const result = document.getElementById('picker-result');
       stage.replaceChildren();
       stage.classList.remove('hidden');
+      stage.style.cursor = 'pointer';
+      stage.onclick = () => { if (skipToReveal) skipToReveal(); };
       result.style.opacity = '0';
       return stage;
     }
@@ -1367,32 +1630,58 @@
       requestAnimationFrame(frame);
     }
 
-    // 2. Spotlight — all names visible, circle of light shrinks to winner
+    // 2. Spotlight — names scattered randomly, light sweeps around then finds winner
     function animSpotlight(stage, names, winner, done) {
-      const tiles = [];
       const w = stage.clientWidth, h = stage.clientHeight;
-      // Place winner near center
-      const winX = w / 2 - 60, winY = h / 2 - 15;
+      const margin = 80;
+      // Place ALL names randomly (winner too — not centered)
+      const positions = [];
       names.forEach(n => {
         const el = document.createElement('div');
         el.className = 'picker-tile';
         el.textContent = n;
-        const isWin = n === winner.Name;
-        el.style.left = (isWin ? winX : 40 + Math.random() * (w - 160)) + 'px';
-        el.style.top = (isWin ? winY : 40 + Math.random() * (h - 100)) + 'px';
+        const x = margin + Math.random() * (w - margin * 2 - 100);
+        const y = margin + Math.random() * (h - margin * 2 - 40);
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
         stage.appendChild(el);
-        tiles.push({ el, isWin, x: parseFloat(el.style.left), y: parseFloat(el.style.top) });
+        if (n === winner.Name) positions.winX = x + 50;
+        if (n === winner.Name) positions.winY = y + 15;
       });
-      // Overlay with radial gradient mask
+      // Overlay mask
       const mask = document.createElement('div');
-      mask.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:5;transition:background 0.1s;';
+      mask.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:5;';
       stage.appendChild(mask);
-      const cx = winX + 60, cy = winY + 15;
+      const cx = positions.winX, cy = positions.winY;
+      // Sweep: spotlight wanders then homes in on winner
       const start = performance.now();
+      const sweepDur = ANIM_DURATION * 0.6;
+      const focusDur = ANIM_DURATION * 0.4;
+      // Random sweep waypoints
+      const waypoints = [{x: w * 0.2, y: h * 0.3}, {x: w * 0.7, y: h * 0.6}, {x: w * 0.4, y: h * 0.8}];
       function frame(t) {
-        const p = Math.min((t - start) / ANIM_DURATION, 1);
-        const radius = Math.max(800 * (1 - p * p), 60);
-        mask.style.background = 'radial-gradient(circle ' + radius + 'px at ' + cx + 'px ' + cy + 'px, transparent 0%, rgba(0,0,0,0.92) 100%)';
+        const elapsed = t - start;
+        const p = Math.min(elapsed / ANIM_DURATION, 1);
+        let spotX, spotY, radius;
+        if (elapsed < sweepDur) {
+          // Sweep phase: light wanders through waypoints
+          const sp = elapsed / sweepDur;
+          const idx = Math.min(Math.floor(sp * waypoints.length), waypoints.length - 1);
+          const next = Math.min(idx + 1, waypoints.length - 1);
+          const lp = (sp * waypoints.length) - idx;
+          spotX = waypoints[idx].x + (waypoints[next].x - waypoints[idx].x) * lp;
+          spotY = waypoints[idx].y + (waypoints[next].y - waypoints[idx].y) * lp;
+          radius = 120 + 40 * Math.sin(sp * Math.PI * 3);
+        } else {
+          // Focus phase: converge on winner and shrink
+          const fp = (elapsed - sweepDur) / focusDur;
+          const ease = fp * fp;
+          const lastWp = waypoints[waypoints.length - 1];
+          spotX = lastWp.x + (cx - lastWp.x) * ease;
+          spotY = lastWp.y + (cy - lastWp.y) * ease;
+          radius = 140 - 80 * ease;
+        }
+        mask.style.background = 'radial-gradient(circle ' + radius + 'px at ' + spotX + 'px ' + spotY + 'px, transparent 0%, rgba(0,0,0,0.92) 100%)';
         if (p < 1) requestAnimationFrame(frame); else done();
       }
       requestAnimationFrame(frame);
@@ -1400,29 +1689,33 @@
 
     // 3. Elimination — grid of names, rapidly disappear until winner remains
     function animEliminate(stage, names, winner, done) {
-      const w = stage.clientWidth;
-      const cols = Math.min(Math.ceil(Math.sqrt(names.length)), 5);
-      const grid = document.createElement('div');
-      grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-content:center;height:100%;padding:40px;';
+      const w = stage.clientWidth, h = stage.clientHeight;
+      const cols = Math.min(Math.ceil(Math.sqrt(names.length)), 7);
+      const rows = Math.ceil(names.length / cols);
+      const cellW = (w - 40) / cols, cellH = (h - 40) / rows;
       const els = [];
-      names.forEach(n => {
+      names.forEach((n, i) => {
         const el = document.createElement('div');
-        el.className = 'picker-tile';
-        el.style.position = 'relative';
+        el.style.cssText = 'position:absolute;border-radius:8px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;color:white;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);transition:all 0.4s ease;';
+        el.style.fontSize = Math.min(cellW / 8, 18) + 'px';
+        el.style.padding = '4px 8px';
+        el.style.width = (cellW * 0.85) + 'px';
+        const col = i % cols, row = Math.floor(i / cols);
+        el.style.left = (20 + col * cellW + cellW * 0.075) + 'px';
+        el.style.top = (20 + row * cellH + cellH * 0.15) + 'px';
         el.textContent = n;
-        grid.appendChild(el);
+        stage.appendChild(el);
         els.push({ el, name: n });
       });
-      stage.appendChild(grid);
       // Remove non-winners one by one
       const toRemove = shuffleArr(els.filter(e => e.name !== winner.Name));
       const interval = ANIM_DURATION / (toRemove.length + 1);
       toRemove.forEach((e, i) => {
-        setTimeout(() => { e.el.classList.add('eliminated'); }, interval * (i + 1));
+        setTimeout(() => { e.el.style.opacity = '0'; e.el.style.transform = 'scale(0.3)'; }, interval * (i + 1));
       });
       setTimeout(() => {
         const winEl = els.find(e => e.name === winner.Name);
-        if (winEl) winEl.el.classList.add('winner');
+        if (winEl) { winEl.el.style.background = 'rgba(185,28,28,0.3)'; winEl.el.style.borderColor = 'rgba(185,28,28,0.6)'; }
         done();
       }, ANIM_DURATION);
     }
@@ -1436,19 +1729,21 @@
         const angle = (2 * Math.PI * i) / names.length - Math.PI / 2;
         const el = document.createElement('div');
         el.className = 'picker-tile';
+        el.style.transition = 'none';
         el.textContent = n;
         el.style.left = (cx + r * Math.cos(angle) - 50) + 'px';
         el.style.top = (cy + r * Math.sin(angle) - 15) + 'px';
         stage.appendChild(el);
         return el;
       });
-      // Spin a highlight indicator
-      const totalRotations = 3 + Math.random() * 2;
+      // Spin a highlight indicator — use 80% of duration so winner holds at end
+      const spinDuration = ANIM_DURATION * 0.8;
+      const totalRotations = 3 + Math.floor(Math.random() * 3);
       const targetAngle = totalRotations * names.length + winIdx;
       const start = performance.now();
       let lastHighlight = -1;
       function frame(t) {
-        const p = Math.min((t - start) / ANIM_DURATION, 1);
+        const p = Math.min((t - start) / spinDuration, 1);
         const ease = 1 - Math.pow(1 - p, 3);
         const current = Math.floor(ease * targetAngle) % names.length;
         if (current !== lastHighlight) {
@@ -1458,73 +1753,97 @@
           });
           lastHighlight = current;
         }
-        if (p < 1) requestAnimationFrame(frame); else done();
+        if (p < 1) requestAnimationFrame(frame); else setTimeout(done, 800);
       }
       requestAnimationFrame(frame);
     }
 
-    // 5. Shuffle cards — names scatter then winner flies to center
+    // 5. Shuffle cards — names spread out face-up, shuffle positions, then winner highlights
     function animShuffle(stage, names, winner, done) {
       const w = stage.clientWidth, h = stage.clientHeight;
-      const els = names.map(n => {
+      const cols = Math.min(Math.ceil(Math.sqrt(names.length)), 6);
+      const rows = Math.ceil(names.length / cols);
+      const cellW = (w - 40) / cols, cellH = (h - 40) / rows;
+      const els = names.map((n, i) => {
         const el = document.createElement('div');
         el.className = 'picker-tile';
         el.textContent = n;
-        el.style.left = (w / 2 - 50) + 'px';
-        el.style.top = (h / 2 - 15) + 'px';
-        el.style.transition = 'all 0.5s cubic-bezier(0.34,1.56,0.64,1)';
+        el.style.fontSize = Math.min(cellW / (n.length * 0.7 + 2), 16) + 'px';
+        const col = i % cols, row = Math.floor(i / cols);
+        el.style.left = (20 + col * cellW + cellW * 0.1) + 'px';
+        el.style.top = (20 + row * cellH + cellH * 0.15) + 'px';
+        el.style.width = (cellW * 0.8) + 'px';
+        el.style.textAlign = 'center';
+        el.style.transition = 'all 0.4s cubic-bezier(0.34,1.56,0.64,1)';
         stage.appendChild(el);
         return { el, name: n };
       });
-      // Phase 1: scatter (0-500ms)
+      // Phase 1: shuffle positions (400ms)
       setTimeout(() => {
         els.forEach(e => {
-          e.el.style.left = (30 + Math.random() * (w - 140)) + 'px';
-          e.el.style.top = (30 + Math.random() * (h - 80)) + 'px';
+          e.el.style.left = (20 + Math.random() * (w - 140)) + 'px';
+          e.el.style.top = (20 + Math.random() * (h - 80)) + 'px';
         });
-      }, 50);
-      // Phase 2: non-winners fade, winner flies to center (800ms)
+      }, 300);
+      // Phase 2: shuffle again (700ms)
+      setTimeout(() => {
+        els.forEach(e => {
+          e.el.style.left = (20 + Math.random() * (w - 140)) + 'px';
+          e.el.style.top = (20 + Math.random() * (h - 80)) + 'px';
+        });
+      }, 650);
+      // Phase 3: non-winners fade, winner flies to center (1000ms)
       setTimeout(() => {
         els.forEach(e => {
           if (e.name !== winner.Name) {
             e.el.classList.add('eliminated');
           } else {
             e.el.classList.add('winner');
-            e.el.style.left = (w / 2 - 60) + 'px';
+            e.el.style.left = (w / 2 - 70) + 'px';
             e.el.style.top = (h / 2 - 20) + 'px';
             e.el.style.fontSize = '2rem';
+            e.el.style.width = 'auto';
             e.el.style.padding = '12px 28px';
           }
         });
-      }, 700);
-      setTimeout(done, ANIM_DURATION);
+      }, 1000);
+      setTimeout(done, 2000);
     }
 
     // 6. Binary split — names split in half, one half fades, repeat
     function animBinary(stage, names, winner, done) {
-      const container = document.createElement('div');
-      container.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-content:center;height:100%;padding:40px;';
+      const w = stage.clientWidth, h = stage.clientHeight;
+      const cols = Math.min(Math.ceil(Math.sqrt(names.length)), 7);
+      const rows = Math.ceil(names.length / cols);
+      const cellW = (w - 40) / cols, cellH = (h - 40) / rows;
       let remaining = [...names];
-      // Make sure winner is in the list
       const els = new Map();
-      remaining.forEach(n => {
+      names.forEach((n, i) => {
         const el = document.createElement('div');
-        el.className = 'picker-tile';
-        el.style.position = 'relative';
+        el.style.cssText = 'position:absolute;border-radius:8px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;color:white;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);transition:all 0.4s ease;';
+        el.style.fontSize = Math.min(cellW / 8, 18) + 'px';
+        el.style.padding = '4px 8px';
+        el.style.width = (cellW * 0.85) + 'px';
+        const col = i % cols, row = Math.floor(i / cols);
+        el.style.left = (20 + col * cellW + cellW * 0.075) + 'px';
+        el.style.top = (20 + row * cellH + cellH * 0.15) + 'px';
         el.textContent = n;
-        container.appendChild(el);
+        stage.appendChild(el);
         els.set(n, el);
       });
-      stage.appendChild(container);
       const rounds = Math.ceil(Math.log2(remaining.length));
       const roundTime = ANIM_DURATION / (rounds + 1);
       function doRound(r) {
-        if (remaining.length <= 1) { if (els.get(winner.Name)) els.get(winner.Name).classList.add('winner'); done(); return; }
+        if (remaining.length <= 1) {
+          const winEl = els.get(winner.Name);
+          if (winEl) { winEl.style.background = 'rgba(185,28,28,0.3)'; winEl.style.borderColor = 'rgba(185,28,28,0.6)'; }
+          done(); return;
+        }
         const shuffled = shuffleArr(remaining);
         const winSide = shuffled.indexOf(winner.Name) < shuffled.length / 2 ? 0 : 1;
         const keep = [], remove = [];
         shuffled.forEach((n, i) => { (i < shuffled.length / 2 ? (winSide === 0 ? keep : remove) : (winSide === 1 ? keep : remove)).push(n); });
-        remove.forEach(n => { const e = els.get(n); if (e) e.classList.add('eliminated'); });
+        remove.forEach(n => { const e = els.get(n); if (e) { e.style.opacity = '0'; e.style.transform = 'scale(0.3)'; } });
         remaining = keep;
         setTimeout(() => doRound(r + 1), roundTime);
       }
@@ -1536,108 +1855,210 @@
       const wrap = document.createElement('div');
       wrap.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;';
       const text = document.createElement('div');
-      text.style.cssText = 'font-size:4rem;font-weight:700;color:white;font-family:monospace;';
-      const cursor = document.createElement('span');
-      cursor.style.cssText = 'border-right:3px solid rgba(185,28,28,0.8);padding-right:4px;animation:blink 0.6s step-end infinite;';
-      text.appendChild(cursor);
+      text.style.cssText = 'font-size:4rem;font-weight:700;color:white;font-family:monospace;letter-spacing:0.05em;';
       wrap.appendChild(text);
       stage.appendChild(wrap);
-      // Add style for blink if not present
-      if (!document.getElementById('blink-style')) {
-        const s = document.createElement('style');
-        s.id = 'blink-style';
-        s.textContent = '@keyframes blink{0%,100%{border-color:rgba(185,28,28,0.8);}50%{border-color:transparent;}}';
-        document.head.appendChild(s);
-      }
-      const letters = winner.Name.split('');
-      const delay = Math.min(ANIM_DURATION / (letters.length + 2), 120);
-      letters.forEach((ch, i) => {
-        setTimeout(() => { cursor.before(document.createTextNode(ch)); }, delay * (i + 1));
+      const target = winner.Name;
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+      // Create a span per character, all start as random letters
+      const spans = target.split('').map((ch, i) => {
+        const span = document.createElement('span');
+        span.textContent = ch === ' ' ? ' ' : chars[Math.floor(Math.random() * chars.length)];
+        span.style.color = 'rgba(255,255,255,0.5)';
+        span.style.transition = 'color 0.2s';
+        text.appendChild(span);
+        return { span, target: ch, locked: ch === ' ' };
       });
-      setTimeout(done, ANIM_DURATION);
+      // Scramble phase: rapidly cycle random letters in unlocked positions
+      const scrambleInterval = setInterval(() => {
+        spans.forEach(s => {
+          if (!s.locked) s.span.textContent = chars[Math.floor(Math.random() * chars.length)];
+        });
+      }, 60);
+      // Lock in each character one at a time, in random order
+      const unlocked = spans.map((s, i) => i).filter(i => !spans[i].locked);
+      const order = shuffleArr(unlocked);
+      const lockDelay = (ANIM_DURATION * 0.85) / order.length;
+      order.forEach((idx, step) => {
+        setTimeout(() => {
+          const s = spans[idx];
+          s.locked = true;
+          s.span.textContent = s.target;
+          s.span.style.color = 'white';
+          s.span.style.textShadow = '0 0 20px rgba(185,28,28,0.6)';
+        }, ANIM_DURATION * 0.15 + lockDelay * step);
+      });
+      setTimeout(() => { clearInterval(scrambleInterval); done(); }, ANIM_DURATION);
     }
 
-    // 8. Zoom — all names tiny, winner zooms huge
+    // 8. Zoom — names in a grid, all visible, then winner zooms to center
     function animZoom(stage, names, winner, done) {
       const w = stage.clientWidth, h = stage.clientHeight;
-      const els = names.map(n => {
+      const cols = Math.min(Math.ceil(Math.sqrt(names.length)), 7);
+      const rows = Math.ceil(names.length / cols);
+      const cellW = (w - 40) / cols, cellH = (h - 40) / rows;
+      const els = names.map((n, i) => {
         const el = document.createElement('div');
-        el.className = 'picker-tile';
-        el.style.fontSize = '0.7rem';
-        el.style.padding = '2px 8px';
-        el.style.left = (20 + Math.random() * (w - 120)) + 'px';
-        el.style.top = (20 + Math.random() * (h - 60)) + 'px';
-        el.style.transition = 'all 0.8s cubic-bezier(0.34,1.56,0.64,1)';
+        el.style.cssText = 'position:absolute;border-radius:8px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;color:white;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);';
+        el.style.fontSize = Math.min(cellW / 8, 18) + 'px';
+        el.style.padding = '4px 8px';
+        el.style.width = (cellW * 0.85) + 'px';
+        const col = i % cols, row = Math.floor(i / cols);
+        const x = 20 + col * cellW + cellW * 0.075;
+        const y = 20 + row * cellH + cellH * 0.15;
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
+        el.textContent = n;
         stage.appendChild(el);
-        return { el, name: n };
+        return { el, name: n, x, y };
       });
-      // After brief pause, zoom winner
+      // Drop non-winners off the bottom one by one, then zoom the winner
+      const toDrop = shuffleArr(els.filter(e => e.name !== winner.Name));
+      const dropTime = Math.min(ANIM_DURATION * 0.75 / toDrop.length, 120);
+      toDrop.forEach((e, i) => {
+        setTimeout(() => {
+          e.el.style.transition = 'all 0.5s cubic-bezier(0.55, 0, 1, 0.45)';
+          e.el.style.top = (h + 50) + 'px';
+          e.el.style.opacity = '0';
+          e.el.style.transform = 'rotate(' + (Math.random() * 30 - 15) + 'deg)';
+        }, 400 + dropTime * i);
+      });
+      // After all dropped, zoom winner to center
+      const zoomAt = 400 + dropTime * toDrop.length + 200;
       setTimeout(() => {
-        els.forEach(e => {
-          if (e.name === winner.Name) {
-            e.el.style.left = (w / 2 - 100) + 'px';
-            e.el.style.top = (h / 2 - 30) + 'px';
-            e.el.style.fontSize = '3rem';
-            e.el.style.padding = '14px 32px';
-            e.el.classList.add('winner');
-          } else {
-            e.el.style.opacity = '0';
-            e.el.style.transform = 'scale(0.2)';
-          }
-        });
-      }, 300);
-      setTimeout(done, ANIM_DURATION);
+        const winEl = els.find(e => e.name === winner.Name);
+        if (winEl) {
+          winEl.el.style.transition = 'all 0.6s cubic-bezier(0.34,1.56,0.64,1)';
+          winEl.el.style.left = (w / 2 - 120) + 'px';
+          winEl.el.style.top = (h / 2 - 30) + 'px';
+          winEl.el.style.fontSize = '3rem';
+          winEl.el.style.padding = '14px 32px';
+          winEl.el.style.width = 'auto';
+          winEl.el.style.background = 'rgba(185,28,28,0.3)';
+          winEl.el.style.borderColor = 'rgba(185,28,28,0.6)';
+          winEl.el.style.zIndex = '10';
+        }
+      }, zoomAt);
+      setTimeout(done, zoomAt + 800);
     }
 
-    // 9. Amoeba — blobs drift around, absorb each other until winner remains
+    // 9. Amoeba — blobs steer toward each other, bigger eats smaller on contact
     function animAmoeba(stage, names, winner, done) {
       const w = stage.clientWidth, h = stage.clientHeight;
-      const blobs = names.map(n => {
+      const hues = [210, 260, 170, 330, 30, 50, 290, 190];
+      const maxTime = ANIM_DURATION * 0.9; // finish before safety timeout
+      const blobs = names.map((n, i) => {
         const el = document.createElement('div');
-        el.style.cssText = 'position:absolute;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;color:white;transition:all 0.3s ease;pointer-events:none;';
-        const size = 50 + Math.random() * 20;
+        el.style.cssText = 'position:absolute;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;color:white;pointer-events:none;text-shadow:0 1px 3px rgba(0,0,0,0.5);';
+        const size = 52 + Math.random() * 16;
         el.style.width = size + 'px'; el.style.height = size + 'px';
         el.style.fontSize = '0.6rem';
-        el.style.background = n === winner.Name ? 'rgba(185,28,28,0.5)' : 'rgba(100,120,180,0.3)';
-        el.style.border = '1px solid ' + (n === winner.Name ? 'rgba(185,28,28,0.6)' : 'rgba(150,160,200,0.3)');
-        el.textContent = n.split(' ')[0]; // first name only to fit
-        const x = 60 + Math.random() * (w - 160), y = 60 + Math.random() * (h - 160);
+        const hue = hues[i % hues.length];
+        el.style.background = `hsla(${hue},50%,40%,0.5)`;
+        el.style.border = `1px solid hsla(${hue},50%,50%,0.4)`;
+        el.textContent = n.split(' ')[0];
+        const x = 30 + Math.random() * (w - 100), y = 30 + Math.random() * (h - 100);
         el.style.left = x + 'px'; el.style.top = y + 'px';
         stage.appendChild(el);
-        return { el, name: n, x, y, size, vx: (Math.random() - 0.5) * 3, vy: (Math.random() - 0.5) * 3, alive: true };
+        // Random initial angle, each blob has a wander angle that drifts
+        const angle = Math.random() * Math.PI * 2;
+        return { el, name: n, x, y, size, hue, angle, speed: 2.5 + Math.random() * 1.5, alive: true };
       });
-      // Order so winner blob absorbs last
-      const eatOrder = shuffleArr(blobs.filter(b => b.name !== winner.Name));
-      const interval = (ANIM_DURATION - 200) / (eatOrder.length + 1);
       const winBlob = blobs.find(b => b.name === winner.Name);
-      // Animate movement
+      winBlob.size += 4;
+      winBlob.el.style.width = winBlob.size + 'px';
+      winBlob.el.style.height = winBlob.size + 'px';
+      const startTime = performance.now();
       let animId;
-      function move() {
-        blobs.forEach(b => {
-          if (!b.alive) return;
-          b.x += b.vx; b.y += b.vy;
-          if (b.x < 10 || b.x > w - b.size - 10) b.vx *= -1;
-          if (b.y < 10 || b.y > h - b.size - 10) b.vy *= -1;
+
+      function findNearest(b, alive) {
+        let best = null, bestDist = Infinity;
+        for (const o of alive) {
+          if (o === b) continue;
+          const dx = o.x - b.x, dy = o.y - b.y;
+          const d = dx * dx + dy * dy;
+          if (d < bestDist) { bestDist = d; best = o; }
+        }
+        return best;
+      }
+
+      function absorb(eater, eaten) {
+        eaten.alive = false;
+        eaten.el.style.transition = 'all 0.25s ease-in';
+        eaten.el.style.left = (eater.x + eater.size / 2 - eaten.size / 2) + 'px';
+        eaten.el.style.top = (eater.y + eater.size / 2 - eaten.size / 2) + 'px';
+        eaten.el.style.width = '0px'; eaten.el.style.height = '0px';
+        eaten.el.style.opacity = '0';
+        eater.size += Math.max(6, eaten.size * 0.25);
+        eater.el.style.transition = 'width 0.25s, height 0.25s, font-size 0.25s';
+        eater.el.style.width = eater.size + 'px'; eater.el.style.height = eater.size + 'px';
+        eater.el.style.fontSize = Math.min(0.55 + (eater.size - 46) * 0.014, 1.8) + 'rem';
+      }
+
+      function tick() {
+        const alive = blobs.filter(b => b.alive);
+        const elapsed = performance.now() - startTime;
+        const urgency = Math.min(elapsed / maxTime, 1);
+
+        alive.forEach(b => {
+          const nearest = findNearest(b, alive);
+          if (nearest) {
+            // Steer toward nearest blob (hunt behavior)
+            const dx = nearest.x - b.x, dy = nearest.y - b.y;
+            const targetAngle = Math.atan2(dy, dx);
+            // Blend: aggressive hunting from the start, less wandering
+            const wander = (Math.random() - 0.5) * (0.8 - urgency * 0.6);
+            b.angle += (targetAngle - b.angle) * (0.15 + urgency * 0.15) + wander * 0.1;
+          } else {
+            b.angle += (Math.random() - 0.5) * 0.3;
+          }
+          // Speed increases with urgency and blob size
+          const spd = b.speed * (1 + urgency * 2);
+          b.x += Math.cos(b.angle) * spd;
+          b.y += Math.sin(b.angle) * spd;
+          // Bounce off walls with angle reflection
+          if (b.x < 5) { b.x = 5; b.angle = Math.PI - b.angle; }
+          if (b.x > w - b.size - 5) { b.x = w - b.size - 5; b.angle = Math.PI - b.angle; }
+          if (b.y < 5) { b.y = 5; b.angle = -b.angle; }
+          if (b.y > h - b.size - 5) { b.y = h - b.size - 5; b.angle = -b.angle; }
           b.el.style.left = b.x + 'px'; b.el.style.top = b.y + 'px';
         });
-        animId = requestAnimationFrame(move);
+
+        // Collision detection: bigger eats smaller, winner always wins its matchups
+        for (let i = 0; i < alive.length; i++) {
+          for (let j = i + 1; j < alive.length; j++) {
+            const a = alive[i], b2 = alive[j];
+            if (!a.alive || !b2.alive) continue;
+            const acx = a.x + a.size / 2, acy = a.y + a.size / 2;
+            const bcx = b2.x + b2.size / 2, bcy = b2.y + b2.size / 2;
+            const dx = acx - bcx, dy = acy - bcy;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const touchDist = (a.size + b2.size) * 0.45;
+            if (dist < touchDist) {
+              let eater, eaten;
+              if (a === winBlob || b2 === winBlob) {
+                // Winner always wins its collisions
+                eater = winBlob;
+                eaten = a === winBlob ? b2 : a;
+              } else {
+                eater = a.size >= b2.size ? a : b2;
+                eaten = eater === a ? b2 : a;
+              }
+              absorb(eater, eaten);
+            }
+          }
+        }
+
+        const aliveCount = blobs.filter(b => b.alive).length;
+        if (aliveCount > 1 && elapsed < maxTime) {
+          animId = requestAnimationFrame(tick);
+        } else {
+          // Force finish: winner absorbs all remaining
+          blobs.filter(b => b.alive && b.name !== winner.Name).forEach(b => absorb(winBlob, b));
+          setTimeout(done, 350);
+        }
       }
-      move();
-      // Absorb blobs one by one
-      eatOrder.forEach((b, i) => {
-        setTimeout(() => {
-          b.alive = false;
-          // Move to winner position and shrink
-          b.el.style.left = winBlob.x + 'px';
-          b.el.style.top = winBlob.y + 'px';
-          b.el.style.width = '0px'; b.el.style.height = '0px'; b.el.style.opacity = '0';
-          // Grow winner
-          winBlob.size += 8;
-          winBlob.el.style.width = winBlob.size + 'px'; winBlob.el.style.height = winBlob.size + 'px';
-          winBlob.el.style.fontSize = Math.min(0.6 + (winBlob.size - 50) * 0.015, 1.8) + 'rem';
-        }, interval * (i + 1));
-      });
-      setTimeout(() => { cancelAnimationFrame(animId); done(); }, ANIM_DURATION);
+      animId = requestAnimationFrame(tick);
     }
 
     // 10. Rolodex — 3D card flip that spins through names and decelerates
@@ -1677,12 +2098,150 @@
       requestAnimationFrame(frame);
     }
 
+    // 11. March Madness bracket — left-vs-right tournament converging to center champion
+    function animBracket(stage, names, winner, done) {
+      const winnerName = winner.Name;
+      // Split names evenly, then pad each half to power of 2
+      const shuffled = shuffleArr([...names]);
+      const mid = Math.ceil(shuffled.length / 2);
+      const leftRaw = shuffled.slice(0, mid);
+      const rightRaw = shuffled.slice(mid);
+      function padToPow2(arr) { while (arr.length > 1 && (arr.length & (arr.length - 1))) arr.push('—'); if (arr.length === 0) arr.push('—'); return arr; }
+      const leftEntrants = padToPow2([...leftRaw]);
+      const rightEntrants = padToPow2([...rightRaw]);
+      const sideRounds = Math.max(Math.ceil(Math.log2(Math.max(leftEntrants.length, rightEntrants.length))), 1);
+      const totalTime = ANIM_DURATION * 1.5;
+      const roundTime = totalTime / (sideRounds + 2);
+
+      // Total columns: left (sideRounds+1) + center (1) + right (sideRounds+1)
+      const totalCols = (sideRounds + 1) * 2 + 1;
+      const container = document.createElement('div');
+      container.style.cssText = 'display:flex;align-items:stretch;width:100%;height:100%;gap:3px;padding:10px;overflow:hidden;';
+      stage.appendChild(container);
+
+      const cellStyle = 'padding:2px 4px;border-radius:4px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;';
+
+      function buildSideColumns(sideEntrants, numRounds) {
+        const columns = [];
+        for (let r = 0; r <= numRounds; r++) {
+          const col = document.createElement('div');
+          col.style.cssText = 'display:flex;flex-direction:column;justify-content:space-around;flex:1 1 0%;width:0;gap:2px;min-width:0;overflow:hidden;';
+          const cells = [];
+          const count = r === 0 ? sideEntrants.length : Math.ceil(sideEntrants.length / Math.pow(2, r));
+          const fontSize = Math.min(0.65 + r * 0.12, 1.1);
+          for (let s = 0; s < count; s++) {
+            const cell = document.createElement('div');
+            if (r === 0) {
+              const name = sideEntrants[s];
+              cell.style.cssText = cellStyle + 'font-size:' + fontSize + 'rem;color:#d1d5db;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);transition:color 0.3s,background 0.3s,border-color 0.3s,opacity 0.3s;';
+              if (name === '—') {
+                cell.style.visibility = 'hidden';
+                cell.style.padding = '0';
+                cell.style.border = 'none';
+                cell.style.fontSize = '0';
+              } else {
+                cell.textContent = name;
+              }
+              cells.push({ el: cell, name: name });
+            } else {
+              cell.style.cssText = cellStyle + 'font-size:' + fontSize + 'rem;color:transparent;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);transition:color 0.3s,background 0.3s,border-color 0.3s,opacity 0.3s;';
+              cell.textContent = '\u00a0';
+              cells.push({ el: cell, name: '' });
+            }
+            col.appendChild(cell);
+          }
+          columns.push({ col, cells });
+        }
+        return columns;
+      }
+
+      // Left side
+      const leftData = buildSideColumns(leftEntrants, sideRounds);
+      leftData.forEach(d => container.appendChild(d.col));
+      const leftColumns = leftData.map(d => d.cells);
+
+      // Championship cell in center
+      const centerCol = document.createElement('div');
+      centerCol.style.cssText = 'display:flex;flex-direction:column;justify-content:center;align-items:center;flex:1 1 0%;width:0;min-width:0;';
+      const champCell = document.createElement('div');
+      champCell.style.cssText = 'padding:6px 10px;border-radius:8px;font-size:1rem;font-weight:700;color:transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(255,255,255,0.06);border:2px solid rgba(255,255,255,0.2);text-align:center;transition:color 0.4s,background 0.4s,border-color 0.4s;';
+      champCell.textContent = '\u00a0';
+      centerCol.appendChild(champCell);
+      container.appendChild(centerCol);
+
+      // Right side (columns reversed so entrants are on far right)
+      const rightData = buildSideColumns(rightEntrants, sideRounds);
+      for (let r = rightData.length - 1; r >= 0; r--) container.appendChild(rightData[r].col);
+      const rightColumns = rightData.map(d => d.cells);
+
+      function processRound(survivors, columns, round) {
+        const next = [];
+        for (let i = 0; i < survivors.length; i += 2) {
+          const a = survivors[i], b = survivors[i + 1] || '—';
+          let advancing;
+          if (a === winnerName || b === '—') advancing = a;
+          else if (b === winnerName || a === '—') advancing = b;
+          else advancing = Math.random() > 0.5 ? a : b;
+          next.push(advancing);
+
+          const col = columns[round];
+          const loser = advancing === a ? b : a;
+          if (col) {
+            const loserCell = col.find(c => c.name === loser);
+            if (loserCell) { loserCell.el.style.opacity = '0.2'; loserCell.el.style.textDecoration = 'line-through'; }
+            const winCell = col.find(c => c.name === advancing);
+            if (winCell) { winCell.el.style.color = 'white'; winCell.el.style.background = 'rgba(185,28,28,0.2)'; winCell.el.style.borderColor = 'rgba(185,28,28,0.4)'; }
+          }
+
+          const nextCol = columns[round + 1];
+          if (nextCol && nextCol[Math.floor(i / 2)]) {
+            const cell = nextCol[Math.floor(i / 2)];
+            cell.el.textContent = advancing === '—' ? '' : advancing;
+            cell.el.style.color = '#d1d5db';
+            cell.name = advancing;
+          }
+        }
+        return next;
+      }
+
+      let leftSurvivors = [...leftEntrants];
+      let rightSurvivors = [...rightEntrants];
+      for (let r = 0; r < sideRounds; r++) {
+        ((round) => {
+          setTimeout(() => {
+            leftSurvivors = processRound(leftSurvivors, leftColumns, round);
+            rightSurvivors = processRound(rightSurvivors, rightColumns, round);
+          }, roundTime * (round + 1));
+        })(r);
+      }
+
+      // Championship reveal
+      setTimeout(() => {
+        const lfCell = leftColumns[sideRounds] && leftColumns[sideRounds][0];
+        const rfCell = rightColumns[sideRounds] && rightColumns[sideRounds][0];
+        if (lfCell) { lfCell.el.style.color = 'white'; lfCell.el.style.background = 'rgba(185,28,28,0.15)'; }
+        if (rfCell) { rfCell.el.style.color = 'white'; rfCell.el.style.background = 'rgba(185,28,28,0.15)'; }
+        champCell.textContent = winnerName;
+        champCell.style.color = 'white';
+        champCell.style.background = 'rgba(185,28,28,0.4)';
+        champCell.style.borderColor = 'rgba(185,28,28,0.7)';
+      }, roundTime * (sideRounds + 1));
+
+      setTimeout(done, totalTime);
+    }
+
     // --- Animation registry ---
-    const pickerAnimations = [animSlot, animSpotlight, animEliminate, animRoulette, animShuffle, animBinary, animTypewriter, animZoom, animAmoeba, animRolodex];
+    const pickerAnimations = [animSlot, animSpotlight, animEliminate, animRoulette, animShuffle, animBinary, animTypewriter, animZoom, animAmoeba, animRolodex, animBracket];
 
     // --- Main trigger ---
+    let skipToReveal = null; // set during animation so a second click skips ahead
+
     function triggerPicker() {
-      if (pickerBusy) return;
+      // If animation is running, skip to reveal
+      if (pickerBusy) {
+        if (skipToReveal) skipToReveal();
+        return;
+      }
       const students = getPresentStudents();
       if (students.length === 0) {
         document.getElementById('picker-name-display').textContent = 'No students yet';
@@ -1691,24 +2250,26 @@
 
       pickerBusy = true;
       const btn = document.getElementById('picker-go-btn');
-      btn.disabled = true;
-      btn.classList.add('opacity-50');
 
       const winner = pickWeightedRandom(students);
       const names = shuffleArr(students.map(s => s.Name));
       const stage = stageSetup();
 
-      // Pick a random animation
+      // Pick a random animation — with safety timeout so a frozen animation never blocks
       const anim = pickerAnimations[Math.floor(Math.random() * pickerAnimations.length)];
-      anim(stage, names, winner, () => {
-        setTimeout(() => {
-          stageFinish(winner);
-          updateWeightsAfterPick(winner.StudentID, students.map(s => s.StudentID));
-          btn.disabled = false;
-          btn.classList.remove('opacity-50');
-          pickerBusy = false;
-        }, 400); // brief pause before showing result
-      });
+      let revealed = false;
+      function revealWinner() {
+        if (revealed) return;
+        revealed = true;
+        skipToReveal = null;
+        stageFinish(winner);
+        updateWeightsAfterPick(winner.StudentID, students.map(s => s.StudentID));
+        pickerBusy = false;
+      }
+      skipToReveal = revealWinner;
+      anim(stage, names, winner, () => setTimeout(revealWinner, 400));
+      // Safety net: force reveal after ANIM_DURATION + 1s no matter what
+      setTimeout(revealWinner, ANIM_DURATION + 1000);
     }
 
     // Picker button + keyboard
@@ -1729,6 +2290,322 @@
       });
     })();
 
+
+    // --- Attendance Correction Form (pre-filled Google Form) ---
+    (function initCorrectionForm() {
+      const FORM_BASE = 'https://docs.google.com/forms/d/e/1FAIpQLSevvK08WkMZnrVvSACsW5PEid53rOoUvOqZPWA0S9heHdnNng/viewform?';
+      const ENTRY = {
+        teacher:  'entry.2116484739',
+        date:     'entry.2133221732',
+        period:   'entry.333248502',
+        name:     'entry.120618819',
+        id:       'entry.1072789732',
+        reason:   'entry.1039797176',
+        notes:    'entry.2019423498',
+      };
+      const corrStudentSel = document.getElementById('correction-student');
+      const corrDateSel = document.getElementById('correction-date');
+      const corrReasonSel = document.getElementById('correction-reason');
+      const corrDateLoading = document.getElementById('correction-date-loading');
+
+      // When a student is selected, fetch their attendance records for the current period
+      if (corrStudentSel) {
+        corrStudentSel.addEventListener('change', async () => {
+          // Reset date and reason
+          corrDateSel.replaceChildren();
+          const defOpt = document.createElement('option');
+          defOpt.value = ''; defOpt.textContent = 'Select a date...';
+          corrDateSel.appendChild(defOpt);
+          corrReasonSel.value = '';
+
+          if (!corrStudentSel.value || !db || !teacherUid) return;
+          const sid = corrStudentSel.value;
+          const period = periodSelect ? periodSelect.value : '';
+          if (!period) return;
+
+          corrDateLoading.classList.remove('hidden');
+
+          try {
+            // Generate school days to check (weekdays going back ~90 days)
+            const dates = [];
+            const today = new Date();
+            for (let i = 0; i < 130 && dates.length < 90; i++) {
+              const d = new Date(today);
+              d.setDate(d.getDate() - i);
+              if (d.getDay() === 0 || d.getDay() === 6) continue;
+              dates.push(d.toISOString().slice(0, 10));
+            }
+
+            const results = await Promise.all(dates.map(async (date) => {
+              const basePath = teacherPath(`attendance/${date}/periods/${period}`);
+              const periodDoc = await getDoc(doc(db, basePath));
+              if (!periodDoc.exists()) return null;
+              const roster = periodDoc.data().roster_snapshot || [];
+              if (!roster.some(s => String(s.StudentID) === String(sid))) return null;
+
+              const studentDoc = await getDoc(doc(db, `${basePath}/students/${sid}`));
+              if (!studentDoc.exists()) {
+                return { date, status: 'Absent' };
+              }
+              const status = studentDoc.data().Status || 'Present';
+              return { date, status };
+            }));
+
+            const entries = results.filter(Boolean);
+            corrDateLoading.classList.add('hidden');
+
+            if (entries.length === 0) {
+              const opt = document.createElement('option');
+              opt.value = ''; opt.textContent = 'No attendance records found';
+              corrDateSel.appendChild(opt);
+            } else {
+              entries.forEach(e => {
+                const opt = document.createElement('option');
+                opt.value = e.date;
+                const label = new Date(e.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                opt.textContent = label + ' — ' + e.status;
+                opt.dataset.status = e.status;
+                corrDateSel.appendChild(opt);
+              });
+            }
+          } catch (err) {
+            corrDateLoading.classList.add('hidden');
+            console.error('Correction date lookup failed:', err);
+          }
+        });
+      }
+
+      // Auto-select reason when a date is picked
+      if (corrDateSel) {
+        corrDateSel.addEventListener('change', () => {
+          const opt = corrDateSel.selectedOptions[0];
+          if (!opt || !opt.dataset.status) { corrReasonSel.value = ''; return; }
+          const status = opt.dataset.status;
+          if (status === 'Absent') {
+            corrReasonSel.value = 'Student was marked absent by mistake.';
+          } else {
+            // Tardy/Late — probably shouldn't have been marked tardy
+            corrReasonSel.value = 'Student was marked absent but was tardy.';
+          }
+        });
+      }
+
+      const btn = document.getElementById('correction-submit-btn');
+      if (!btn) return;
+      btn.addEventListener('click', async () => {
+        const studentSel = document.getElementById('correction-student');
+        const dateSel = document.getElementById('correction-date');
+        const reasonSel = document.getElementById('correction-reason');
+        if (!studentSel.value) { studentSel.focus(); return; }
+        if (!dateSel.value) { dateSel.focus(); return; }
+        if (!reasonSel.value) { reasonSel.focus(); return; }
+        const opt = studentSel.selectedOptions[0];
+        const studentName = opt.dataset.name || opt.textContent;
+        const studentId = studentSel.value;
+        const reason = reasonSel.value;
+        const period = periodSelect ? periodSelect.value : '';
+        const corrDate = dateSel.value; // YYYY-MM-DD
+
+        // Open the Google Form
+        const params = new URLSearchParams();
+        params.set(ENTRY.teacher, teacherDisplayName || teacherName || '');
+        params.set(ENTRY.date, corrDate);
+        if (period) params.set(ENTRY.period, period);
+        params.set(ENTRY.name, studentName);
+        params.set(ENTRY.id, studentId);
+        params.set(ENTRY.reason, reason);
+        window.open(FORM_BASE + params.toString(), '_blank');
+
+        // Also update Firestore to keep local data in sync
+        if (db && teacherUid && period) {
+          try {
+            const studentDocRef = doc(db, teacherPath(`attendance/${corrDate}/periods/${period}/students/${studentId}`));
+
+            if (reason === 'Student was not marked absent but was absent.') {
+              // Student should be absent — remove their sign-in record
+              await deleteDoc(studentDocRef);
+            } else if (reason === 'Student was marked absent but was tardy.') {
+              // Student was absent, should be tardy — add a sign-in record
+              await setDoc(studentDocRef, {
+                StudentID: studentId,
+                Name: studentName,
+                Date: new Date(corrDate + 'T12:00:00').toLocaleDateString(),
+                SignInTime: 'Corrected',
+                Status: 'Late',
+                Period: period,
+                Group: null,
+                Timestamp: serverTimestamp(),
+              });
+            } else {
+              // All other reasons: student should be present — add/update sign-in record
+              const existing = await getDoc(studentDocRef);
+              if (existing.exists()) {
+                // Already signed in — update status to On Time
+                await setDoc(studentDocRef, { Status: 'On Time' }, { merge: true });
+              } else {
+                // Was absent — create a present record
+                await setDoc(studentDocRef, {
+                  StudentID: studentId,
+                  Name: studentName,
+                  Date: new Date(corrDate + 'T12:00:00').toLocaleDateString(),
+                  SignInTime: 'Corrected',
+                  Status: 'On Time',
+                  Period: period,
+                  Group: null,
+                  Timestamp: serverTimestamp(),
+                });
+              }
+            }
+            console.log('Firestore updated for correction:', studentId, corrDate, reason);
+            // Clear insights cache so it refreshes
+            insightsCache.delete(period);
+          } catch (err) {
+            console.error('Failed to update Firestore for correction:', err);
+          }
+        }
+      });
+    })();
+
+    // --- Entire Period Correction Form ---
+    (function initPeriodCorrectionForm() {
+      const FORM_BASE = 'https://docs.google.com/forms/d/e/1FAIpQLSdvGPsETs-jY5iity2O3-jDEnIEhF-liLwQ2eWiKcXTIcHMYg/viewform?';
+      const ENTRY = {
+        teacher: 'entry.1358303787',
+        date:    'entry.1373797864',
+        period:  'entry.77713515',
+        absent:  'entry.1075080481',
+        tardy:   'entry.509116090',
+        record:  'entry.870442974',
+      };
+      const dateInput = document.getElementById('period-correction-date');
+      const periodSel = document.getElementById('period-correction-period');
+      const fullDayCheck = document.getElementById('period-correction-fullday');
+      const btn = document.getElementById('period-correction-btn');
+      const statusEl = document.getElementById('period-correction-status');
+      if (!btn || !dateInput || !periodSel) return;
+
+      // Default date to today
+      dateInput.value = new Date().toLocaleDateString('en-CA');
+
+      // Default period to current selection (periodSelect is declared later, use getElementById)
+      const globalPeriodSel = document.getElementById('period-select');
+      if (globalPeriodSel && globalPeriodSel.value) periodSel.value = globalPeriodSel.value;
+
+      // Toggle period selector when full day is checked
+      if (fullDayCheck) {
+        fullDayCheck.addEventListener('change', () => {
+          periodSel.disabled = fullDayCheck.checked;
+          periodSel.style.opacity = fullDayCheck.checked ? '0.4' : '1';
+        });
+      }
+
+      // Build a pre-filled URL for one period
+      async function buildPeriodUrl(date, period) {
+        const basePath = teacherPath(`attendance/${date}/periods/${period}`);
+        const periodDoc = await getDoc(doc(db, basePath));
+        if (!periodDoc.exists() || !(periodDoc.data().roster_snapshot || []).length) return null;
+
+        const roster = periodDoc.data().roster_snapshot;
+        const studentsSnap = await getDocs(collection(db, `${basePath}/students`));
+        const signedIn = {};
+        studentsSnap.forEach(d => { signedIn[d.id] = d.data(); });
+
+        const absentNames = [];
+        const tardyNames = [];
+        for (const student of roster) {
+          const sid = String(student.StudentID);
+          const displayName = (student.preferredName || student.FirstName || '') + ' ' + (student.LastName || '');
+          if (!signedIn[sid]) {
+            absentNames.push(displayName.trim());
+          } else {
+            const status = signedIn[sid].Status || 'On Time';
+            if (['Late', 'Tardy', 'Truant', 'Cut', 'Late > 20'].includes(status)) {
+              tardyNames.push(displayName.trim());
+            }
+          }
+        }
+
+        const params = new URLSearchParams();
+        params.set(ENTRY.teacher, teacherDisplayName || teacherName || '');
+        params.set(ENTRY.date, date);
+        params.set(ENTRY.period, period);
+        if (absentNames.length > 0) params.set(ENTRY.absent, absentNames.join(', '));
+        if (tardyNames.length > 0) params.set(ENTRY.tardy, tardyNames.join(', '));
+        return { url: FORM_BASE + params.toString(), absentCount: absentNames.length, rosterSize: roster.length };
+      }
+
+      btn.addEventListener('click', async () => {
+        if (!dateInput.value) { dateInput.focus(); return; }
+        if (!fullDayCheck.checked && !periodSel.value) { periodSel.focus(); return; }
+        if (!db || !teacherUid) return;
+
+        const date = dateInput.value;
+        statusEl.textContent = 'Loading attendance data...';
+        statusEl.classList.remove('hidden');
+
+        try {
+          if (fullDayCheck.checked) {
+            // Open a form for every period the teacher has a roster for
+            // Pre-open tabs while we still have user-gesture trust (popup blocker)
+            const allPeriods = Object.keys(allRosters).filter(p => (allRosters[p] || []).length > 0).sort();
+            if (allPeriods.length === 0) { statusEl.textContent = 'No roster periods found.'; return; }
+            const tabs = allPeriods.map(() => window.open('about:blank', '_blank'));
+            const results = await Promise.all(allPeriods.map(p => buildPeriodUrl(date, p)));
+
+            // Check if any period has a suspicious number of absences
+            const suspicious = results.filter(r => r && r.absentCount > r.rosterSize / 3);
+            if (suspicious.length > 0) {
+              const summary = suspicious.map((r, i) => {
+                const period = allPeriods[results.indexOf(r)];
+                return `Period ${period}: ${r.absentCount}/${r.rosterSize} absent`;
+              }).join('\n');
+              if (!confirm(`Warning: The following periods have more than a third of the class marked absent. This may mean no attendance was taken (e.g. sub day). Continue?\n\n${summary}`)) {
+                tabs.forEach(t => { if (t) t.close(); });
+                statusEl.textContent = 'Cancelled.';
+                setTimeout(() => statusEl.classList.add('hidden'), 2000);
+                return;
+              }
+            }
+
+            let opened = 0;
+            results.forEach((result, i) => {
+              if (result && tabs[i]) {
+                tabs[i].location.href = result.url;
+                opened++;
+              } else if (tabs[i]) {
+                tabs[i].close(); // no data for this period, close the blank tab
+              }
+            });
+            if (opened === 0) {
+              statusEl.textContent = 'No attendance data found for any period on ' + date + '.';
+              return;
+            }
+            statusEl.textContent = 'Opened ' + opened + ' period form(s).';
+            setTimeout(() => statusEl.classList.add('hidden'), 2000);
+          } else {
+            const result = await buildPeriodUrl(date, periodSel.value);
+            if (!result) {
+              statusEl.textContent = 'No attendance data found for that date/period.';
+              return;
+            }
+            // Warn if more than a third of the class is absent
+            if (result.absentCount > result.rosterSize / 3) {
+              if (!confirm(`Warning: ${result.absentCount} out of ${result.rosterSize} students are marked absent (${Math.round(result.absentCount / result.rosterSize * 100)}%). This may mean no attendance was taken (e.g. sub day). Continue?`)) {
+                statusEl.textContent = 'Cancelled.';
+                statusEl.classList.remove('hidden');
+                setTimeout(() => statusEl.classList.add('hidden'), 2000);
+                return;
+              }
+            }
+            statusEl.classList.add('hidden');
+            window.open(result.url, '_blank');
+          }
+        } catch (err) {
+          statusEl.textContent = 'Error loading data: ' + err.message;
+          console.error('Period correction lookup failed:', err);
+        }
+      });
+    })();
 
     async function exportDateRangeCSV() {
       const startDateInput = document.getElementById('start-date');
@@ -1758,7 +2635,7 @@
       statusEl.classList.add('text-blue-600');
 
       const rows = [["Date", "Period", "StudentID", "LastName", "FirstName", "Status", "SignInTime", "Group"]];
-      const masterPeriodList = ["0", "1", "2", "2A", "2B", "3", "4", "5", "6", "7"];
+      const masterPeriodList = [...new Set(["0", "1", "2", "2A", "2B", "3", "4", "5", "6", "7", ...Object.keys(allRosters)])];
 
       const datesToCheck = [];
       let currentDate = new Date(startDate);
@@ -1781,12 +2658,12 @@
 
               const studentsSnapshot = await getDocs(collection(db, `${basePath}/students`));
               const presentStudents = new Map();
-              studentsSnapshot.forEach(d => presentStudents.set(d.data().StudentID, d.data()));
+              studentsSnapshot.forEach(d => presentStudents.set(d.id, d.data()));
 
               const periodRows = [];
               for (const student of roster) {
-                if (presentStudents.has(student.StudentID)) {
-                  const log = presentStudents.get(student.StudentID);
+                if (presentStudents.has(String(student.StudentID))) {
+                  const log = presentStudents.get(String(student.StudentID));
                   periodRows.push([date, period, student.StudentID, csvQuote(student.LastName || ''), csvQuote(student.FirstName || ''), log.Status, log.SignInTime, log.Group]);
                 } else {
                   periodRows.push([date, period, student.StudentID, csvQuote(student.LastName || ''), csvQuote(student.FirstName || ''), 'Absent', 'N/A', 'N/A']);
@@ -1827,16 +2704,17 @@
     // ===== Import modern Firebase SDK =====
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getAuth, signInWithCustomToken, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-    import { getFirestore, initializeFirestore, persistentLocalCache, collection, doc, onSnapshot, setDoc, serverTimestamp, getDoc, addDoc, where, query, getDocs, deleteDoc, documentId } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getFirestore, initializeFirestore, persistentLocalCache, collection, doc, onSnapshot, setDoc, serverTimestamp, getDoc, addDoc, where, query, getDocs, deleteDoc, documentId, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
 
     // ===== Config & Constants =====
     const MAX_GROUP = 13;                    // groups 1..13
     const GROUP_CAP = g => g === 6 ? 2 : 3;    // cap 2 for group 6, else 3
-    const FRONT_SET = new Set([1, 2, 12, 13]);  // "front of room" groups
+    // Front-of-room groups are configured per-period in the Seating tab (no hardcoded default)
     const LATE_TO_THIRD = new Set([9, 10]);   // groups that should be last to receive a 3rd person
-    const TARDY_AFTER_NTH = 5;              // Start marking tardy after Nth sign-in for the period
-    const TARDY_GRACE_MINUTES = 8;           // Minutes after Nth sign-in before marking late
+    let TARDY_ENABLED = true;                // Can be toggled off in Settings
+    let TARDY_AFTER_NTH = 5;                // Start marking tardy after Nth sign-in for the period
+    let TARDY_GRACE_MINUTES = 8;            // Minutes after Nth sign-in before marking late
     const PERIOD_SWITCH_NTH = 2;             // Switch global period after Nth student from new period
 
     // CSV RFC 4180 quoting — doubles internal quotes
@@ -1882,6 +2760,7 @@
     // ===== Teacher auth state =====
     let teacherUid = null;
     let teacherName = null;
+    let teacherDisplayName = null; // from Settings, used for correction forms
     let teacherPin = null;
 
     // Build a Firestore path under the authenticated teacher's root
@@ -1897,6 +2776,7 @@
     let allRosters = {};      // { period -> [{StudentID,LastName,FirstName}, ...] }
     let currentRoster = [];   // active period roster array
     let periodAttendanceLog = []; // sign-ins for current period
+    let absenceStreaks = new Map();   // StudentID -> consecutive days absent (for current period)
     let globalPeriod = null;          // current period from Firebase (shared across kiosks)
     let unsubCurrentPeriod = null;    // listener for currentPeriod doc
     let isOverride = false;
@@ -2016,6 +2896,7 @@
     // Start listening for currentPeriod changes from Firebase
     function watchCurrentPeriod() {
       if (!db || !teacherUid) return;
+      if (unsubCurrentPeriod) { unsubCurrentPeriod(); unsubCurrentPeriod = null; }
       const today = nowISODate();
       const periodDocRef = doc(db, teacherPath(`attendance/${today}/meta/currentPeriod`));
       unsubCurrentPeriod = onSnapshot(periodDocRef, snap => {
@@ -2075,9 +2956,42 @@
         rosterUpload.addEventListener('change', onRosterUpload);
         clearRostersBtn.addEventListener('click', clearSavedRosters);
         exportCsvButton.addEventListener('click', exportCSV);
+
+        // Sync to Aeries button on Attendance tab
+        const attendanceSyncBtn = document.getElementById('attendance-sync-btn');
+        if (attendanceSyncBtn) {
+          attendanceSyncBtn.addEventListener('click', async () => {
+            if (!functions) return;
+            attendanceSyncBtn.disabled = true;
+            const spinner = document.getElementById('attendance-sync-spinner');
+            const statusEl = document.getElementById('attendance-sync-status');
+            if (spinner) spinner.classList.remove('hidden');
+            try {
+              const triggerSyncFn = httpsCallable(functions, 'triggerSync');
+              const result = await triggerSyncFn({});
+              if (result.data.success) {
+                statusEl.textContent = 'Synced successfully!';
+                statusEl.className = 'text-xs mt-1 text-center font-medium text-green-600';
+              } else {
+                statusEl.textContent = result.data.error || 'Sync failed.';
+                statusEl.className = 'text-xs mt-1 text-center font-medium text-red-600';
+              }
+              statusEl.classList.remove('hidden');
+              setTimeout(() => statusEl.classList.add('hidden'), 4000);
+            } catch (err) {
+              console.error('[attendanceSync]', err);
+              statusEl.textContent = 'Sync error: ' + (err.message || 'unknown');
+              statusEl.className = 'text-xs mt-1 text-center font-medium text-red-600';
+              statusEl.classList.remove('hidden');
+            } finally {
+              attendanceSyncBtn.disabled = false;
+              if (spinner) spinner.classList.add('hidden');
+            }
+          });
+        }
         hideAdminButton.addEventListener('click', showKioskMode);
         saveExceptionsBtn.addEventListener('click', saveExceptions);
-        studentIdInput.addEventListener('input', () => { signInButton.disabled = studentIdInput.value.trim().length < 4; }); // 4 min: allows short PINs; student IDs are 5 digits
+        studentIdInput.addEventListener('input', () => { signInButton.disabled = studentIdInput.value.trim().length < 3; }); // 3 min: supports 3-digit staff IDs, 4-digit PINs, 5-digit student IDs
         studentIdInput.addEventListener('keyup', e => { if (e.key === 'Enter' && !signInButton.disabled) signInButton.click(); });
         signInButton.addEventListener('click', handleSignIn);
         document.addEventListener('keydown', e => { if (!messageView.classList.contains('hidden') && (e.key === 'Enter' || e.key === 'Escape')) dismissMessage(); });
@@ -2104,6 +3018,17 @@
         if (loginPasswordInput) loginPasswordInput.addEventListener('keyup', e => { if (e.key === 'Enter') handleLogin(); });
         if (loginUsernameInput) loginUsernameInput.addEventListener('keyup', e => { if (e.key === 'Enter') loginPasswordInput && loginPasswordInput.focus(); });
 
+        // Login password visibility toggle
+        const loginTogglePw = document.getElementById('login-toggle-password');
+        if (loginTogglePw && loginPasswordInput) {
+          loginTogglePw.addEventListener('click', () => {
+            const isPassword = loginPasswordInput.type === 'password';
+            loginPasswordInput.type = isPassword ? 'text' : 'password';
+            document.getElementById('login-eye-open').classList.toggle('hidden', !isPassword);
+            document.getElementById('login-eye-closed').classList.toggle('hidden', isPassword);
+          });
+        }
+
         // PIN setup listeners
         const pinSetupSubmitBtn = document.getElementById('pin-setup-submit');
         if (pinSetupSubmitBtn) pinSetupSubmitBtn.addEventListener('click', handlePinSetup);
@@ -2118,6 +3043,23 @@
         const pinForgotLink = document.getElementById('pin-forgot-link');
         if (pinForgotLink) pinForgotLink.addEventListener('click', () => {
           pinEntryScreen.classList.add('hidden');
+          clearKioskBinding();
+          teacherUid = null; teacherName = null; teacherPin = null;
+          if (auth) signOut(auth).catch(() => {});
+          showLoginScreen();
+        });
+
+        // Kiosk forgot-PIN link — clears Firestore PIN so re-auth forces new PIN setup
+        const kioskForgotPin = document.getElementById('kiosk-forgot-pin');
+        if (kioskForgotPin) kioskForgotPin.addEventListener('click', async () => {
+          if (!confirm('Forgot your PIN? You will need to sign in with Aeries to set a new one.')) return;
+          // Clear PIN from Firestore so login flow triggers PIN setup
+          if (db && teacherUid) {
+            try {
+              const configRef = doc(db, teacherPath('config/main'));
+              await setDoc(configRef, { kioskPin: null, updatedAt: serverTimestamp() }, { merge: true });
+            } catch (e) { console.warn('[forgot-pin] failed to clear Firestore PIN', e); }
+          }
           clearKioskBinding();
           teacherUid = null; teacherName = null; teacherPin = null;
           if (auth) signOut(auth).catch(() => {});
@@ -2247,6 +3189,8 @@
       studentIdInput.value = '';
       signInButton.disabled = true;
       studentIdInput.focus();
+      // Restart QR if enabled (canvas needs visible parent to render)
+      if (qrInterval) { stopQrSession(); startQrSession(); }
     }
 
     function showDashboard() {
@@ -2267,6 +3211,14 @@
       initSettingsUI();
       // Default to Attendance section on open
       switchDashboardSection('attendance');
+      // Show Aeries warning if stored from login
+      const aeriesWarn = sessionStorage.getItem('aeriesWarning');
+      if (aeriesWarn) {
+        sessionStorage.removeItem('aeriesWarning');
+        setTimeout(() => {
+          alert(aeriesWarn);
+        }, 500);
+      }
     }
 
     // Keep showAdminPanel as an alias for backwards compatibility
@@ -2277,7 +3229,7 @@
     // ===== Onboarding Wizard =====
     let wizardRosterLoaded = false;
 
-    function showOnboardingWizard(username) {
+    function showOnboardingWizard(username, aeriesVerified) {
       const wizardEl = document.getElementById('onboarding-wizard');
       loginScreen.classList.add('hidden');
       pinSetupScreen.classList.add('hidden');
@@ -2289,6 +3241,26 @@
       // Display username on step 1
       const usernameDisplay = document.getElementById('wizard-username-display');
       if (usernameDisplay) usernameDisplay.textContent = username || '';
+
+      // Update step 1 header based on Aeries verification
+      const verifiedTitle = document.getElementById('wizard-verified-title');
+      const verifiedNote = document.getElementById('wizard-verified-note');
+      if (verifiedTitle) {
+        if (aeriesVerified) {
+          verifiedTitle.textContent = 'Your Aeries credentials have been verified!';
+        } else {
+          verifiedTitle.textContent = 'Account created!';
+        }
+      }
+      if (verifiedNote) {
+        if (aeriesVerified) {
+          verifiedNote.textContent = '';
+          verifiedNote.classList.add('hidden');
+        } else {
+          verifiedNote.textContent = 'These credentials are not linked to Aeries. To enable automatic roster fetching and attendance sync, update your username and password in Settings to match your Aeries account.';
+          verifiedNote.classList.remove('hidden');
+        }
+      }
 
       // Reset to step 1
       wizardRosterLoaded = false;
@@ -2394,7 +3366,7 @@
         const changed = new Set();
         for (const f of files) {
           try {
-            const text = await f.text();
+            const text = await fileToCSV(f);
             const parsed = parseRoster(text);
             for (const p in parsed) { merged[p] = parsed[p]; changed.add(String(p)); }
             processed++;
@@ -2689,7 +3661,14 @@
         if (!functions) throw new Error('Firebase not initialized — no cloud connection.');
         const authenticateTeacher = httpsCallable(functions, 'authenticateTeacher');
         const result = await authenticateTeacher({ username, password });
-        const { token, uid, displayName } = result.data;
+
+        if (result.data.success === false) {
+          errEl.textContent = result.data.error || 'Login failed.';
+          errEl.classList.remove('hidden');
+          return;
+        }
+
+        const { token, uid, displayName, aeriesWarning } = result.data;
 
         // Sign in to Firebase Auth with the custom token
         await signInWithCustomToken(auth, token);
@@ -2697,13 +3676,20 @@
         teacherUid = uid;
         teacherName = displayName || username;
 
+        // Show Aeries warning if credentials need updating
+        if (aeriesWarning) {
+          console.warn('[login] Aeries warning:', aeriesWarning);
+          // Store warning to show after dashboard loads
+          sessionStorage.setItem('aeriesWarning', aeriesWarning);
+        }
+
         const remember = rememberInput ? rememberInput.checked : false;
 
         // Check if this is a new teacher who needs onboarding
         const needsOnboarding = await checkNeedsOnboarding();
         if (needsOnboarding) {
           saveKioskBinding(teacherUid, teacherName, null, remember);
-          showOnboardingWizard(username);
+          showOnboardingWizard(username, result.data.validated);
           return;
         }
 
@@ -2821,6 +3807,7 @@
       if (unsubAttendance) { unsubAttendance(); unsubAttendance = null; }
       if (unsubCurrentPeriod) { unsubCurrentPeriod(); unsubCurrentPeriod = null; }
       if (unsubSyncStatus) { unsubSyncStatus(); unsubSyncStatus = null; }
+      stopQrSession();
       if (auth) { try { await signOut(auth); } catch { } }
       // Reset UI
       teacherNameDisplay.classList.add('hidden');
@@ -2829,11 +3816,38 @@
       allRosters = {};
       currentRoster = [];
       periodAttendanceLog = [];
+      localStorage.removeItem('allRosters');
       showLoginScreen();
     }
 
     // Called after successful authentication (login or PIN entry from stored session)
     async function onTeacherAuthenticated(remember) {
+      // Load custom kiosk prompt
+      if (db && teacherUid) {
+        try {
+          const cfgSnap = await getDoc(doc(db, teacherPath('config/main')));
+          if (cfgSnap.exists() && cfgSnap.data().kioskPrompt) {
+            const promptEl = document.getElementById('kiosk-prompt-text');
+            if (promptEl) promptEl.textContent = cfgSnap.data().kioskPrompt;
+          }
+          if (cfgSnap.exists() && cfgSnap.data().kioskPlaceholder) {
+            const idInput = document.getElementById('student-id-input');
+            if (idInput) idInput.placeholder = cfgSnap.data().kioskPlaceholder;
+          }
+          if (cfgSnap.exists() && cfgSnap.data().teacherDisplayName) {
+            teacherDisplayName = cfgSnap.data().teacherDisplayName;
+          }
+          if (cfgSnap.exists() && cfgSnap.data().qrSignInEnabled === true) {
+            startQrSession();
+          }
+          // Tardy settings
+          if (cfgSnap.exists()) {
+            if (cfgSnap.data().tardyEnabled === false) TARDY_ENABLED = false;
+            if (cfgSnap.data().tardyAfterNth != null) TARDY_AFTER_NTH = cfgSnap.data().tardyAfterNth;
+            if (cfgSnap.data().tardyGraceMinutes != null) TARDY_GRACE_MINUTES = cfgSnap.data().tardyGraceMinutes;
+          }
+        } catch (e) { console.warn('[onTeacherAuthenticated] config load failed', e); }
+      }
       if (db) {
         watchRostersFromCloud();
         loadExceptions();
@@ -2850,7 +3864,8 @@
               numGroups: sc.numGroups || 6,
               defaultSeatsPerGroup: sc.defaultSeatsPerGroup || 4,
               perGroupOverrides: sc.perGroupOverrides || {},
-              perPeriodOverrides: sc.perPeriodOverrides || {}
+              perPeriodOverrides: sc.perPeriodOverrides || {},
+              frontGroups: sc.frontGroups || [],
             };
           }
         } catch (e) { console.warn('[onTeacherAuthenticated] local seating config load failed', e); }
@@ -2878,6 +3893,12 @@
         opt.textContent = `Period ${p}`;
         periodSelect.appendChild(opt);
       });
+
+      // Auto-select first period if none is set yet
+      if (!periodSelect.value && rosterPeriods.length > 0) {
+        periodSelect.value = rosterPeriods[0];
+        onPeriodChange();
+      }
 
       if (sessionStorage.getItem('periodOverride') === 'true') { isOverride = true; }
       updateUI();
@@ -2908,7 +3929,7 @@
           }
         });
 
-        allRosters = { ...allRosters, ...incoming };
+        allRosters = incoming;
         try { localStorage.setItem('allRosters', JSON.stringify(allRosters)); } catch (e) { console.warn('localStorage full:', e); }
         renderRosterSummary();
         renderRosterManagementUI();
@@ -2930,7 +3951,16 @@
           opt.textContent = `Period ${p}`;
           periodSelect.appendChild(opt);
         });
-        if (curVal) periodSelect.value = curVal;
+        // Restore previous selection, or apply globalPeriod from Firebase, or auto-select first
+        if (curVal) {
+          periodSelect.value = curVal;
+        } else if (globalPeriod && !isOverride) {
+          periodSelect.value = globalPeriod;
+          if (periodSelect.value === globalPeriod) onPeriodChange();
+        } else if (rosterPeriods.length > 0) {
+          periodSelect.value = rosterPeriods[0];
+          onPeriodChange();
+        }
 
         const cur = periodSelect.value;
         if (cur) {
@@ -2953,22 +3983,60 @@
       if (!container) return;
       const periods = Object.keys(allRosters).sort(periodSort);
       if (periods.length === 0) {
-        container.innerHTML = '<div class="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500"><p class="font-medium">No rosters loaded yet.</p><p class="text-sm mt-1">Fetch from Aeries or upload a roster CSV to get started.</p></div>';
+        container.replaceChildren();
+        const empty = document.createElement('div');
+        empty.className = 'bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500';
+        const p1 = document.createElement('p');
+        p1.className = 'font-medium';
+        p1.textContent = 'No rosters loaded yet.';
+        const p2 = document.createElement('p');
+        p2.className = 'text-sm mt-1';
+        p2.textContent = 'Fetch from Aeries or upload a roster CSV to get started.';
+        empty.append(p1, p2);
+        container.appendChild(empty);
         return;
       }
-      container.innerHTML = '';
+      // Preserve expanded state and scroll before re-render
+      const expandedPeriods = new Set();
+      container.querySelectorAll('.roster-period-body').forEach(el => {
+        if (!el.classList.contains('hidden')) expandedPeriods.add(el.id);
+      });
+      const scrollParent = container.closest('.overflow-y-auto');
+      const savedScroll = scrollParent ? scrollParent.scrollTop : window.scrollY;
+      container.replaceChildren();
       periods.forEach((period, idx) => {
         const students = allRosters[period] || [];
         const sectionId = 'roster-period-' + period;
         const tableId = 'roster-table-' + period;
+        const wasExpanded = expandedPeriods.size > 0 ? expandedPeriods.has(sectionId) : idx === 0;
         const section = document.createElement('div');
         section.className = 'bg-white rounded-xl border border-gray-200 mb-4 overflow-hidden';
         const header = document.createElement('div');
         header.className = 'flex items-center justify-between px-5 py-3.5 cursor-pointer hover:bg-gray-50 select-none';
-        header.innerHTML = '<div class="flex items-center gap-3"><span class="font-semibold text-gray-900">Period ' + escHtml(period) + '</span><span class="text-xs bg-gray-100 text-gray-600 font-medium px-2 py-0.5 rounded-full">' + students.length + ' students</span></div><svg class="roster-chevron w-5 h-5 text-gray-400 transition-transform' + (idx === 0 ? ' rotate-180' : '') + '" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>';
+        const headerLeft = document.createElement('div');
+        headerLeft.className = 'flex items-center gap-3';
+        const periodLabel = document.createElement('span');
+        periodLabel.className = 'font-semibold text-gray-900';
+        periodLabel.textContent = 'Period ' + period;
+        const countBadge = document.createElement('span');
+        countBadge.className = 'text-xs bg-gray-100 text-gray-600 font-medium px-2 py-0.5 rounded-full';
+        countBadge.textContent = students.length + ' students';
+        headerLeft.append(periodLabel, countBadge);
+        const chevronSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        chevronSvg.setAttribute('class', 'roster-chevron w-5 h-5 text-gray-400 transition-transform' + (wasExpanded ? ' rotate-180' : ''));
+        chevronSvg.setAttribute('fill', 'none');
+        chevronSvg.setAttribute('stroke', 'currentColor');
+        chevronSvg.setAttribute('viewBox', '0 0 24 24');
+        const chevronPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        chevronPath.setAttribute('stroke-linecap', 'round');
+        chevronPath.setAttribute('stroke-linejoin', 'round');
+        chevronPath.setAttribute('stroke-width', '2');
+        chevronPath.setAttribute('d', 'M19 9l-7 7-7-7');
+        chevronSvg.appendChild(chevronPath);
+        header.append(headerLeft, chevronSvg);
         const body = document.createElement('div');
         body.id = sectionId;
-        body.className = 'roster-period-body border-t border-gray-100' + (idx !== 0 ? ' hidden' : '');
+        body.className = 'roster-period-body border-t border-gray-100' + (wasExpanded ? '' : ' hidden');
         const tableWrap = document.createElement('div');
         tableWrap.className = 'overflow-x-auto';
         const table = document.createElement('table');
@@ -2986,11 +4054,19 @@
           const pn = escHtml(s.preferredName || s.FirstName || '');
           const sp = escHtml(period);
           const si = escHtml(s.StudentID);
+          // NOTE: All values are escaped via escHtml() before insertion into innerHTML.
+          // This is existing code being modified only to replace inline JS handlers
+          // (onblur/onclick) with data-* attributes + addEventListener below.
           tr.innerHTML = '<td class="px-4 py-2 text-gray-500 font-mono text-xs">' + escHtml(s.StudentID || '') + '</td>'
             + '<td class="px-4 py-2 text-gray-700">' + escHtml(s.LastName || '') + ', ' + escHtml(s.FirstName || '') + '</td>'
-            + '<td class="px-4 py-2"><input type="text" class="w-full border border-transparent rounded px-2 py-1 text-sm hover:border-gray-300 focus:border-red-500 focus:ring-1 focus:ring-red-500 focus:outline-none bg-transparent" value="' + pn + '" placeholder="' + escHtml(s.FirstName || '') + '" onblur="savePreferredName(\'' + sp + '\',\'' + si + '\',this.value)" onkeyup="if(event.key===\'Enter\')this.blur()" /></td>'
+            + '<td class="px-4 py-2"><input type="text" class="roster-pref-input w-full border border-transparent rounded px-2 py-1 text-sm hover:border-gray-300 focus:border-red-500 focus:ring-1 focus:ring-red-500 focus:outline-none bg-transparent" value="' + pn + '" placeholder="' + escHtml(s.FirstName || '') + '" data-period="' + sp + '" data-sid="' + si + '" /></td>'
             + '<td class="px-4 py-2">' + srcBadge + '</td>'
-            + '<td class="px-4 py-2"><button onclick="removeStudentFromRoster(\'' + sp + '\',\'' + si + '\')" class="text-red-400 hover:text-red-700 text-xs font-bold px-2 py-1 rounded hover:bg-red-50" title="Remove">&times;</button></td>';
+            + '<td class="px-4 py-2"><button class="roster-remove-btn text-red-400 hover:text-red-700 text-xs font-bold px-2 py-1 rounded hover:bg-red-50" data-period="' + sp + '" data-sid="' + si + '" title="Remove">&times;</button></td>';
+          // Attach event listeners via JS (not inline) to avoid escaping issues
+          const prefInput = tr.querySelector('.roster-pref-input');
+          prefInput.addEventListener('blur', function() { savePreferredName(this.dataset.period, this.dataset.sid, this.value); });
+          prefInput.addEventListener('keyup', function(e) { if (e.key === 'Enter') this.blur(); });
+          tr.querySelector('.roster-remove-btn').addEventListener('click', function() { removeStudentFromRoster(this.dataset.period, this.dataset.sid); });
           tbody.appendChild(tr);
         });
         const addRow = document.createElement('tr');
@@ -2999,7 +4075,8 @@
         addRow.innerHTML = '<td class="px-4 py-2"><input type="text" id="add-id-' + spp + '" maxlength="10" placeholder="Student ID" class="w-full border border-gray-300 rounded px-2 py-1 text-xs font-mono focus:ring-1 focus:ring-red-500 focus:outline-none" /></td>'
           + '<td class="px-4 py-2" colspan="2"><div class="flex gap-1"><input type="text" id="add-first-' + spp + '" placeholder="First name" class="w-1/2 border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-red-500 focus:outline-none" /><input type="text" id="add-last-' + spp + '" placeholder="Last name" class="w-1/2 border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-red-500 focus:outline-none" /></div></td>'
           + '<td class="px-4 py-2"><span class="text-xs text-gray-400">Manual</span></td>'
-          + '<td class="px-4 py-2"><button onclick="addManualStudent(\'' + spp + '\')" class="text-green-600 hover:text-green-800 text-xs font-semibold px-2 py-1 rounded bg-green-50 hover:bg-green-100">+ Add</button></td>';
+          + '<td class="px-4 py-2"><button class="roster-add-btn text-green-600 hover:text-green-800 text-xs font-semibold px-2 py-1 rounded bg-green-50 hover:bg-green-100">+ Add</button></td>';
+        addRow.querySelector('.roster-add-btn').addEventListener('click', () => addManualStudent(period));
         tbody.appendChild(addRow);
         tableWrap.appendChild(table);
         body.appendChild(tableWrap);
@@ -3011,6 +4088,11 @@
         section.appendChild(header);
         section.appendChild(body);
         container.appendChild(section);
+      });
+      // Restore scroll position after re-render
+      requestAnimationFrame(() => {
+        if (scrollParent) scrollParent.scrollTop = savedScroll;
+        else window.scrollTo(0, savedScroll);
       });
     }
 
@@ -3114,6 +4196,15 @@
       el.classList.add(colorMap[type] || 'text-gray-600');
     }
 
+    async function fileToCSV(f) {
+      if (f.name.match(/\.xlsx?$/i) && typeof XLSX !== 'undefined') {
+        const data = await f.arrayBuffer();
+        const wb = XLSX.read(data);
+        return XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]);
+      }
+      return await f.text();
+    }
+
     function onRosterUpload(evt) {
       (async e => {
         const files = e.target.files; if (!files || !files.length) return;
@@ -3126,7 +4217,7 @@
 
         for (const f of files) {
           try {
-            const text = await f.text();
+            const text = await fileToCSV(f);
             const parsed = parseRoster(text);
             console.log(`[onRosterUpload] Parsed file ${f.name}:`, parsed);
             for (const p in parsed) {
@@ -3326,7 +4417,8 @@
           numGroups: sc.numGroups || 6,
           defaultSeatsPerGroup: sc.defaultSeatsPerGroup || 4,
           perGroupOverrides: sc.perGroupOverrides || {},
-          perPeriodOverrides: sc.perPeriodOverrides || {}
+          perPeriodOverrides: sc.perPeriodOverrides || {},
+          frontGroups: sc.frontGroups || [],
         };
       }
       renderSeatingUI();
@@ -3360,11 +4452,14 @@
             const dsEl = row.querySelector('.period-override-seats');
             const ng = ngEl ? (parseInt(ngEl.value) || numGroups) : numGroups;
             const ds = dsEl ? (parseInt(dsEl.value) || defaultSeatsPerGroup) : defaultSeatsPerGroup;
-            perPeriodOverrides[period] = { numGroups: ng, defaultSeatsPerGroup: ds };
+            // Preserve frontGroups from existing config if set
+            const existingPeriod = (currentSeatingConfig.perPeriodOverrides || {})[period];
+            const fg = existingPeriod?.frontGroups || [];
+            perPeriodOverrides[period] = { numGroups: ng, defaultSeatsPerGroup: ds, frontGroups: fg };
           }
         });
       }
-      currentSeatingConfig = { enabled, numGroups, defaultSeatsPerGroup, perGroupOverrides, perPeriodOverrides };
+      currentSeatingConfig = { enabled, numGroups, defaultSeatsPerGroup, perGroupOverrides, perPeriodOverrides, frontGroups: currentSeatingConfig.frontGroups || [] };
       if (seatingSaveStatus) { seatingSaveStatus.textContent = 'Saving...'; seatingSaveStatus.className = 'text-sm text-blue-600'; }
       if (db && teacherUid) {
         try {
@@ -3439,18 +4534,37 @@
           if (inp.value.trim() !== '') overrides[inp.dataset.group] = parseInt(inp.value) || defaultSeats;
         });
       }
+      const fg = currentSeatingConfig.frontGroups || [];
+      const frontSet = new Set(fg.map(String));
       seatingPreview.replaceChildren();
       for (let g = 1; g <= n; g++) {
         const seats = overrides[String(g)] != null ? overrides[String(g)] : defaultSeats;
+        const isFront = frontSet.has(String(g));
         const chip = document.createElement('div');
-        chip.className = 'flex flex-col items-center bg-gray-100 rounded-lg px-3 py-2 border border-gray-200 min-w-[56px]';
+        chip.className = 'flex flex-col items-center rounded-lg px-3 py-2 border min-w-[56px] cursor-pointer select-none transition-all relative '
+          + (isFront ? 'bg-blue-100 border-blue-500 ring-2 ring-blue-300 shadow-sm' : 'bg-gray-100 border-gray-200 hover:border-gray-300');
+        chip.title = isFront ? 'Front of room (click to remove)' : 'Click to mark as front of room';
+        if (isFront) {
+          const badge = document.createElement('span');
+          badge.className = 'absolute -top-1.5 -right-1.5 bg-blue-600 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center';
+          badge.textContent = 'F';
+          chip.appendChild(badge);
+        }
         const gl = document.createElement('span');
-        gl.className = 'text-xs font-semibold text-gray-700';
-        gl.textContent = `G${g}`;
+        gl.className = 'text-xs font-semibold ' + (isFront ? 'text-blue-700' : 'text-gray-700');
+        gl.textContent = 'G' + g;
         const sl = document.createElement('span');
-        sl.className = 'text-xs text-gray-500';
+        sl.className = 'text-xs ' + (isFront ? 'text-blue-500' : 'text-gray-500');
         sl.textContent = seats + (seats !== 1 ? ' seats' : ' seat');
         chip.append(gl, sl);
+        chip.addEventListener('click', () => {
+          const fgs = new Set((currentSeatingConfig.frontGroups || []).map(String));
+          if (fgs.has(String(g))) fgs.delete(String(g));
+          else fgs.add(String(g));
+          currentSeatingConfig.frontGroups = Array.from(fgs).map(Number).sort((a, b) => a - b);
+          renderSeatingPreview();
+          saveSeatingConfig();
+        });
         seatingPreview.appendChild(chip);
       }
     }
@@ -3516,11 +4630,66 @@
         dsLabel.className = 'text-xs text-gray-500';
         dsLabel.textContent = 'seats each';
         customFields.append(ngInp, ngLabel, dsInp, dsLabel);
+
+        // Front groups for this period (only shown in custom mode)
+        const frontRow = document.createElement('div');
+        frontRow.className = 'flex flex-wrap items-center gap-1 mt-1';
+        if (mode !== 'custom') frontRow.classList.add('hidden');
+        const frontLabel = document.createElement('span');
+        frontLabel.className = 'text-xs text-gray-400 mr-1';
+        frontLabel.textContent = 'Front:';
+        frontRow.appendChild(frontLabel);
+
+        function renderPeriodFrontChips() {
+          // Remove old chips (keep the label)
+          while (frontRow.children.length > 1) frontRow.removeChild(frontRow.lastChild);
+          const ng = parseInt(ngInp.value) || numGroups;
+          const pfg = (existing && existing.frontGroups) || [];
+          const pfgSet = new Set(pfg.map(String));
+          for (let g = 1; g <= ng; g++) {
+            const isFront = pfgSet.has(String(g));
+            const chip = document.createElement('span');
+            chip.className = 'relative text-xs px-2 py-0.5 rounded cursor-pointer select-none transition-all '
+              + (isFront ? 'bg-blue-200 text-blue-700 font-semibold ring-1 ring-blue-400' : 'bg-gray-100 text-gray-500 hover:bg-gray-200');
+            chip.textContent = g;
+            chip.title = isFront ? 'Front (click to remove)' : 'Click to mark front';
+            if (isFront) {
+              const badge = document.createElement('span');
+              badge.className = 'absolute -top-1 -right-1 bg-blue-600 text-white text-[7px] font-bold w-3 h-3 rounded-full flex items-center justify-center';
+              badge.textContent = 'F';
+              chip.appendChild(badge);
+            }
+            chip.addEventListener('click', () => {
+              if (!existing) periodOverrides[String(period)] = { numGroups: ng, defaultSeatsPerGroup: parseInt(dsInp.value) || defSeats };
+              const cur = periodOverrides[String(period)];
+              const fgs = new Set((cur.frontGroups || []).map(String));
+              if (fgs.has(String(g))) fgs.delete(String(g));
+              else fgs.add(String(g));
+              cur.frontGroups = Array.from(fgs).map(Number).sort((a, b) => a - b);
+              // Update the existing reference so re-renders pick it up
+              if (existing) existing.frontGroups = cur.frontGroups;
+              renderPeriodFrontChips();
+              saveSeatingConfig();
+            });
+            frontRow.appendChild(chip);
+          }
+        }
+        renderPeriodFrontChips();
+        ngInp.addEventListener('input', renderPeriodFrontChips);
+
         modeSelect.addEventListener('change', () => {
-          customFields.classList.toggle('hidden', modeSelect.value !== 'custom');
+          const isCustom = modeSelect.value === 'custom';
+          customFields.classList.toggle('hidden', !isCustom);
+          frontRow.classList.toggle('hidden', !isCustom);
         });
-        row.append(label, modeSelect, customFields);
-        seatingPeriodOverrides.appendChild(row);
+        const periodContainer = document.createElement('div');
+        periodContainer.className = 'period-override-row py-2 border-b border-gray-100 last:border-0';
+        periodContainer.dataset.period = period;
+        const topRow = document.createElement('div');
+        topRow.className = 'flex flex-wrap items-center gap-2';
+        topRow.append(label, modeSelect, customFields);
+        periodContainer.append(topRow, frontRow);
+        seatingPeriodOverrides.appendChild(periodContainer);
       });
     }
 
@@ -3537,6 +4706,7 @@
         renderGroupOverrideInputs();
         renderSeatingPreview();
         renderPeriodOverrideRows();
+        saveSeatingConfig();
       });
       if (seatingNumGroups) seatingNumGroups.addEventListener('input', renderSeatingPreview);
       if (seatingDefaultSeats) seatingDefaultSeats.addEventListener('input', renderSeatingPreview);
@@ -3574,6 +4744,66 @@
       }
     }
 
+    // ===== Absence streak calculation =====
+    // Returns past N school day date strings (YYYY-MM-DD), most recent first
+    function getPastSchoolDays(n) {
+      const days = [];
+      const d = new Date();
+      while (days.length < n) {
+        d.setDate(d.getDate() - 1);
+        const dow = d.getDay();
+        if (dow !== 0 && dow !== 6) { // skip weekends
+          days.push(d.toISOString().slice(0, 10));
+        }
+      }
+      return days;
+    }
+
+    // Load absence streaks for the given period (async, updates absenceStreaks map)
+    async function loadAbsenceStreaks(period) {
+      absenceStreaks = new Map();
+      if (!db || !teacherUid || !period) return;
+
+      const roster = currentRoster;
+      if (!roster || roster.length === 0) return;
+
+      const pastDays = getPastSchoolDays(5); // check last 5 school days
+      const rosterIds = new Set(roster.map(s => s.StudentID));
+
+      // Fetch attendance for each past day in parallel (most recent first)
+      const presentOnDay = await Promise.all(pastDays.map(async (dateStr) => {
+        try {
+          const colRef = collection(db, teacherPath(`attendance/${dateStr}/periods/${period}/students`));
+          const snap = await getDocs(colRef);
+          const ids = new Set();
+          snap.docs.forEach(d => ids.add(String(d.id)));
+          return ids;
+        } catch {
+          return new Set();
+        }
+      }));
+
+      // Filter out days where >50% of roster was absent — likely a sub day
+      // or the class didn't meet (special schedule). Those days shouldn't
+      // count toward absence streaks.
+      const validDays = presentOnDay.filter(dayPresent => {
+        return dayPresent.size > rosterIds.size / 2;
+      });
+
+      // For each roster student, count consecutive recent absences
+      for (const sid of rosterIds) {
+        let streak = 0;
+        for (const dayPresent of validDays) {
+          if (dayPresent.has(sid)) break; // they were present this day, streak ends
+          streak++;
+        }
+        if (streak > 0) absenceStreaks.set(sid, streak);
+      }
+
+      // Trigger re-render with streak data
+      updateUI();
+    }
+
     // ===== Period change & attendance stream =====
     function onPeriodChange() {
       const p = periodSelect.value;
@@ -3582,6 +4812,7 @@
       const resolved = resolveRosterKey(p);
       currentRoster = resolved ? (allRosters[resolved] || []) : [];
       periodAttendanceLog = [];
+      absenceStreaks = new Map();
       const today = nowISODate();
 
       if (db && p && teacherUid) {
@@ -3592,6 +4823,8 @@
         }, err => {
           console.error('[onSnapshot] attendance listener error:', err);
         });
+        // Load absence streaks in background (doesn't block UI)
+        loadAbsenceStreaks(p).catch(e => console.warn('[absenceStreaks]', e));
       } else {
         periodAttendanceLog = getLocalLogs(today, p);
         updateUI(); renderRosterDebug();
@@ -3653,8 +4886,32 @@
         }
       }
 
-      if (Object.keys(rosters).length === 0)
-        throw new Error('No valid period rosters found in the file.');
+      // If Aeries-format parsing found nothing, try simple table format:
+      // Column A = ID, Column B = Last, Column C = First (or "Last, First" in B)
+      if (Object.keys(rosters).length === 0) {
+        const simple = [];
+        for (let raw of lines) {
+          let line = raw;
+          if (!line) continue;
+          if (line.charCodeAt(0) === 0xFEFF) line = line.slice(1);
+          const cells = splitCSVRow(line);
+          // Skip header rows (first cell isn't a number)
+          const idCell = (cells[0] || '').replace(/"/g, '').trim();
+          if (!idCell || !/^\d+$/.test(idCell)) continue;
+          const last = (cells[1] || '').replace(/"/g, '').trim();
+          const first = (cells[2] || '').replace(/"/g, '').trim();
+          if (!last) continue;
+          simple.push({
+            StudentID: idCell,
+            LastName: last,
+            FirstName: first,
+            preferredName: (first || last).split(' ')[0],
+            source: 'csv',
+          });
+        }
+        if (simple.length > 0) return { '1': simple };
+        throw new Error('No valid roster data found in the file.');
+      }
 
       return rosters;
     }
@@ -3665,10 +4922,11 @@
         const roster = map[p] || [];
         const tails = new Map();
         roster.forEach(s => {
-          const id = String(s.StudentID || '');
-          const last4 = id.length >= 5 ? id.slice(-5) : id;
-          if (!tails.has(last4)) tails.set(last4, []);
-          tails.get(last4).push(`${escHtml((s.FirstName || '') + ' ' + (s.LastName || ''))}`);
+          const id = String(s.StudentID || '').replace(/^0+/, '') || '0';
+          // Use last 5 digits to match the suffix-matching in matchStudentId
+          const last5 = id.length > 5 ? id.slice(-5) : id;
+          if (!tails.has(last5)) tails.set(last5, []);
+          tails.get(last5).push(`${escHtml((s.FirstName || '') + ' ' + (s.LastName || ''))}`);
         });
         tails.forEach((names, tail) => {
           if (tail && names.length > 1) {
@@ -3753,22 +5011,30 @@
 
       const cap = g => getGroupCap(g, effectiveCfg);
 
-      // Front groups = first ~15% of groups (configurable convention)
-      const frontGroups = new Set();
-      if (needsFront) {
-        const frontCount = Math.max(1, Math.ceil(numGroups * 0.15));
-        for (let g = 1; g <= frontCount; g++) frontGroups.add(g);
-      }
+      // Front groups from config (teacher-designated)
+      const configFront = effectiveCfg.frontGroups || currentSeatingConfig.frontGroups || [];
+      const frontGroups = new Set(configFront.map(Number).filter(g => g >= 1 && g <= numGroups));
+
+      // Reserve seats in front groups for front-row students who haven't signed in yet
+      const signedInIds = new Set(periodAttendanceLog.map(l => String(l.StudentID)));
+      const unsignedFrontCount = [...exceptions.frontRow].filter(sid => !signedInIds.has(sid)).length;
+      const reservedPerGroup = frontGroups.size > 0 ? Math.ceil(unsignedFrontCount / frontGroups.size) : 0;
 
       // Pool = groups with capacity, not in avoid set
+      // For non-front students, reduce front group capacity by reserved seats
       let pool = [];
       for (let g = 1; g <= numGroups; g++) {
-        if (counts[g] < cap(g) && !avoid.has(g)) pool.push(g);
+        const effectiveCap = (frontGroups.has(g) && !needsFront) ? Math.max(0, cap(g) - reservedPerGroup) : cap(g);
+        if (counts[g] < effectiveCap && !avoid.has(g)) pool.push(g);
       }
 
       // Front-row preference: narrow to front groups if available
       if (needsFront && frontGroups.size > 0) {
-        const frontPool = pool.filter(g => frontGroups.has(g));
+        // Front students use full capacity (not reduced)
+        const frontPool = [];
+        for (let g = 1; g <= numGroups; g++) {
+          if (frontGroups.has(g) && counts[g] < cap(g) && !avoid.has(g)) frontPool.push(g);
+        }
         if (frontPool.length) pool = frontPool;
       }
 
@@ -3820,16 +5086,17 @@
         if (counts[g] < cap(g) && !avoid.has(g)) pool.push(g);
       }
 
-      if (needsFront) {
-        const frontPool = pool.filter(g => FRONT_SET.has(g));
+      const cfgFront = new Set((currentSeatingConfig.frontGroups || []).map(Number));
+      if (needsFront && cfgFront.size > 0) {
+        const frontPool = pool.filter(g => cfgFront.has(g));
         if (frontPool.length) pool = frontPool;
       }
 
       if (pool.length === 0) {
         let alt = [];
         for (let g = 1; g <= MAX_GROUP; g++) if (isAllowed(g) && counts[g] < cap(g)) alt.push(g);
-        if (needsFront) {
-          const frontAlt = alt.filter(g => FRONT_SET.has(g));
+        if (needsFront && cfgFront.size > 0) {
+          const frontAlt = alt.filter(g => cfgFront.has(g));
           pool = frontAlt.length ? frontAlt : alt;
         } else {
           pool = alt;
@@ -3863,6 +5130,7 @@
 
     function statusForNow() {
       if (!periodSelect.value) return 'On Time';
+      if (!TARDY_ENABLED) return 'On Time';
 
       // Need at least TARDY_AFTER_NTH students signed in before anyone can be late
       if (periodAttendanceLog.length < TARDY_AFTER_NTH) return 'On Time';
@@ -3886,7 +5154,7 @@
     function findPeriodsForStudent(code) {
       const matches = [];
       for (const [period, roster] of Object.entries(allRosters)) {
-        const student = roster.find(s => String(s.StudentID || '').slice(-5) === code);
+        const student = roster.find(s => matchStudentId(s.StudentID, code));
         if (student) matches.push(period);
       }
       return matches;
@@ -3904,7 +5172,7 @@
         const today = nowISODate();
         for (const p of periods) {
           const roster = allRosters[p] || [];
-          const student = roster.find(s => String(s.StudentID || '').slice(-5) === code);
+          const student = roster.find(s => matchStudentId(s.StudentID, code));
           if (!student) continue;
           const ref = doc(db, teacherPath(`attendance/${today}/periods/${p}/students/${student.StudentID}`));
           const snap = await getDoc(ref);
@@ -3929,6 +5197,17 @@
       }, 3000);
     }
 
+    // Match entered ID against stored ID
+    // Supports: leading-zero stripping (712 = 00712), and last-5-digit suffix match
+    // e.g. entered "34567" matches stored "1234567"
+    function matchStudentId(storedId, enteredCode) {
+      const stored = String(storedId || '').replace(/^0+/, '') || '0';
+      const entered = String(enteredCode || '').replace(/^0+/, '') || '0';
+      if (stored === entered) return true;
+      // Last-5 suffix match: entered code matches the trailing digits of stored ID
+      return stored.length > entered.length && stored.endsWith(entered);
+    }
+
     async function handleSignIn() {
       try {
         const code = studentIdInput.value.trim();
@@ -3941,7 +5220,7 @@
         }
 
         let p = periodSelect.value;
-        let student = (currentRoster || []).find(s => String(s.StudentID || '').slice(-5) === code);
+        let student = (currentRoster || []).find(s => matchStudentId(s.StudentID, code));
         let wasSmartSwitched = false;
 
         // --- START: SMART SWITCH LOGIC ---
@@ -3952,15 +5231,16 @@
             const targetPeriod = await pickBestPeriod(possiblePeriods, code);
             console.log(`[SmartSwitch] Switching to P.${targetPeriod}`);
 
-            periodSelect.value = targetPeriod;
-            onPeriodChange();
-
             p = targetPeriod;
-            student = (currentRoster || []).find(s => String(s.StudentID || '').slice(-5) === code);
+            periodSelect.value = p;
+
+            // Set roster directly (avoid onPeriodChange which races with getDocs)
+            const resolved = resolveRosterKey(p);
+            currentRoster = resolved ? (allRosters[resolved] || []) : [];
+            student = (currentRoster || []).find(s => matchStudentId(s.StudentID, code));
             wasSmartSwitched = true;
 
-            // Directly fetch attendance for the new period so statusForNow() has accurate data
-            // (onSnapshot may not have fired yet after onPeriodChange)
+            // One-shot fetch for accurate tardy/seat data before sign-in
             if (db && teacherUid) {
               const switchDate = nowISODate();
               const switchColRef = collection(db, teacherPath(`attendance/${switchDate}/periods/${p}/students`));
@@ -3973,12 +5253,12 @@
         }
         // --- END: SMART SWITCH LOGIC ---
 
-        if (!p) {
-          showMessage('error', 'Period Not Set', 'Open the admin panel and select a period.');
+        if (!student) {
+          showMessage('error', 'ID Not Found', 'Please enter the last 5 digits of your ID.');
           return;
         }
-        if (!student) {
-          showMessage('error', 'ID Not Found', 'Please check your ID and try again.');
+        if (!p) {
+          showMessage('error', 'Period Not Set', 'Open the admin panel and select a period.');
           return;
         }
 
@@ -3996,43 +5276,46 @@
           setDoc(rosterSnapshotRef, { roster_snapshot: currentRoster, updatedAt: serverTimestamp() }, { merge: true })
             .catch(e => console.error("Roster snapshot error:", e));
 
-          // Check existing sign-in (direct doc read — faster & cheaper than query)
-          const existingSnap = await getDoc(studentDocRef);
-
-          if (existingSnap.exists()) {
-            const existing = existingSnap.data();
-            const g = typeof existing.Group === 'number' ? existing.Group : null;
-            const seat = existing.Seat != null ? existing.Seat : null;
-            showGroup(g, existing.Status || status, getDisplayName(student), seat);
-            updateUI();
-            if (wasSmartSwitched) restoreToGlobalPeriod();
-            return;
-          }
-
-          // Assign group and build log entry
-          const { group: g, overflow } = pickGroup(student);
-          if (overflow) {
-            showMessage('error', 'All groups full', 'Check with your teacher for a seat.');
-            signInButton.disabled = false;
-            if (wasSmartSwitched) restoreToGlobalPeriod();
-            return;
-          }
-          const seat = g != null ? calcSeatNumber(g) : null;
-          const log = buildLogEntry(student, p, status, g, true, seat);
-
+          // Use a transaction to prevent concurrent kiosks from assigning
+          // duplicate groups/seats (check-then-write atomicity)
           try {
-            // Write to Firebase FIRST — don't show success until confirmed
-            await setDoc(studentDocRef, log);
+            const txResult = await runTransaction(db, async (tx) => {
+              const existingSnap = await tx.get(studentDocRef);
+
+              if (existingSnap.exists()) {
+                const existing = existingSnap.data();
+                return { alreadyExists: true, existing };
+              }
+
+              // Assign group and build log entry (reads local state — acceptable
+              // since group assignment is best-effort, not financial)
+              const { group: g } = pickGroup(student);
+
+              const seat = g != null ? calcSeatNumber(g) : null;
+              const log = buildLogEntry(student, p, status, g, true, seat);
+              tx.set(studentDocRef, log);
+              return { alreadyExists: false, log, g, seat };
+            });
+
+            if (txResult.alreadyExists) {
+              const existing = txResult.existing;
+              const g = typeof existing.Group === 'number' ? existing.Group : null;
+              const seat = existing.Seat != null ? existing.Seat : null;
+              showGroup(g, existing.Status || status, getDisplayName(student), seat);
+              updateUI();
+              if (wasSmartSwitched) restoreToGlobalPeriod();
+              return;
+            }
 
             // Optimistically update local state so the NEXT sign-in sees this student
             // (covers the gap before onSnapshot fires with the server-confirmed data)
             periodAttendanceLog.push({
-              ...log,
+              ...txResult.log,
               Timestamp: Date.now()  // Replace sentinel with local timestamp for local use
             });
 
             // THEN show success
-            showGroup(g, status, getDisplayName(student), seat);
+            showGroup(txResult.g, status, getDisplayName(student), txResult.seat);
 
             // Check if this sign-in should trigger a global period switch
             maybeUpdateGlobalPeriod(p);
@@ -4054,13 +5337,7 @@
             if (wasSmartSwitched) restoreToGlobalPeriod();
             return;
           }
-          const { group: g, overflow } = pickGroup(student);
-          if (overflow) {
-            showMessage('error', 'All groups full', 'Check with your teacher for a seat.');
-            signInButton.disabled = false;
-            if (wasSmartSwitched) restoreToGlobalPeriod();
-            return;
-          }
+          const { group: g } = pickGroup(student);
           const seat = g != null ? calcSeatNumber(g) : null;
           const log = buildLogEntry(student, p, status, g, false, seat);
           list.push(log);
@@ -4080,20 +5357,20 @@
     async function exportCSV() {
       const today = nowISODate();
       const rows = [["Date", "Period", "StudentID", "LastName", "FirstName", "Status", "SignInTime", "Group"]];
-      const masterPeriodList = ["0", "1", "2", "2A", "2B", "3", "4", "5", "6", "7"];
+      const masterPeriodList = [...new Set(["0", "1", "2", "2A", "2B", "3", "4", "5", "6", "7", ...Object.keys(allRosters)])];
       for (const p of masterPeriodList) {
         const present = new Map();
         if (db && teacherUid) {
           const colRef = collection(db, teacherPath(`attendance/${today}/periods/${p}/students`));
           const snap = await getDocs(colRef);
-          snap.docs.forEach(d => { const data = d.data(); present.set(data.StudentID, data); });
+          snap.docs.forEach(d => present.set(d.id, d.data()));
         } else {
           (getLocalLogs(today, p) || []).forEach(d => present.set(d.StudentID, d));
         }
         const roster = allRosters[p] || [];
         roster.forEach(stu => {
-          if (present.has(stu.StudentID)) {
-            const log = present.get(stu.StudentID);
+          if (present.has(String(stu.StudentID))) {
+            const log = present.get(String(stu.StudentID));
             // Use roster names (reliable) instead of parsing log.Name (fragile for multi-word names)
             rows.push([log.Date, p, log.StudentID, csvQuote(stu.LastName || ''), csvQuote(stu.FirstName || ''), log.Status, log.SignInTime, log.Group]);
           } else {
@@ -4311,9 +5588,8 @@
       const p = periodSelect.value;
       const status = statusForNow();
 
-      // 3. Assign Group
-      const { group: g, overflow } = pickGroup(student);
-      if (overflow) return; // Can't assign if all full
+      // 3. Assign Group (still record attendance even if groups are full)
+      const { group: g } = pickGroup(student);
 
       // 4. Compute seat
       const seat = g != null ? calcSeatNumber(g) : null;
@@ -4339,7 +5615,404 @@
     }
     window.manualCheckIn = manualCheckIn;
 
+    // ===== QR Code Session Management =====
+    let qrInterval = null;
+    let qrKioskId = null;
+
+    function getKioskId() {
+      if (qrKioskId) return qrKioskId;
+      let id = localStorage.getItem('kioskInstanceId');
+      if (!id) {
+        id = crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36) + Date.now().toString(36)).slice(0, 16);
+        localStorage.setItem('kioskInstanceId', id);
+      }
+      qrKioskId = id;
+      return id;
+    }
+
+    function generateQrCode() {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      let code = '';
+      for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)];
+      return code;
+    }
+
+    async function writeQrSession(code) {
+      if (!db || !teacherUid) { console.warn('[QR] no db or teacherUid'); return false; }
+      const period = periodSelect ? periodSelect.value : '';
+      if (!period) { console.warn('[QR] no period selected — writing session without period'); }
+      const kioskId = getKioskId();
+      // Use code as doc ID so old codes survive until they expire naturally
+      const path = teacherPath('config/main/qrSessions/' + code);
+      console.log('[QR] writing session to:', path, { code, period, kioskId });
+      try {
+        const sessionRef = doc(db, path);
+        await setDoc(sessionRef, {
+          code,
+          period: period || '',
+          kioskId,
+          createdAt: serverTimestamp(),
+        });
+        console.log('[QR] session written successfully');
+        // Clean up expired sessions in background (older than 3 minutes)
+        cleanupExpiredQrSessions().catch(() => {});
+        return true;
+      } catch (e) {
+        console.error('[QR] writeQrSession FAILED:', e);
+        return false;
+      }
+    }
+
+    async function cleanupExpiredQrSessions() {
+      try {
+        const colRef = collection(db, teacherPath('config/main/qrSessions'));
+        const snap = await getDocs(colRef);
+        const now = Date.now();
+        const batch = [];
+        snap.forEach(d => {
+          const ts = d.data().createdAt;
+          const ms = ts && ts.toMillis ? ts.toMillis() : 0;
+          if (ms > 0 && now - ms > 180000) { // older than 3 min
+            batch.push(deleteDoc(d.ref));
+          }
+        });
+        if (batch.length > 0) await Promise.all(batch);
+      } catch (e) { console.warn('[QR] cleanup error', e); }
+    }
+
+    let currentQrDataUrl = null;
+
+    function renderQrCode(code) {
+      const container = document.getElementById('kiosk-qr-container');
+      const img = document.getElementById('kiosk-qr-img');
+      if (!container || !img) { console.error('[QR] container or img not found'); return; }
+      // Include a timestamp so s.html can detect bookmarked/cached URLs locally
+      // before even calling the server (avoids confusing "expired" UX).
+      const url = window.location.origin + '/s.html?t=' + teacherUid + '&c=' + code + '&ts=' + Date.now();
+      currentQrDataUrl = url;
+      const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=' + encodeURIComponent(url);
+      img.src = qrUrl;
+      container.classList.remove('hidden');
+      console.log('[QR] rendered:', url);
+      // Update enlarged overlay if it's currently open
+      const enlargedImg = document.getElementById('qr-enlarged-img');
+      const overlay = document.getElementById('qr-enlarged-overlay');
+      if (enlargedImg && overlay && !overlay.classList.contains('hidden')) {
+        enlargedImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=' + encodeURIComponent(url);
+      }
+    }
+
+    // Enlarged QR overlay
+    (function() {
+      const clickTarget = document.getElementById('kiosk-qr-clickable');
+      const overlay = document.getElementById('qr-enlarged-overlay');
+      const enlargedImg = document.getElementById('qr-enlarged-img');
+      const closeBtn = document.getElementById('qr-enlarged-close');
+      if (!clickTarget || !overlay || !enlargedImg) return;
+
+      clickTarget.addEventListener('click', function() {
+        if (!currentQrDataUrl) return;
+        enlargedImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=' + encodeURIComponent(currentQrDataUrl);
+        overlay.classList.remove('hidden');
+      });
+
+      overlay.addEventListener('click', function() {
+        overlay.classList.add('hidden');
+      });
+
+      if (closeBtn) closeBtn.addEventListener('click', function() {
+        overlay.classList.add('hidden');
+      });
+    })();
+
+    let qrRetryTimeout = null;
+
+    async function rotateQrCode() {
+      try {
+        const code = generateQrCode();
+        const ok = await writeQrSession(code);
+        const errEl = document.getElementById('kiosk-qr-error');
+        if (!ok) {
+          console.warn('[QR] write failed — will retry in 10s');
+          if (errEl) errEl.classList.remove('hidden');
+          // Retry after 10s (won't stack — cleared on next rotation or success)
+          clearTimeout(qrRetryTimeout);
+          qrRetryTimeout = setTimeout(rotateQrCode, 10000);
+          return;
+        }
+        if (errEl) errEl.classList.add('hidden');
+        renderQrCode(code);
+      } catch (e) {
+        console.error('[QR] rotation failed', e);
+        clearTimeout(qrRetryTimeout);
+        qrRetryTimeout = setTimeout(rotateQrCode, 10000);
+      }
+    }
+
+    function startQrSession() {
+      if (qrInterval) return; // already running
+      rotateQrCode(); // immediate first render
+      qrInterval = setInterval(rotateQrCode, 120000); // every 2 minutes
+    }
+
+    function stopQrSession() {
+      if (qrInterval) { clearInterval(qrInterval); qrInterval = null; }
+      clearTimeout(qrRetryTimeout); qrRetryTimeout = null;
+      const container = document.getElementById('kiosk-qr-container');
+      if (container) container.classList.add('hidden');
+      // Delete ALL session docs immediately (not just expired)
+      if (db && teacherUid) {
+        cleanupAllQrSessions().catch(() => {});
+      }
+    }
+
+    // Refresh QR immediately when tab regains visibility (after sleep/wake or alt-tab)
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && qrInterval) {
+        console.log('[QR] tab visible — rotating now');
+        rotateQrCode();
+      }
+    });
+
+    async function cleanupAllQrSessions() {
+      try {
+        const colRef = collection(db, teacherPath('config/main/qrSessions'));
+        const snap = await getDocs(colRef);
+        if (snap.empty) return;
+        await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+      } catch (e) { console.warn('[QR] cleanup-all error', e); }
+    }
+
+    // ===== Attendance Insights Engine =====
+    let insightsTimer = null;
+    let lastInsightsPeriod = null;
+    const insightsCache = new Map(); // period -> { timestamp, alerts }
+
+    function scheduleInsightsUpdate() {
+      clearTimeout(insightsTimer);
+      insightsTimer = setTimeout(() => runInsightsAnalysis(), 500);
+    }
+
+    async function runInsightsAnalysis() {
+      const listEl = document.getElementById('insights-list');
+      const loadingEl = document.getElementById('insights-loading');
+      if (!listEl) return;
+
+      const period = periodSelect ? periodSelect.value : '';
+      if (!period || !db || !teacherUid || !(currentRoster || []).length) {
+        listEl.replaceChildren();
+        const p = document.createElement('p');
+        p.className = 'text-sm text-gray-400 italic';
+        p.textContent = 'Select a period to see insights.';
+        listEl.appendChild(p);
+        return;
+      }
+
+      // Use cache if same period and less than 60s old
+      const cached = insightsCache.get(period);
+      if (cached && Date.now() - cached.timestamp < 60000 && lastInsightsPeriod === period) {
+        renderInsights(cached.alerts);
+        return;
+      }
+      lastInsightsPeriod = period;
+
+      loadingEl.classList.remove('hidden');
+      listEl.replaceChildren();
+      const loadMsg = document.createElement('p');
+      loadMsg.className = 'text-sm text-gray-400 italic';
+      loadMsg.textContent = 'Analyzing attendance patterns...';
+      listEl.appendChild(loadMsg);
+
+      try {
+        // Generate last 20 school days
+        const dates = [];
+        const today = new Date();
+        for (let i = 0; i < 90 && dates.length < 60; i++) {
+          const d = new Date(today);
+          d.setDate(d.getDate() - i);
+          if (d.getDay() === 0 || d.getDay() === 6) continue;
+          dates.push(d.toISOString().slice(0, 10));
+        }
+
+        // Fetch attendance for each date in this period
+        const roster = currentRoster || [];
+        const studentHistory = new Map(); // sid -> [{date, status}]
+        roster.forEach(s => studentHistory.set(String(s.StudentID), []));
+
+        await Promise.all(dates.map(async (date) => {
+          const basePath = teacherPath(`attendance/${date}/periods/${period}`);
+          const periodDoc = await getDoc(doc(db, basePath));
+          if (!periodDoc.exists()) return;
+          const snap = periodDoc.data().roster_snapshot || [];
+          if (snap.length === 0) return;
+
+          const studentsSnap = await getDocs(collection(db, `${basePath}/students`));
+          const signedIn = new Map();
+          studentsSnap.forEach(d => signedIn.set(d.id, d.data()));
+
+          // Skip days where >50% of roster had no sign-in — likely a sub day
+          // or the class didn't meet (special schedule)
+          const rosterSids = new Set(snap.map(s => String(s.StudentID)));
+          if (signedIn.size <= rosterSids.size / 2) return;
+
+          for (const [sid, history] of studentHistory) {
+            if (!rosterSids.has(sid)) continue;
+            if (signedIn.has(sid)) {
+              const status = signedIn.get(sid).Status || 'On Time';
+              const isTardy = ['Late', 'Tardy', 'Truant', 'Cut', 'Late > 20'].includes(status);
+              history.push({ date, status: isTardy ? 'Tardy' : 'Present' });
+            } else {
+              history.push({ date, status: 'Absent' });
+            }
+          }
+        }));
+
+        // Analyze patterns and generate alerts
+        const alerts = [];
+        const perfectAttendance = [];
+        const neverTardy = [];
+
+        for (const s of roster) {
+          const sid = String(s.StudentID);
+          const history = studentHistory.get(sid) || [];
+          if (history.length < 3) continue;
+
+          const name = ((s.preferredName || s.FirstName || '') + ' ' + (s.LastName || '')).trim();
+          const totalClasses = history.length;
+          const absentCount = history.filter(h => h.status === 'Absent').length;
+          const tardyCount = history.filter(h => h.status === 'Tardy').length;
+          const absentRate = absentCount / totalClasses;
+          const tardyRate = tardyCount / totalClasses;
+
+          // Positive: perfect attendance
+          if (absentCount === 0 && tardyCount === 0) {
+            perfectAttendance.push(name);
+            continue; // no concerns to check
+          }
+          // Positive: never tardy (but may have absences)
+          if (tardyCount === 0 && absentCount <= 1) {
+            neverTardy.push(name);
+          }
+
+          // Build a single summary for this student
+          const streak = absenceStreaks.get(s.StudentID) || 0;
+          const concerns = [];
+          let severity = null;
+
+          // Absence concerns
+          if (streak >= 3 && absentCount >= 4) {
+            concerns.push('has missed the last ' + streak + ' classes and ' + absentCount + ' of the last ' + totalClasses);
+            severity = 'high';
+          } else if (streak >= 3) {
+            concerns.push('has missed the last ' + streak + ' consecutive classes');
+            severity = 'high';
+          } else if (absentCount >= 4 && absentRate > 0.25) {
+            concerns.push('has missed ' + absentCount + ' of the last ' + totalClasses + ' classes (' + Math.round(absentRate * 100) + '%)');
+            severity = 'high';
+          } else {
+            const recent5 = history.slice(0, 5);
+            const recentAbsent = recent5.filter(h => h.status === 'Absent').length;
+            if (recentAbsent >= 3) {
+              concerns.push('has missed ' + recentAbsent + ' of the last ' + recent5.length + ' classes');
+              severity = 'high';
+            }
+          }
+
+          // Tardy concerns
+          if (tardyCount >= 4 && tardyRate > 0.3) {
+            concerns.push('tardy ' + tardyCount + ' of the last ' + totalClasses + ' classes (' + Math.round(tardyRate * 100) + '%)');
+            if (!severity) severity = 'medium';
+          } else if (history.length >= 10) {
+            const half = Math.ceil(history.length / 2);
+            const recent = history.slice(0, half);
+            const prior = history.slice(half);
+            const recentTardyRate = recent.filter(h => h.status === 'Tardy').length / recent.length;
+            const priorTardyRate = prior.filter(h => h.status === 'Tardy').length / prior.length;
+            if (recentTardyRate >= 0.3 && priorTardyRate < 0.15 && recentTardyRate - priorTardyRate > 0.2) {
+              const fmt = d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+              const priorRange = fmt(prior[prior.length - 1].date) + '\u2013' + fmt(prior[0].date);
+              const recentRange = fmt(recent[recent.length - 1].date) + '\u2013' + fmt(recent[0].date);
+              concerns.push('tardiness increasing \u2014 ' + Math.round(priorTardyRate * 100) + '% (' + priorRange + ') to ' + Math.round(recentTardyRate * 100) + '% (' + recentRange + ')');
+              if (!severity) severity = 'medium';
+            }
+          }
+
+          if (concerns.length > 0) {
+            alerts.push({ severity, student: name, message: concerns.join('; also ') });
+          }
+        }
+
+        // Sort: high severity first, then by student name
+        alerts.sort((a, b) => (a.severity === 'high' ? 0 : 1) - (b.severity === 'high' ? 0 : 1) || a.student.localeCompare(b.student));
+        const deduped = alerts;
+
+        // Add positive insights (only after 45+ days of data)
+        const maxHistory = Math.max(...[...studentHistory.values()].map(h => h.length));
+        if (maxHistory >= 45) {
+          if (perfectAttendance.length > 0) {
+            deduped.push({ severity: 'positive', student: '', message: perfectAttendance.join(', ') + (perfectAttendance.length === 1 ? ' has' : ' have') + ' perfect attendance!' });
+          }
+          if (neverTardy.length > 0 && neverTardy.length <= 5) {
+            deduped.push({ severity: 'positive', student: '', message: neverTardy.join(', ') + ' \u2014 always on time!' });
+          }
+        }
+
+        insightsCache.set(period, { timestamp: Date.now(), alerts: deduped });
+        renderInsights(deduped);
+      } catch (err) {
+        console.error('Insights analysis failed:', err);
+        listEl.replaceChildren();
+        const p = document.createElement('p');
+        p.className = 'text-sm text-gray-400 italic';
+        p.textContent = 'Could not load insights.';
+        listEl.appendChild(p);
+      } finally {
+        loadingEl.classList.add('hidden');
+      }
+    }
+
+    function renderInsights(alerts) {
+      const listEl = document.getElementById('insights-list');
+      if (!listEl) return;
+      listEl.replaceChildren();
+
+      if (alerts.length === 0) {
+        const p = document.createElement('p');
+        p.className = 'text-sm text-green-600 font-medium';
+        p.textContent = 'No concerns \u2014 all students are on track.';
+        listEl.appendChild(p);
+        return;
+      }
+
+      alerts.forEach(a => {
+        const div = document.createElement('div');
+        if (a.severity === 'positive') {
+          div.className = 'flex items-start gap-2 p-2.5 rounded-lg text-sm bg-green-50 border border-green-200';
+        } else {
+          const isHigh = a.severity === 'high';
+          div.className = 'flex items-start gap-2 p-2.5 rounded-lg text-sm ' +
+            (isHigh ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200');
+        }
+        const icon = document.createElement('span');
+        icon.className = 'flex-shrink-0 mt-0.5';
+        icon.textContent = a.severity === 'positive' ? '\u2b50' : a.severity === 'high' ? '\u26a0\ufe0f' : '\u23f0';
+        const text = document.createElement('span');
+        if (a.student) {
+          const strong = document.createElement('strong');
+          strong.textContent = a.student;
+          text.appendChild(strong);
+          text.appendChild(document.createTextNode(' \u2014 ' + a.message));
+        } else {
+          text.textContent = a.message;
+        }
+        div.append(icon, text);
+        listEl.appendChild(div);
+      });
+    }
+
     function updateUI() {
+      const savedAbsentScroll = absentListEl.scrollTop;
+      const savedGroupScroll = groupReportEl.scrollTop;
       const counts = { 'On Time': 0, 'Late': 0, 'Truant': 0 };
       periodAttendanceLog.forEach(l => { if (counts[l.Status] !== undefined) counts[l.Status]++; });
       const present = periodAttendanceLog.length;
@@ -4383,6 +6056,47 @@
         }
       }
 
+      // Populate correction student dropdown — all roster students
+      const corrStudentSel = document.getElementById('correction-student');
+      if (corrStudentSel) {
+        const prev = corrStudentSel.value;
+        corrStudentSel.replaceChildren();
+        const defOpt = document.createElement('option');
+        defOpt.value = '';
+        defOpt.textContent = 'Select a student...';
+        corrStudentSel.appendChild(defOpt);
+        const allStudents = [...(currentRoster || [])].sort((a, b) => String(a.LastName || '').localeCompare(String(b.LastName || '')));
+        allStudents.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s.StudentID;
+          opt.textContent = (s.LastName || '') + ', ' + (s.preferredName || s.FirstName || '');
+          opt.dataset.name = (s.preferredName || s.FirstName || '') + ' ' + (s.LastName || '');
+          corrStudentSel.appendChild(opt);
+        });
+        if (prev) corrStudentSel.value = prev;
+      }
+
+      // Update absent/present percentages
+      const absentPctEl = document.getElementById('absent-pct');
+      const presentPctEl = document.getElementById('present-pct');
+      const rosterLen = (currentRoster || []).length;
+      const presentCount = periodAttendanceLog.length;
+      const absentCount = Math.max(0, rosterLen - presentCount);
+      if (rosterLen > 0 && periodSelect.value) {
+        const absentPct = Math.round((absentCount / rosterLen) * 100);
+        const presentPct = Math.round((presentCount / rosterLen) * 100);
+        absentPctEl.textContent = absentPct + '%';
+        absentPctEl.className = 'text-base font-bold ' + (absentCount === 0 ? 'text-green-600' : absentCount >= 4 ? 'text-red-600' : 'text-yellow-600');
+        presentPctEl.textContent = presentPct + '%';
+        presentPctEl.className = 'text-base font-bold ' + (presentPct === 100 ? 'text-green-600' : presentPct >= 85 ? 'text-blue-600' : 'text-yellow-600');
+      } else {
+        absentPctEl.textContent = '';
+        presentPctEl.textContent = '';
+      }
+
+      // Trigger attendance insights analysis (debounced, runs in background)
+      scheduleInsightsUpdate();
+
       // Group Report — DOM-safe construction
       groupReportEl.replaceChildren();
       if (!periodSelect.value) {
@@ -4393,10 +6107,6 @@
       } else {
         const period = periodSelect.value;
         const effectiveCfg = getEffectiveSeatingConfig(period);
-        const numGroups = effectiveCfg.enabled ? effectiveCfg.numGroups : MAX_GROUP;
-        const map = new Map();
-        for (let g = 1; g <= numGroups; g++) map.set(g, []);
-        periodAttendanceLog.forEach(l => { if (l.Group && map.has(l.Group)) map.get(l.Group).push(l); });
 
         if (periodAttendanceLog.length === 0) {
           const placeholder = document.createElement('p');
@@ -4404,49 +6114,90 @@
           placeholder.textContent = 'Students will appear here as they sign in.';
           groupReportEl.appendChild(placeholder);
         } else {
-          map.forEach((arr, grp) => {
-            if (arr.length > 0) {
-              const cap = effectiveCfg.enabled ? getGroupCap(grp, effectiveCfg) : 3;
-              const div = document.createElement('div');
-              const h4 = document.createElement('h4');
-              h4.className = 'font-bold text-md text-gray-700 mt-2';
-              h4.textContent = 'Group ' + grp + ' (' + arr.length + '/' + cap + ')';
-              const ul = document.createElement('ul');
-              ul.className = 'text-sm list-disc list-inside mb-2';
-              arr.forEach(s => {
-                let color = 'text-green-600';
-                if (s.Status === 'Late') color = 'text-yellow-600';
-                if (s.Status === 'Truant' || s.Status === 'Absent') color = 'text-red-600';
-                const li = document.createElement('li');
-                li.className = 'flex justify-between items-center group pl-1 py-1 hover:bg-gray-200 rounded';
-                const nameSpan = document.createElement('span');
-                nameSpan.textContent = s.Seat != null ? s.Name + ' (Seat ' + s.Seat + ')' : s.Name;
-                const actionsDiv = document.createElement('div');
-                actionsDiv.className = 'flex items-center gap-2';
-                const toggleBtn = document.createElement('button');
-                toggleBtn.className = 'text-xs font-mono cursor-pointer ' + color + ' hover:underline font-bold';
-                toggleBtn.title = 'Click to toggle status';
-                toggleBtn.textContent = (s.Status || '').toUpperCase().substring(0, 3);
-                toggleBtn.addEventListener('click', () => toggleStatus(s.StudentID, s.Status));
-                const removeBtn = document.createElement('button');
-                removeBtn.className = 'text-red-400 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold px-1';
-                removeBtn.title = 'Delete';
-                removeBtn.textContent = '\u00d7';
-                removeBtn.addEventListener('click', () => removeStudent(s.StudentID));
-                actionsDiv.append(toggleBtn, removeBtn);
-                li.append(nameSpan, actionsDiv);
-                ul.appendChild(li);
-              });
-              div.append(h4, ul);
-              groupReportEl.appendChild(div);
+
+          // Helper to render a student list item
+          function renderStudentLi(s) {
+            let color = 'text-green-600';
+            if (s.Status === 'Late') color = 'text-yellow-600';
+            if (s.Status === 'Truant' || s.Status === 'Absent') color = 'text-red-600';
+            const streak = absenceStreaks.get(s.StudentID) || 0;
+            const li = document.createElement('li');
+            let bgTint = '';
+            if (streak === 1) bgTint = 'bg-amber-50 border-l-2 border-amber-400';
+            else if (streak >= 2) bgTint = 'bg-red-50 border-l-2 border-red-400';
+            li.className = 'flex justify-between items-center group pl-1 py-1 hover:bg-gray-200 rounded ' + bgTint;
+            const nameSpan = document.createElement('span');
+            let nameText = s.Seat != null ? s.Name + ' (Seat ' + s.Seat + ')' : s.Name;
+            nameSpan.textContent = nameText;
+            if (streak > 0) {
+              const badge = document.createElement('span');
+              badge.className = streak >= 2 ? 'text-xs ml-1.5 text-red-500' : 'text-xs ml-1.5 text-amber-500';
+              badge.title = streak === 1 ? 'Absent last class' : 'Absent ' + streak + ' classes in a row';
+              badge.textContent = streak === 1 ? '\u25CF' : '\u25CF' + streak;
+              nameSpan.appendChild(badge);
             }
-          });
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'flex items-center gap-2';
+            const toggleBtn = document.createElement('button');
+            toggleBtn.className = 'text-xs font-mono cursor-pointer ' + color + ' hover:underline font-bold';
+            toggleBtn.title = 'Click to toggle status';
+            toggleBtn.textContent = (s.Status || '').toUpperCase().substring(0, 3);
+            toggleBtn.addEventListener('click', () => toggleStatus(s.StudentID, s.Status));
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'text-red-400 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold px-1';
+            removeBtn.title = 'Delete';
+            removeBtn.textContent = '\u00d7';
+            removeBtn.addEventListener('click', () => removeStudent(s.StudentID));
+            actionsDiv.append(toggleBtn, removeBtn);
+            li.append(nameSpan, actionsDiv);
+            return li;
+          }
+
+          if (!effectiveCfg.enabled) {
+            // No seating — flat list of all present students
+            const div = document.createElement('div');
+            const h4 = document.createElement('h4');
+            h4.className = 'font-bold text-md text-gray-700 mt-2';
+            h4.textContent = 'Present (' + periodAttendanceLog.length + ')';
+            const ul = document.createElement('ul');
+            ul.className = 'text-sm list-disc list-inside mb-2';
+            periodAttendanceLog.forEach(s => ul.appendChild(renderStudentLi(s)));
+            div.append(h4, ul);
+            groupReportEl.appendChild(div);
+          } else {
+            // Seating enabled — group buckets
+            const numGroups = effectiveCfg.numGroups;
+            const map = new Map();
+            for (let g = 1; g <= numGroups; g++) map.set(g, []);
+            periodAttendanceLog.forEach(l => { if (l.Group && map.has(l.Group)) map.get(l.Group).push(l); });
+            map.forEach((arr, grp) => {
+              if (arr.length > 0) {
+                const cap = getGroupCap(grp, effectiveCfg);
+                const div = document.createElement('div');
+                const h4 = document.createElement('h4');
+                h4.className = 'font-bold text-md text-gray-700 mt-2';
+                h4.textContent = 'Group ' + grp + ' (' + arr.length + '/' + cap + ')';
+                const ul = document.createElement('ul');
+                ul.className = 'text-sm list-disc list-inside mb-2';
+                arr.forEach(s => ul.appendChild(renderStudentLi(s)));
+                div.append(h4, ul);
+                groupReportEl.appendChild(div);
+              }
+            });
+          }
         }
-        updateFullscreenGroupView();
+        const fsContainer = document.getElementById('group-display-fullscreen');
+        if (fsContainer && !fsContainer.classList.contains('hidden')) {
+          updateFullscreenGroupView();
+        }
       }
 
       renderPeriodIndicator();
       renderRosterDebug();
+      requestAnimationFrame(() => {
+        absentListEl.scrollTop = savedAbsentScroll;
+        groupReportEl.scrollTop = savedGroupScroll;
+      });
     }
 
     function renderPeriodIndicator() {
@@ -4460,7 +6211,7 @@
         return;
       }
 
-      const tardyInfo = count >= TARDY_AFTER_NTH ? 'tardy active' : `${TARDY_AFTER_NTH - count} more before tardy`;
+      const tardyInfo = !TARDY_ENABLED ? 'tardies off' : count >= TARDY_AFTER_NTH ? 'tardy active' : `${TARDY_AFTER_NTH - count} more before tardy`;
       periodIndicator.textContent = `Period ${p} \u2022 ${how} \u2022 ${count} signed in (${tardyInfo}) \u2022 ${nowStr}`;
     }
 
@@ -4483,6 +6234,7 @@
           revealSyncTab();
           document.getElementById('sync-enabled-toggle').checked = true;
           document.getElementById('sync-status-section').classList.remove('hidden');
+          document.getElementById('sync-now-section').classList.remove('hidden');
           document.getElementById('sync-toggle-status').textContent = 'Sync is enabled. Attendance syncs to Aeries every 30 minutes during school hours.';
           watchSyncStatus();
         }
@@ -4500,13 +6252,16 @@
             await setDoc(configRef, { syncEnabled: enabled }, { merge: true });
             const statusEl = document.getElementById('sync-toggle-status');
             const statusSection = document.getElementById('sync-status-section');
+            const syncNowSection = document.getElementById('sync-now-section');
             if (enabled) {
               statusEl.textContent = 'Sync is enabled. Attendance syncs to Aeries every 30 minutes during school hours.';
               statusSection.classList.remove('hidden');
+              if (syncNowSection) syncNowSection.classList.remove('hidden');
               watchSyncStatus();
             } else {
               statusEl.textContent = 'Sync is disabled. Attendance will not be sent to Aeries.';
               statusSection.classList.add('hidden');
+              if (syncNowSection) syncNowSection.classList.add('hidden');
               if (unsubSyncStatus) { unsubSyncStatus(); unsubSyncStatus = null; }
             }
           } catch (e) {
@@ -4524,6 +6279,35 @@
           if (errorDetails) {
             errorDetails.classList.toggle('hidden');
             detailsBtn.textContent = errorDetails.classList.contains('hidden') ? 'Details' : 'Hide';
+          }
+        });
+      }
+
+      // Sync Now button
+      const syncNowBtn = document.getElementById('sync-now-btn');
+      if (syncNowBtn) {
+        syncNowBtn.addEventListener('click', async () => {
+          syncNowBtn.disabled = true;
+          const spinner = document.getElementById('sync-now-spinner');
+          if (spinner) spinner.classList.remove('hidden');
+          syncNowBtn.childNodes[syncNowBtn.childNodes.length - 1].textContent = ' Syncing...';
+          try {
+            const triggerSyncFn = httpsCallable(functions, 'triggerSync');
+            const result = await triggerSyncFn({});
+            if (result.data.success) {
+              syncNowBtn.childNodes[syncNowBtn.childNodes.length - 1].textContent = ' Done!';
+              setTimeout(() => { syncNowBtn.childNodes[syncNowBtn.childNodes.length - 1].textContent = ' Sync Now'; }, 2000);
+            } else {
+              syncNowBtn.childNodes[syncNowBtn.childNodes.length - 1].textContent = ' Failed';
+              setTimeout(() => { syncNowBtn.childNodes[syncNowBtn.childNodes.length - 1].textContent = ' Sync Now'; }, 3000);
+            }
+          } catch (err) {
+            console.error('[syncNow]', err);
+            syncNowBtn.childNodes[syncNowBtn.childNodes.length - 1].textContent = ' Error';
+            setTimeout(() => { syncNowBtn.childNodes[syncNowBtn.childNodes.length - 1].textContent = ' Sync Now'; }, 3000);
+          } finally {
+            syncNowBtn.disabled = false;
+            if (spinner) spinner.classList.add('hidden');
           }
         });
       }
@@ -4644,6 +6428,7 @@
     }
 
     // ===== Settings Section =====
+    let _settingsListenersAttached = false;
     function initSettingsUI() {
       // Populate username display
       const settingsUsername = document.getElementById('settings-username');
@@ -4669,6 +6454,159 @@
         if (lastLogin && user.metadata && user.metadata.lastSignInTime) {
           try { lastLogin.textContent = new Date(user.metadata.lastSignInTime).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch { }
         }
+      }
+
+      // Load teacher display name from Firestore config
+      const displayNameInput = document.getElementById('settings-teacher-display-name');
+      const kioskPromptInput = document.getElementById('settings-kiosk-prompt');
+      if (displayNameInput && db && teacherUid) {
+        getDoc(doc(db, teacherPath('config/main'))).then(snap => {
+          if (snap.exists()) {
+            if (snap.data().teacherDisplayName) {
+              displayNameInput.value = snap.data().teacherDisplayName;
+              teacherDisplayName = snap.data().teacherDisplayName;
+            }
+            if (snap.data().kioskPrompt) {
+              if (kioskPromptInput) kioskPromptInput.value = snap.data().kioskPrompt;
+              const promptEl = document.getElementById('kiosk-prompt-text');
+              if (promptEl) promptEl.textContent = snap.data().kioskPrompt;
+            }
+            if (snap.data().kioskPlaceholder) {
+              const phInput = document.getElementById('settings-kiosk-placeholder');
+              if (phInput) phInput.value = snap.data().kioskPlaceholder;
+              const idInput = document.getElementById('student-id-input');
+              if (idInput) idInput.placeholder = snap.data().kioskPlaceholder;
+            }
+            // QR sign-in toggle
+            const qrToggle = document.getElementById('settings-qr-enabled');
+            if (qrToggle) qrToggle.checked = snap.data().qrSignInEnabled === true;
+            // Tardy settings
+            const tardyToggle = document.getElementById('settings-tardy-enabled');
+            const tardyNthInput = document.getElementById('settings-tardy-nth');
+            const tardyGraceInput = document.getElementById('settings-tardy-grace');
+            const tardyOptions = document.getElementById('tardy-options');
+            if (tardyToggle) {
+              const enabled = snap.data().tardyEnabled !== false;
+              tardyToggle.checked = enabled;
+              if (tardyOptions) tardyOptions.style.opacity = enabled ? '1' : '0.4';
+            }
+            if (tardyNthInput && snap.data().tardyAfterNth != null) tardyNthInput.value = snap.data().tardyAfterNth;
+            if (tardyGraceInput && snap.data().tardyGraceMinutes != null) tardyGraceInput.value = snap.data().tardyGraceMinutes;
+          }
+        }).catch(() => {});
+      }
+
+      // Event listeners — only attach once to prevent stacking on repeated showDashboard() calls
+      if (_settingsListenersAttached) return;
+      _settingsListenersAttached = true;
+
+      // QR sign-in toggle
+      const qrToggle = document.getElementById('settings-qr-enabled');
+      if (qrToggle) {
+        qrToggle.addEventListener('change', async () => {
+          const enabled = qrToggle.checked;
+          const statusEl = document.getElementById('settings-qr-status');
+          try {
+            await setDoc(doc(db, teacherPath('config/main')), { qrSignInEnabled: enabled }, { merge: true });
+            if (enabled) { startQrSession(); } else { stopQrSession(); }
+            statusEl.textContent = enabled ? 'QR sign-in enabled!' : 'QR sign-in disabled.';
+            statusEl.className = 'text-xs mt-2 font-medium ' + (enabled ? 'text-green-600' : 'text-gray-500');
+            statusEl.classList.remove('hidden');
+            setTimeout(() => statusEl.classList.add('hidden'), 2000);
+          } catch (err) {
+            statusEl.textContent = 'Failed: ' + err.message;
+            statusEl.className = 'text-xs mt-2 font-medium text-red-600';
+            statusEl.classList.remove('hidden');
+          }
+        });
+      }
+
+      // Tardy settings
+      const tardyToggle = document.getElementById('settings-tardy-enabled');
+      const tardyOptions = document.getElementById('tardy-options');
+      if (tardyToggle && tardyOptions) {
+        tardyToggle.addEventListener('change', () => {
+          tardyOptions.style.opacity = tardyToggle.checked ? '1' : '0.4';
+        });
+      }
+      const saveTardyBtn = document.getElementById('settings-save-tardy');
+      if (saveTardyBtn) {
+        saveTardyBtn.addEventListener('click', async () => {
+          const enabled = document.getElementById('settings-tardy-enabled').checked;
+          const nth = Math.max(1, Math.min(30, parseInt(document.getElementById('settings-tardy-nth').value) || 5));
+          const grace = Math.max(1, Math.min(30, parseInt(document.getElementById('settings-tardy-grace').value) || 8));
+          const statusEl = document.getElementById('settings-tardy-status');
+          try {
+            await setDoc(doc(db, teacherPath('config/main')), {
+              tardyEnabled: enabled,
+              tardyAfterNth: nth,
+              tardyGraceMinutes: grace,
+            }, { merge: true });
+            TARDY_ENABLED = enabled;
+            TARDY_AFTER_NTH = nth;
+            TARDY_GRACE_MINUTES = grace;
+            statusEl.textContent = 'Saved!';
+            statusEl.className = 'text-xs font-medium text-green-600';
+            statusEl.classList.remove('hidden');
+            setTimeout(() => statusEl.classList.add('hidden'), 2000);
+          } catch (err) {
+            statusEl.textContent = 'Failed: ' + err.message;
+            statusEl.className = 'text-xs font-medium text-red-600';
+            statusEl.classList.remove('hidden');
+          }
+        });
+      }
+
+      // Save teacher display name
+      const saveDisplayNameBtn = document.getElementById('settings-save-display-name');
+      if (saveDisplayNameBtn && displayNameInput) {
+        saveDisplayNameBtn.addEventListener('click', async () => {
+          const name = displayNameInput.value.trim();
+          if (!name) { displayNameInput.focus(); return; }
+          const statusEl = document.getElementById('settings-display-name-status');
+          try {
+            await setDoc(doc(db, teacherPath('config/main')), { teacherDisplayName: name }, { merge: true });
+            teacherDisplayName = name;
+            statusEl.textContent = 'Saved!';
+            statusEl.className = 'text-xs mt-2 font-medium text-green-600';
+            statusEl.classList.remove('hidden');
+            setTimeout(() => statusEl.classList.add('hidden'), 2000);
+          } catch (err) {
+            statusEl.textContent = 'Failed to save: ' + err.message;
+            statusEl.className = 'text-xs mt-2 font-medium text-red-600';
+            statusEl.classList.remove('hidden');
+          }
+        });
+      }
+
+      // Save kiosk prompt + placeholder
+      const saveKioskPromptBtn = document.getElementById('settings-save-kiosk-prompt');
+      const kioskPlaceholderInput = document.getElementById('settings-kiosk-placeholder');
+      if (saveKioskPromptBtn && kioskPromptInput) {
+        saveKioskPromptBtn.addEventListener('click', async () => {
+          const prompt = kioskPromptInput.value.trim();
+          const placeholder = kioskPlaceholderInput ? kioskPlaceholderInput.value.trim() : '';
+          const statusEl = document.getElementById('settings-kiosk-prompt-status');
+          try {
+            const update = {};
+            if (prompt) update.kioskPrompt = prompt;
+            if (placeholder) update.kioskPlaceholder = placeholder;
+            if (Object.keys(update).length === 0) { kioskPromptInput.focus(); return; }
+            await setDoc(doc(db, teacherPath('config/main')), update, { merge: true });
+            const promptEl = document.getElementById('kiosk-prompt-text');
+            if (promptEl && prompt) promptEl.textContent = prompt;
+            const idInput = document.getElementById('student-id-input');
+            if (idInput && placeholder) idInput.placeholder = placeholder;
+            statusEl.textContent = 'Saved!';
+            statusEl.className = 'text-xs mt-2 font-medium text-green-600';
+            statusEl.classList.remove('hidden');
+            setTimeout(() => statusEl.classList.add('hidden'), 2000);
+          } catch (err) {
+            statusEl.textContent = 'Failed to save: ' + err.message;
+            statusEl.className = 'text-xs mt-2 font-medium text-red-600';
+            statusEl.classList.remove('hidden');
+          }
+        });
       }
 
       // Sync status details toggle
@@ -4740,6 +6678,17 @@
       }
       if (newPwInput) {
         newPwInput.addEventListener('keyup', e => { if (e.key === 'Enter' && updatePwSubmit) updatePwSubmit.click(); });
+      }
+
+      // Password visibility toggle
+      const togglePwBtn = document.getElementById('settings-toggle-password');
+      if (togglePwBtn && newPwInput) {
+        togglePwBtn.addEventListener('click', () => {
+          const isPassword = newPwInput.type === 'password';
+          newPwInput.type = isPassword ? 'text' : 'password';
+          document.getElementById('settings-eye-open').classList.toggle('hidden', !isPassword);
+          document.getElementById('settings-eye-closed').classList.toggle('hidden', isPassword);
+        });
       }
 
       // Change PIN
@@ -5029,6 +6978,7 @@
       }
 
       function tHideFs() {
+        if (tInterval) { clearInterval(tInterval); tInterval = null; }
         tFsOverlay.classList.add('hidden');
       }
 

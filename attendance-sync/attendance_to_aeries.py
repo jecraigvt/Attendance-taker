@@ -131,11 +131,11 @@ def export_attendance_for_teacher(date_str, teacher_uid):
             timestamps.sort()
             nth_timestamp = timestamps[MIN_STUDENTS_BEFORE_SYNC - 1]
             now_utc = datetime.now(timezone.utc)
-            # Handle both timezone-aware and naive datetimes
+            # Ensure timezone-aware comparison (Firestore returns UTC-aware timestamps;
+            # guard against naive by treating as UTC)
             if nth_timestamp.tzinfo is None:
-                minutes_elapsed = (datetime.now() - nth_timestamp).total_seconds() / 60
-            else:
-                minutes_elapsed = (now_utc - nth_timestamp).total_seconds() / 60
+                nth_timestamp = nth_timestamp.replace(tzinfo=timezone.utc)
+            minutes_elapsed = (now_utc - nth_timestamp).total_seconds() / 60
 
             if minutes_elapsed < PERIOD_SETTLE_MINUTES:
                 logger.info(
@@ -313,9 +313,8 @@ def _export_legacy(date_str, db):
             nth_timestamp = timestamps[MIN_STUDENTS_BEFORE_SYNC - 1]
             now_utc = datetime.now(timezone.utc)
             if nth_timestamp.tzinfo is None:
-                minutes_elapsed = (datetime.now() - nth_timestamp).total_seconds() / 60
-            else:
-                minutes_elapsed = (now_utc - nth_timestamp).total_seconds() / 60
+                nth_timestamp = nth_timestamp.replace(tzinfo=timezone.utc)
+            minutes_elapsed = (now_utc - nth_timestamp).total_seconds() / 60
 
             if minutes_elapsed < PERIOD_SETTLE_MINUTES:
                 logger.info(

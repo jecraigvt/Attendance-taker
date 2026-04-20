@@ -13,6 +13,10 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
+
+import pytz
+
+PACIFIC_TZ = pytz.timezone("America/Los_Angeles")
 from typing import Optional, Tuple
 
 from playwright.sync_api import sync_playwright
@@ -97,6 +101,12 @@ class SyncEngineError(Exception):
         self.category = category
 
 
+class CredentialsError(SyncEngineError):
+    """Raised when login fails due to bad credentials (should not be retried)."""
+    def __init__(self, message: str = "Invalid credentials"):
+        super().__init__(message, category="credentials")
+
+
 def find_element_with_fallback(page, element_type: str, format_args: dict, teacher_uid=None):
     """
     Locate an element using SELECTOR_STRATEGIES with automatic fallback.
@@ -143,6 +153,10 @@ def find_element_with_fallback(page, element_type: str, format_args: dict, teach
             element = page.locator(healed_selector)
             if element.count() > 0:
                 logger.info(f"Self-healing succeeded for {element_type}: {healed_selector}")
+                # Cache the healed selector in memory so subsequent calls
+                # in this process don't burn another Gemini API call
+                if healed_selector not in SELECTOR_STRATEGIES[element_type]:
+                    SELECTOR_STRATEGIES[element_type].append(healed_selector)
                 return element, len(strategies)  # index = len(strategies) signals "healed"
     except Exception as heal_exc:
         logger.error(f"Self-healing error for {element_type}: {heal_exc}")
@@ -201,7 +215,7 @@ def categorize_error(exception: Exception, context: str = "") -> Tuple[str, str]
 def retry_login(func):
     """
     Decorator: retry the wrapped function up to 3 times with 5 / 15 / 45 s backoff.
-    Only applied to the login step.
+    Only applied to the login step.  CredentialsError is never retried.
     """
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
@@ -214,6 +228,8 @@ def retry_login(func):
                 if attempt > 1:
                     logger.info(f"Login succeeded on attempt {attempt}")
                 return result
+            except CredentialsError:
+                raise  # Bad credentials — retrying would risk account lockout
             except Exception as exc:
                 last_exc = exc
                 err_short = str(exc).split("\n")[0]
@@ -241,7 +257,13 @@ def _login_to_aeries(page, username: str, password: str):
     page.fill('input[name="portalAccountUsername"], input[type="text"]', username)
     page.fill('input[name="portalAccountPassword"], input[type="password"]', password)
     page.click('button[type="submit"], input[type="submit"]')
-    page.wait_for_url(lambda url: "Login.aspx" not in url, timeout=40000)
+    try:
+        page.wait_for_url(lambda url: "Login.aspx" not in url, timeout=15000)
+    except Exception:
+        # If still on Login.aspx after submit, credentials are likely wrong
+        if "Login.aspx" in page.url:
+            raise CredentialsError("Aeries login rejected — still on login page")
+        raise  # Other error (timeout, network) — let retry_login handle it
     logger.info("Login complete")
 
 
@@ -274,7 +296,7 @@ def sync_teacher(uid: str) -> dict:
     Never raises — all exceptions are caught and reflected in the result dict
     and in the Firestore sync/status document.
     """
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(PACIFIC_TZ).strftime("%Y-%m-%d")
     logger.info(f"[{uid}] Starting sync for {today}")
 
     # ------------------------------------------------------------------

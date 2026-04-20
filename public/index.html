@@ -3079,31 +3079,44 @@
           // Wait for Firebase Auth to restore the persisted session.
           // Firebase keeps a refresh token in IndexedDB that auto-renews
           // indefinitely — no re-login needed even after days.
+          let authOk = false;
           if (auth) {
             try {
-              await new Promise((resolve, reject) => {
+              authOk = await new Promise((resolve) => {
                 const unsub = onAuthStateChanged(auth, (user) => {
                   unsub();
                   if (user && user.uid === teacherUid) {
                     console.log('[init] Auth session restored for', user.uid);
-                    resolve();
+                    resolve(true);
                   } else if (user) {
-                    console.warn('[init] Auth UID mismatch, re-signing in');
-                    resolve(); // proceed anyway — binding has the right UID
+                    console.warn('[init] Auth UID mismatch, binding may be stale');
+                    resolve(false);
                   } else {
-                    console.warn('[init] No auth session found, kiosk will use offline cache');
-                    resolve(); // still show kiosk — offline cache works for reads
+                    console.warn('[init] No auth session — need re-login');
+                    resolve(false);
                   }
                 });
-                // Timeout after 5s so the kiosk isn't stuck on a blank screen
-                setTimeout(() => { unsub(); resolve(); }, 5000);
+                setTimeout(() => { unsub(); resolve(false); }, 5000);
               });
             } catch (e) {
               console.warn('[init] Auth state check failed:', e.message);
             }
+          } else {
+            authOk = true; // no-cloud local mode
           }
-          await onTeacherAuthenticated(false);
-          showKioskMode();
+
+          if (!authOk) {
+            // Auth session lost (token revoked, long absence, etc.).
+            // Without auth, Firestore writes fail silently → QR sign-in
+            // breaks. Force a fresh login instead of pretending to be OK.
+            console.warn('[init] Forcing re-login due to missing auth session');
+            clearKioskBinding();
+            teacherUid = null; teacherName = null; teacherPin = null;
+            showLoginScreen();
+          } else {
+            await onTeacherAuthenticated(false);
+            showKioskMode();
+          }
         } else if (!FB_CONFIG) {
           // No cloud config — go straight to local kiosk mode
           teacherUid = 'local';
@@ -5639,6 +5652,15 @@
 
     async function writeQrSession(code) {
       if (!db || !teacherUid) { console.warn('[QR] no db or teacherUid'); return false; }
+      // CRITICAL: Firestore writes require an active auth session. If the
+      // Firebase token was revoked or refresh failed, auth.currentUser is
+      // null and writes will fail with permission-denied — silently, from
+      // the user's perspective. Detect this and surface it loudly.
+      if (auth && !auth.currentUser) {
+        console.error('[QR] Firebase auth session is gone — QR writes will fail');
+        showAuthExpiredBanner();
+        return false;
+      }
       const period = periodSelect ? periodSelect.value : '';
       if (!period) { console.warn('[QR] no period selected — writing session without period'); }
       const kioskId = getKioskId();
@@ -5659,8 +5681,25 @@
         return true;
       } catch (e) {
         console.error('[QR] writeQrSession FAILED:', e);
+        if (e && (e.code === 'permission-denied' || /permission/i.test(e.message || ''))) {
+          showAuthExpiredBanner();
+        }
         return false;
       }
+    }
+
+    function showAuthExpiredBanner() {
+      if (document.getElementById('auth-expired-banner')) return;
+      const banner = document.createElement('div');
+      banner.id = 'auth-expired-banner';
+      banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#dc2626;color:white;padding:12px 20px;text-align:center;font-weight:bold;font-size:15px;box-shadow:0 2px 10px rgba(0,0,0,0.3);';
+      banner.appendChild(document.createTextNode('Sign-in session expired — QR sign-in is offline. '));
+      const btn = document.createElement('button');
+      btn.textContent = 'Reload to sign in again';
+      btn.style.cssText = 'margin-left:12px;background:white;color:#dc2626;padding:4px 12px;border-radius:4px;font-weight:bold;cursor:pointer;';
+      btn.addEventListener('click', () => window.location.reload());
+      banner.appendChild(btn);
+      document.body.appendChild(banner);
     }
 
     async function cleanupExpiredQrSessions() {

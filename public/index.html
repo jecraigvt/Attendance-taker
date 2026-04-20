@@ -5721,6 +5721,21 @@
 
     let currentQrDataUrl = null;
 
+    // Preload a QR image then atomically swap it into an <img>. Avoids the
+    // stale-image window where the browser keeps showing the old QR while
+    // the new one is still downloading — especially bad at 400x400 where
+    // loads take longer and students are more likely to scan during the gap.
+    function swapQrImage(imgEl, newSrc) {
+      const preload = new Image();
+      preload.onload = () => { imgEl.src = newSrc; };
+      preload.onerror = () => {
+        // If the QR service is down, retry once with a cache-buster
+        console.warn('[QR] image load failed, retrying');
+        setTimeout(() => { imgEl.src = newSrc + '&_r=' + Date.now(); }, 500);
+      };
+      preload.src = newSrc;
+    }
+
     function renderQrCode(code) {
       const container = document.getElementById('kiosk-qr-container');
       const img = document.getElementById('kiosk-qr-img');
@@ -5729,15 +5744,16 @@
       // before even calling the server (avoids confusing "expired" UX).
       const url = window.location.origin + '/s.html?t=' + teacherUid + '&c=' + code + '&ts=' + Date.now();
       currentQrDataUrl = url;
-      const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=' + encodeURIComponent(url);
-      img.src = qrUrl;
+      const smallUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=' + encodeURIComponent(url);
+      swapQrImage(img, smallUrl);
       container.classList.remove('hidden');
       console.log('[QR] rendered:', url);
       // Update enlarged overlay if it's currently open
       const enlargedImg = document.getElementById('qr-enlarged-img');
       const overlay = document.getElementById('qr-enlarged-overlay');
       if (enlargedImg && overlay && !overlay.classList.contains('hidden')) {
-        enlargedImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=' + encodeURIComponent(url);
+        const largeUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=' + encodeURIComponent(url);
+        swapQrImage(enlargedImg, largeUrl);
       }
     }
 
@@ -5751,7 +5767,10 @@
 
       clickTarget.addEventListener('click', function() {
         if (!currentQrDataUrl) return;
-        enlargedImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=' + encodeURIComponent(currentQrDataUrl);
+        // Always use the freshest currentQrDataUrl (updated on every rotation)
+        // and preload so we never show a stale QR while the new one downloads.
+        const largeUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=' + encodeURIComponent(currentQrDataUrl);
+        swapQrImage(enlargedImg, largeUrl);
         overlay.classList.remove('hidden');
       });
 

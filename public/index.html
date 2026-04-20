@@ -5765,6 +5765,8 @@
     })();
 
     let qrRetryTimeout = null;
+    let qrWatchdog = null;
+    let qrLastWriteMs = 0; // timestamp of last successful write
 
     async function rotateQrCode() {
       try {
@@ -5780,6 +5782,7 @@
           return;
         }
         if (errEl) errEl.classList.add('hidden');
+        qrLastWriteMs = Date.now();
         renderQrCode(code);
       } catch (e) {
         console.error('[QR] rotation failed', e);
@@ -5788,15 +5791,32 @@
       }
     }
 
+    // Watchdog: browsers throttle setInterval on background tabs and pause
+    // it entirely on OS sleep. If we notice that the last successful write
+    // was too long ago, force a rotation. Runs every 20s independently of
+    // the 2-minute setInterval so throttling doesn't silently kill rotation.
+    function qrWatchdogTick() {
+      if (!qrInterval) return;
+      const age = Date.now() - qrLastWriteMs;
+      if (age > 90000) { // 90 sec since last successful write — force one now
+        console.warn('[QR] watchdog: last write was', Math.round(age/1000) + 's ago — forcing rotation');
+        rotateQrCode();
+      }
+    }
+
     function startQrSession() {
       if (qrInterval) return; // already running
+      qrLastWriteMs = 0;
       rotateQrCode(); // immediate first render
       qrInterval = setInterval(rotateQrCode, 120000); // every 2 minutes
+      qrWatchdog = setInterval(qrWatchdogTick, 20000); // watchdog every 20s
     }
 
     function stopQrSession() {
       if (qrInterval) { clearInterval(qrInterval); qrInterval = null; }
+      if (qrWatchdog) { clearInterval(qrWatchdog); qrWatchdog = null; }
       clearTimeout(qrRetryTimeout); qrRetryTimeout = null;
+      qrLastWriteMs = 0;
       const container = document.getElementById('kiosk-qr-container');
       if (container) container.classList.add('hidden');
       // Delete ALL session docs immediately (not just expired)
@@ -5810,6 +5830,17 @@
       if (!document.hidden && qrInterval) {
         console.log('[QR] tab visible — rotating now');
         rotateQrCode();
+      }
+    });
+
+    // Also catch window focus — some browsers fire this but not visibilitychange
+    window.addEventListener('focus', () => {
+      if (qrInterval) {
+        const age = Date.now() - qrLastWriteMs;
+        if (age > 60000) {
+          console.log('[QR] window focused and stale — rotating now');
+          rotateQrCode();
+        }
       }
     });
 

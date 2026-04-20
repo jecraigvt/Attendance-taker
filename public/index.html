@@ -1199,6 +1199,7 @@
                 <img id="kiosk-qr-img" width="130" height="130" class="rounded-lg" alt="QR Code" />
               </div>
               <p class="text-xs text-gray-500 mt-2">Tap to enlarge</p>
+              <p id="kiosk-qr-error" class="hidden text-xs text-red-400 mt-1 font-semibold">QR offline — retrying...</p>
             </div>
           </div>
 
@@ -2384,7 +2385,7 @@
             corrReasonSel.value = 'Student was marked absent by mistake.';
           } else {
             // Tardy/Late — probably shouldn't have been marked tardy
-            corrReasonSel.value = 'Student was marked absent by mistake.';
+            corrReasonSel.value = 'Student was marked absent but was tardy.';
           }
         });
       }
@@ -2530,7 +2531,7 @@
         params.set(ENTRY.period, period);
         if (absentNames.length > 0) params.set(ENTRY.absent, absentNames.join(', '));
         if (tardyNames.length > 0) params.set(ENTRY.tardy, tardyNames.join(', '));
-        return FORM_BASE + params.toString();
+        return { url: FORM_BASE + params.toString(), absentCount: absentNames.length, rosterSize: roster.length };
       }
 
       btn.addEventListener('click', async () => {
@@ -2549,11 +2550,27 @@
             const allPeriods = Object.keys(allRosters).filter(p => (allRosters[p] || []).length > 0).sort();
             if (allPeriods.length === 0) { statusEl.textContent = 'No roster periods found.'; return; }
             const tabs = allPeriods.map(() => window.open('about:blank', '_blank'));
-            const urls = await Promise.all(allPeriods.map(p => buildPeriodUrl(date, p)));
+            const results = await Promise.all(allPeriods.map(p => buildPeriodUrl(date, p)));
+
+            // Check if any period has a suspicious number of absences
+            const suspicious = results.filter(r => r && r.absentCount > r.rosterSize / 3);
+            if (suspicious.length > 0) {
+              const summary = suspicious.map((r, i) => {
+                const period = allPeriods[results.indexOf(r)];
+                return `Period ${period}: ${r.absentCount}/${r.rosterSize} absent`;
+              }).join('\n');
+              if (!confirm(`Warning: The following periods have more than a third of the class marked absent. This may mean no attendance was taken (e.g. sub day). Continue?\n\n${summary}`)) {
+                tabs.forEach(t => { if (t) t.close(); });
+                statusEl.textContent = 'Cancelled.';
+                setTimeout(() => statusEl.classList.add('hidden'), 2000);
+                return;
+              }
+            }
+
             let opened = 0;
-            urls.forEach((url, i) => {
-              if (url && tabs[i]) {
-                tabs[i].location.href = url;
+            results.forEach((result, i) => {
+              if (result && tabs[i]) {
+                tabs[i].location.href = result.url;
                 opened++;
               } else if (tabs[i]) {
                 tabs[i].close(); // no data for this period, close the blank tab
@@ -2566,13 +2583,22 @@
             statusEl.textContent = 'Opened ' + opened + ' period form(s).';
             setTimeout(() => statusEl.classList.add('hidden'), 2000);
           } else {
-            const url = await buildPeriodUrl(date, periodSel.value);
-            if (!url) {
+            const result = await buildPeriodUrl(date, periodSel.value);
+            if (!result) {
               statusEl.textContent = 'No attendance data found for that date/period.';
               return;
             }
+            // Warn if more than a third of the class is absent
+            if (result.absentCount > result.rosterSize / 3) {
+              if (!confirm(`Warning: ${result.absentCount} out of ${result.rosterSize} students are marked absent (${Math.round(result.absentCount / result.rosterSize * 100)}%). This may mean no attendance was taken (e.g. sub day). Continue?`)) {
+                statusEl.textContent = 'Cancelled.';
+                statusEl.classList.remove('hidden');
+                setTimeout(() => statusEl.classList.add('hidden'), 2000);
+                return;
+              }
+            }
             statusEl.classList.add('hidden');
-            window.open(url, '_blank');
+            window.open(result.url, '_blank');
           }
         } catch (err) {
           statusEl.textContent = 'Error loading data: ' + err.message;
@@ -2632,12 +2658,12 @@
 
               const studentsSnapshot = await getDocs(collection(db, `${basePath}/students`));
               const presentStudents = new Map();
-              studentsSnapshot.forEach(d => presentStudents.set(d.data().StudentID, d.data()));
+              studentsSnapshot.forEach(d => presentStudents.set(d.id, d.data()));
 
               const periodRows = [];
               for (const student of roster) {
-                if (presentStudents.has(student.StudentID)) {
-                  const log = presentStudents.get(student.StudentID);
+                if (presentStudents.has(String(student.StudentID))) {
+                  const log = presentStudents.get(String(student.StudentID));
                   periodRows.push([date, period, student.StudentID, csvQuote(student.LastName || ''), csvQuote(student.FirstName || ''), log.Status, log.SignInTime, log.Group]);
                 } else {
                   periodRows.push([date, period, student.StudentID, csvQuote(student.LastName || ''), csvQuote(student.FirstName || ''), 'Absent', 'N/A', 'N/A']);
@@ -3903,7 +3929,7 @@
           }
         });
 
-        allRosters = { ...allRosters, ...incoming };
+        allRosters = incoming;
         try { localStorage.setItem('allRosters', JSON.stringify(allRosters)); } catch (e) { console.warn('localStorage full:', e); }
         renderRosterSummary();
         renderRosterManagementUI();
@@ -4049,7 +4075,8 @@
         addRow.innerHTML = '<td class="px-4 py-2"><input type="text" id="add-id-' + spp + '" maxlength="10" placeholder="Student ID" class="w-full border border-gray-300 rounded px-2 py-1 text-xs font-mono focus:ring-1 focus:ring-red-500 focus:outline-none" /></td>'
           + '<td class="px-4 py-2" colspan="2"><div class="flex gap-1"><input type="text" id="add-first-' + spp + '" placeholder="First name" class="w-1/2 border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-red-500 focus:outline-none" /><input type="text" id="add-last-' + spp + '" placeholder="Last name" class="w-1/2 border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-red-500 focus:outline-none" /></div></td>'
           + '<td class="px-4 py-2"><span class="text-xs text-gray-400">Manual</span></td>'
-          + '<td class="px-4 py-2"><button onclick="addManualStudent(\'' + spp + '\')" class="text-green-600 hover:text-green-800 text-xs font-semibold px-2 py-1 rounded bg-green-50 hover:bg-green-100">+ Add</button></td>';
+          + '<td class="px-4 py-2"><button class="roster-add-btn text-green-600 hover:text-green-800 text-xs font-semibold px-2 py-1 rounded bg-green-50 hover:bg-green-100">+ Add</button></td>';
+        addRow.querySelector('.roster-add-btn').addEventListener('click', () => addManualStudent(period));
         tbody.appendChild(addRow);
         tableWrap.appendChild(table);
         body.appendChild(tableWrap);
@@ -4743,25 +4770,30 @@
       const pastDays = getPastSchoolDays(5); // check last 5 school days
       const rosterIds = new Set(roster.map(s => s.StudentID));
 
-      // Fetch attendance for each past day (most recent first)
-      // Stop checking once a student was present
-      const presentOnDay = []; // array of Sets, index 0 = most recent
-      for (const dateStr of pastDays) {
+      // Fetch attendance for each past day in parallel (most recent first)
+      const presentOnDay = await Promise.all(pastDays.map(async (dateStr) => {
         try {
           const colRef = collection(db, teacherPath(`attendance/${dateStr}/periods/${period}/students`));
           const snap = await getDocs(colRef);
           const ids = new Set();
-          snap.docs.forEach(d => ids.add(d.id));
-          presentOnDay.push(ids);
+          snap.docs.forEach(d => ids.add(String(d.id)));
+          return ids;
         } catch {
-          presentOnDay.push(new Set());
+          return new Set();
         }
-      }
+      }));
+
+      // Filter out days where >50% of roster was absent — likely a sub day
+      // or the class didn't meet (special schedule). Those days shouldn't
+      // count toward absence streaks.
+      const validDays = presentOnDay.filter(dayPresent => {
+        return dayPresent.size > rosterIds.size / 2;
+      });
 
       // For each roster student, count consecutive recent absences
       for (const sid of rosterIds) {
         let streak = 0;
-        for (const dayPresent of presentOnDay) {
+        for (const dayPresent of validDays) {
           if (dayPresent.has(sid)) break; // they were present this day, streak ends
           streak++;
         }
@@ -4890,10 +4922,11 @@
         const roster = map[p] || [];
         const tails = new Map();
         roster.forEach(s => {
-          const id = String(s.StudentID || '');
-          const last4 = id.replace(/^0+/, '') || '0';
-          if (!tails.has(last4)) tails.set(last4, []);
-          tails.get(last4).push(`${escHtml((s.FirstName || '') + ' ' + (s.LastName || ''))}`);
+          const id = String(s.StudentID || '').replace(/^0+/, '') || '0';
+          // Use last 5 digits to match the suffix-matching in matchStudentId
+          const last5 = id.length > 5 ? id.slice(-5) : id;
+          if (!tails.has(last5)) tails.set(last5, []);
+          tails.get(last5).push(`${escHtml((s.FirstName || '') + ' ' + (s.LastName || ''))}`);
         });
         tails.forEach((names, tail) => {
           if (tail && names.length > 1) {
@@ -5198,15 +5231,16 @@
             const targetPeriod = await pickBestPeriod(possiblePeriods, code);
             console.log(`[SmartSwitch] Switching to P.${targetPeriod}`);
 
-            periodSelect.value = targetPeriod;
-            onPeriodChange();
-
             p = targetPeriod;
+            periodSelect.value = p;
+
+            // Set roster directly (avoid onPeriodChange which races with getDocs)
+            const resolved = resolveRosterKey(p);
+            currentRoster = resolved ? (allRosters[resolved] || []) : [];
             student = (currentRoster || []).find(s => matchStudentId(s.StudentID, code));
             wasSmartSwitched = true;
 
-            // Directly fetch attendance for the new period so statusForNow() has accurate data
-            // (onSnapshot may not have fired yet after onPeriodChange)
+            // One-shot fetch for accurate tardy/seat data before sign-in
             if (db && teacherUid) {
               const switchDate = nowISODate();
               const switchColRef = collection(db, teacherPath(`attendance/${switchDate}/periods/${p}/students`));
@@ -5329,14 +5363,14 @@
         if (db && teacherUid) {
           const colRef = collection(db, teacherPath(`attendance/${today}/periods/${p}/students`));
           const snap = await getDocs(colRef);
-          snap.docs.forEach(d => { const data = d.data(); present.set(data.StudentID, data); });
+          snap.docs.forEach(d => present.set(d.id, d.data()));
         } else {
           (getLocalLogs(today, p) || []).forEach(d => present.set(d.StudentID, d));
         }
         const roster = allRosters[p] || [];
         roster.forEach(stu => {
-          if (present.has(stu.StudentID)) {
-            const log = present.get(stu.StudentID);
+          if (present.has(String(stu.StudentID))) {
+            const log = present.get(String(stu.StudentID));
             // Use roster names (reliable) instead of parsing log.Name (fragile for multi-word names)
             rows.push([log.Date, p, log.StudentID, csvQuote(stu.LastName || ''), csvQuote(stu.FirstName || ''), log.Status, log.SignInTime, log.Group]);
           } else {
@@ -5608,21 +5642,42 @@
       const period = periodSelect ? periodSelect.value : '';
       if (!period) { console.warn('[QR] no period selected — writing session without period'); }
       const kioskId = getKioskId();
-      const path = teacherPath('config/main/qrSessions/' + kioskId);
-      console.log('[QR] writing session to:', path, { code, period });
+      // Use code as doc ID so old codes survive until they expire naturally
+      const path = teacherPath('config/main/qrSessions/' + code);
+      console.log('[QR] writing session to:', path, { code, period, kioskId });
       try {
         const sessionRef = doc(db, path);
         await setDoc(sessionRef, {
           code,
           period: period || '',
+          kioskId,
           createdAt: serverTimestamp(),
         });
         console.log('[QR] session written successfully');
+        // Clean up expired sessions in background (older than 3 minutes)
+        cleanupExpiredQrSessions().catch(() => {});
         return true;
       } catch (e) {
         console.error('[QR] writeQrSession FAILED:', e);
         return false;
       }
+    }
+
+    async function cleanupExpiredQrSessions() {
+      try {
+        const colRef = collection(db, teacherPath('config/main/qrSessions'));
+        const snap = await getDocs(colRef);
+        const now = Date.now();
+        const batch = [];
+        snap.forEach(d => {
+          const ts = d.data().createdAt;
+          const ms = ts && ts.toMillis ? ts.toMillis() : 0;
+          if (ms > 0 && now - ms > 180000) { // older than 3 min
+            batch.push(deleteDoc(d.ref));
+          }
+        });
+        if (batch.length > 0) await Promise.all(batch);
+      } catch (e) { console.warn('[QR] cleanup error', e); }
     }
 
     let currentQrDataUrl = null;
@@ -5631,7 +5686,9 @@
       const container = document.getElementById('kiosk-qr-container');
       const img = document.getElementById('kiosk-qr-img');
       if (!container || !img) { console.error('[QR] container or img not found'); return; }
-      const url = window.location.origin + '/s.html?t=' + teacherUid + '&c=' + code;
+      // Include a timestamp so s.html can detect bookmarked/cached URLs locally
+      // before even calling the server (avoids confusing "expired" UX).
+      const url = window.location.origin + '/s.html?t=' + teacherUid + '&c=' + code + '&ts=' + Date.now();
       currentQrDataUrl = url;
       const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=' + encodeURIComponent(url);
       img.src = qrUrl;
@@ -5668,13 +5725,27 @@
       });
     })();
 
+    let qrRetryTimeout = null;
+
     async function rotateQrCode() {
       try {
         const code = generateQrCode();
-        renderQrCode(code); // show QR immediately
-        await writeQrSession(code); // then persist to Firestore
+        const ok = await writeQrSession(code);
+        const errEl = document.getElementById('kiosk-qr-error');
+        if (!ok) {
+          console.warn('[QR] write failed — will retry in 10s');
+          if (errEl) errEl.classList.remove('hidden');
+          // Retry after 10s (won't stack — cleared on next rotation or success)
+          clearTimeout(qrRetryTimeout);
+          qrRetryTimeout = setTimeout(rotateQrCode, 10000);
+          return;
+        }
+        if (errEl) errEl.classList.add('hidden');
+        renderQrCode(code);
       } catch (e) {
         console.error('[QR] rotation failed', e);
+        clearTimeout(qrRetryTimeout);
+        qrRetryTimeout = setTimeout(rotateQrCode, 10000);
       }
     }
 
@@ -5686,14 +5757,30 @@
 
     function stopQrSession() {
       if (qrInterval) { clearInterval(qrInterval); qrInterval = null; }
+      clearTimeout(qrRetryTimeout); qrRetryTimeout = null;
       const container = document.getElementById('kiosk-qr-container');
       if (container) container.classList.add('hidden');
-      // Clean up session doc
+      // Delete ALL session docs immediately (not just expired)
       if (db && teacherUid) {
-        const kioskId = getKioskId();
-        const sessionRef = doc(db, teacherPath('config/main/qrSessions/' + kioskId));
-        deleteDoc(sessionRef).catch(() => {});
+        cleanupAllQrSessions().catch(() => {});
       }
+    }
+
+    // Refresh QR immediately when tab regains visibility (after sleep/wake or alt-tab)
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && qrInterval) {
+        console.log('[QR] tab visible — rotating now');
+        rotateQrCode();
+      }
+    });
+
+    async function cleanupAllQrSessions() {
+      try {
+        const colRef = collection(db, teacherPath('config/main/qrSessions'));
+        const snap = await getDocs(colRef);
+        if (snap.empty) return;
+        await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+      } catch (e) { console.warn('[QR] cleanup-all error', e); }
     }
 
     // ===== Attendance Insights Engine =====
@@ -5763,7 +5850,11 @@
           const signedIn = new Map();
           studentsSnap.forEach(d => signedIn.set(d.id, d.data()));
 
+          // Skip days where >50% of roster had no sign-in — likely a sub day
+          // or the class didn't meet (special schedule)
           const rosterSids = new Set(snap.map(s => String(s.StudentID)));
+          if (signedIn.size <= rosterSids.size / 2) return;
+
           for (const [sid, history] of studentHistory) {
             if (!rosterSids.has(sid)) continue;
             if (signedIn.has(sid)) {

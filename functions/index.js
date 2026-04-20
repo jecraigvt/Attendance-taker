@@ -436,7 +436,7 @@ function parseAeriesClassList($) {
 
       if (periodMatch) {
         const fullHref = href.startsWith("http") ? href :
-          href.startsWith("/") ? `https://adn.fjuhsd.org${href}` :
+          href.startsWith("/") ? `${AERIES_BASE_URL}${href}` :
           `${AERIES_BASE_URL}/${href}`;
         classes.push({
           period: periodMatch[1].toUpperCase(),
@@ -1189,7 +1189,7 @@ exports.triggerSync = onCall(
         throw new HttpsError("unauthenticated", "Must be signed in.");
       }
       const uid = request.auth.uid;
-      const dateStr = new Date().toLocaleDateString("en-CA");
+      const dateStr = toPacific(new Date()).toLocaleDateString("en-CA");
       logger.info("triggerSync called", {uid, dateStr});
 
       try {
@@ -1795,34 +1795,37 @@ exports.qrSignIn = onCall(
             message: "This code has expired. Scan the QR code again."};
         }
 
-        const period = matchedSession.period;
-        if (!period) {
-          return {success: false, error: "no_period",
-            message: "No period is active. Please wait for your teacher."};
-        }
+        const period = matchedSession.period || "";
 
         const dateStr = toPacific(new Date()).toLocaleDateString("en-CA");
 
         // 3. Find student on roster (check matched period first, then others)
+        //    Supports last-5-digit suffix matching (e.g. "34567" matches "1234567")
         let foundPeriod = null;
         let foundStudent = null;
         const cleanSid = sid.replace(/^0+/, "") || "0";
 
+        function matchSid(storedId) {
+          const stored = String(storedId || "").replace(/^0+/, "") || "0";
+          if (stored === cleanSid) return true;
+          return stored.length > cleanSid.length && stored.endsWith(cleanSid);
+        }
+
         // Try matched period first (single doc read instead of full collection)
-        const periodRosterSnap = await db.collection("teachers")
-            .doc(teacherUid).collection("rosters").doc(period).get();
-        if (periodRosterSnap.exists) {
-          const roster = periodRosterSnap.data().roster || [];
-          const match = roster.find((s) =>
-            (String(s.StudentID || "").replace(/^0+/, "") || "0") === cleanSid,
-          );
-          if (match) {
-            foundPeriod = period;
-            foundStudent = match;
+        if (period) {
+          const periodRosterSnap = await db.collection("teachers")
+              .doc(teacherUid).collection("rosters").doc(period).get();
+          if (periodRosterSnap.exists) {
+            const roster = periodRosterSnap.data().roster || [];
+            const match = roster.find((s) => matchSid(s.StudentID));
+            if (match) {
+              foundPeriod = period;
+              foundStudent = match;
+            }
           }
         }
 
-        // Fall back to all rosters only if not found in matched period
+        // Fall back to all rosters if not found in matched period
         if (!foundStudent) {
           const rostersSnap = await db.collection("teachers").doc(teacherUid)
               .collection("rosters").get();
@@ -1831,10 +1834,7 @@ exports.qrSignIn = onCall(
             const roster = doc.data().roster || [];
             const p = doc.id;
             if (p === period) return; // Already checked
-            const match = roster.find((s) =>
-              (String(s.StudentID || "").replace(/^0+/, "") || "0") ===
-                cleanSid,
-            );
+            const match = roster.find((s) => matchSid(s.StudentID));
             if (match) {
               foundPeriod = p;
               foundStudent = match;
@@ -1844,7 +1844,7 @@ exports.qrSignIn = onCall(
 
         if (!foundStudent) {
           return {success: false, error: "not_found",
-            message: "Student ID not found on the roster."};
+            message: "ID not found. Please enter the last 5 digits of your ID."};
         }
 
         const displayName =
@@ -1852,10 +1852,13 @@ exports.qrSignIn = onCall(
           " " + (foundStudent.LastName || "");
         const studentName = displayName.trim();
 
+        // Use the full roster ID as the doc key (not the partial ID the student entered)
+        const rosterSid = String(foundStudent.StudentID || sid);
+
         // 4-10. Use a Firestore transaction for the read-check-write
         const basePath =
           `teachers/${teacherUid}/attendance/${dateStr}/periods/${foundPeriod}`;
-        const studentDocRef = db.doc(`${basePath}/students/${sid}`);
+        const studentDocRef = db.doc(`${basePath}/students/${rosterSid}`);
 
         const result = await db.runTransaction(async (txn) => {
           const existingDoc = await txn.get(studentDocRef);
@@ -1866,6 +1869,7 @@ exports.qrSignIn = onCall(
             return {
               success: true, recheck: true,
               name: d.Name || studentName,
+              studentId: rosterSid,
               group: d.Group || null,
               seat: d.Seat || null,
               status: d.Status || "On Time",
@@ -1874,24 +1878,30 @@ exports.qrSignIn = onCall(
             };
           }
 
-          // 5. Determine tardy status
+          // 5. Determine tardy status (respects teacher's configurable settings)
           const studentsSnap = await txn.get(
               db.collection(`${basePath}/students`),
           );
           const signedInCount = studentsSnap.size;
           let status = "On Time";
 
-          if (signedInCount >= 5) {
-            // TARDY_AFTER_NTH = 5, TARDY_GRACE_MINUTES = 8
+          const cfgData = configSnap.data() || {};
+          const tardyEnabled = cfgData.tardyEnabled !== false;
+          const tardyAfterNth = cfgData.tardyAfterNth != null ?
+            cfgData.tardyAfterNth : 5;
+          const tardyGraceMin = cfgData.tardyGraceMinutes != null ?
+            cfgData.tardyGraceMinutes : 8;
+
+          if (tardyEnabled && signedInCount >= tardyAfterNth) {
             const timestamps = [];
             studentsSnap.forEach((doc) => {
               const ts = doc.data().Timestamp;
               if (ts && ts.toMillis) timestamps.push(ts.toMillis());
             });
             timestamps.sort((a, b) => a - b);
-            if (timestamps.length >= 5) {
-              const nthTs = timestamps[4]; // 0-indexed, 5th student
-              const graceEnd = nthTs + 8 * 60 * 1000;
+            if (timestamps.length >= tardyAfterNth) {
+              const nthTs = timestamps[tardyAfterNth - 1];
+              const graceEnd = nthTs + tardyGraceMin * 60 * 1000;
               if (Date.now() > graceEnd) status = "Late";
             }
           }
@@ -1955,20 +1965,24 @@ exports.qrSignIn = onCall(
               const frontRowSet = new Set(
                   Array.isArray(frontRow) ? frontRow.map(String) : [],
               );
-              const needsFront = frontRowSet.has(sid);
+              const needsFront = frontRowSet.has(rosterSid);
               const frontGroups = new Set(
                   (effectiveCfg.frontGroups || [])
                       .map(Number).filter((g) => g >= 1 && g <= numGroups),
               );
 
-              // Avoid pairs
+              // Avoid pairs (supports both array ["a","b"] and object {s1,s2} formats)
               const avoidPairs = configSnap.data().avoidPairs || [];
               const avoid = new Set();
               if (Array.isArray(avoidPairs)) {
                 for (const pair of avoidPairs) {
-                  if (!Array.isArray(pair) || pair.length < 2) continue;
-                  if (pair.includes(sid)) {
-                    const other = pair.find((x) => x !== sid);
+                  const a = Array.isArray(pair) ? pair[0] : pair.s1;
+                  const b = Array.isArray(pair) ? pair[1] : pair.s2;
+                  if (!a || !b) continue;
+                  let other = null;
+                  if (String(a) === rosterSid) other = String(b);
+                  else if (String(b) === rosterSid) other = String(a);
+                  if (other) {
                     studentsSnap.forEach((doc) => {
                       if (String(doc.data().StudentID) === other &&
                           typeof doc.data().Group === "number") {
@@ -2027,7 +2041,7 @@ exports.qrSignIn = onCall(
 
           // 7. Write attendance record
           const record = {
-            StudentID: sid,
+            StudentID: rosterSid,
             Name: studentName,
             Date: new Date().toLocaleDateString(),
             SignInTime: new Date().toLocaleTimeString(),
@@ -2043,7 +2057,7 @@ exports.qrSignIn = onCall(
           // Check for device alert
           let deviceAlert = false;
           if (cleanDeviceId && previousStudentId &&
-              String(previousStudentId) !== sid) {
+              String(previousStudentId) !== rosterSid) {
             deviceAlert = true;
             record.deviceAlert = true;
           }
@@ -2053,6 +2067,7 @@ exports.qrSignIn = onCall(
           return {
             success: true, recheck: false,
             name: studentName,
+            studentId: rosterSid,
             group, seat, status,
             period: foundPeriod,
             deviceAlert,
@@ -2065,16 +2080,13 @@ exports.qrSignIn = onCall(
             const alertRef = db.doc(
                 `teachers/${teacherUid}/attendance/${dateStr}` +
                 `/deviceAlerts/${cleanDeviceId}`);
-            const alertSnap = await alertRef.get();
-            const existing = alertSnap.exists ?
-              (alertSnap.data().students || []) : [];
             const prevName = previousStudentId || "Unknown";
-            const names = [...new Set([...existing, prevName, studentName])];
             await alertRef.set({
-              students: names,
+              students: admin.firestore.FieldValue.arrayUnion(
+                  prevName, studentName),
               period: result.period,
               timestamp: admin.firestore.FieldValue.serverTimestamp(),
-            });
+            }, {merge: true});
           } catch (e) {
             logger.warn("Device alert write failed", {error: e.message});
           }

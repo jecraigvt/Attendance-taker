@@ -76,6 +76,14 @@
         Try Again
       </button>
     </div>
+
+    <!-- Expired / stale URL — instruct to re-scan -->
+    <div id="state-expired" class="hidden text-center">
+      <div class="text-5xl mb-4">&#128241;</div>
+      <h1 class="text-2xl font-bold text-white mb-2">Scan the QR code again</h1>
+      <p class="text-gray-400 text-sm mb-6">This link has expired. Point your phone's camera at the QR code on the kiosk to get a fresh link.</p>
+      <p class="text-gray-500 text-xs">QR codes rotate every 2 minutes for security.</p>
+    </div>
   </div>
 
   <script type="module">
@@ -97,6 +105,7 @@
     const params = new URLSearchParams(window.location.search);
     const teacherUid = params.get('t');
     const code = params.get('c');
+    const urlTs = parseInt(params.get('ts') || '0', 10);
 
     // DOM refs
     const stateLoading = document.getElementById('state-loading');
@@ -104,13 +113,25 @@
     const stateWarning = document.getElementById('state-warning');
     const stateSuccess = document.getElementById('state-success');
     const stateError = document.getElementById('state-error');
+    const stateExpired = document.getElementById('state-expired');
     const idInput = document.getElementById('id-input');
     const submitBtn = document.getElementById('submit-btn');
 
     function showState(state) {
-      [stateLoading, stateEntry, stateWarning, stateSuccess, stateError]
+      [stateLoading, stateEntry, stateWarning, stateSuccess, stateError, stateExpired]
         .forEach(el => el.classList.add('hidden'));
       state.classList.remove('hidden');
+    }
+
+    function showExpired() {
+      showState(stateExpired);
+    }
+
+    // Codes are valid for 150s server-side. Allow some clock-skew slack.
+    // If the URL's embedded timestamp is older than 3 minutes, it's definitely stale.
+    function urlIsStale() {
+      if (!urlTs) return false; // old QRs without ts — skip local check, server will validate
+      return (Date.now() - urlTs) > 180000;
     }
 
     // Device ID (persistent)
@@ -123,19 +144,20 @@
       return id;
     }
 
-    // Stored student info
+    // Stored student info (scoped per teacher so multi-teacher works)
+    function studentKey(suffix) { return 'qr_' + teacherUid + '_' + suffix; }
     function getStoredStudent() {
-      const id = localStorage.getItem('qr_student_id');
-      const name = localStorage.getItem('qr_student_name');
+      const id = localStorage.getItem(studentKey('id'));
+      const name = localStorage.getItem(studentKey('name'));
       return id ? { id, name } : null;
     }
     function storeStudent(id, name) {
-      localStorage.setItem('qr_student_id', id);
-      localStorage.setItem('qr_student_name', name || '');
+      localStorage.setItem(studentKey('id'), id);
+      localStorage.setItem(studentKey('name'), name || '');
     }
     function clearStoredStudent() {
-      localStorage.removeItem('qr_student_id');
-      localStorage.removeItem('qr_student_name');
+      localStorage.removeItem(studentKey('id'));
+      localStorage.removeItem(studentKey('name'));
     }
 
     // Sign in via Cloud Function
@@ -175,6 +197,16 @@
       showState(stateError);
     }
 
+    function showEntryError(msg) {
+      document.getElementById('entry-error').textContent = msg;
+      document.getElementById('entry-error').classList.remove('hidden');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Sign In';
+      showState(stateEntry);
+      idInput.focus();
+      idInput.select();
+    }
+
     // Entry form handlers
     idInput.addEventListener('input', () => {
       submitBtn.disabled = idInput.value.trim().length < 3;
@@ -198,8 +230,9 @@
           try {
             const data = await doSignIn(sid, stored.id);
             if (data.success) { showSuccess(data); }
-            else { showError(data.message || 'Sign-in failed.'); }
-          } catch (e) { showError('Connection error. Try again.'); }
+            else if (data.error === 'expired') { showExpired(); }
+            else { showEntryError(data.message || 'Sign-in failed.'); }
+          } catch (e) { showEntryError('Connection error. Try again.'); }
         };
 
         document.getElementById('warning-cancel').onclick = async () => {
@@ -207,8 +240,9 @@
           try {
             const data = await doSignIn(stored.id, null);
             if (data.success) { showSuccess(data); }
-            else { showError(data.message || 'Sign-in failed.'); }
-          } catch (e) { showError('Connection error. Try again.'); }
+            else if (data.error === 'expired') { showExpired(); }
+            else { showEntryError(data.message || 'Sign-in failed.'); }
+          } catch (e) { showEntryError('Connection error. Try again.'); }
         };
 
         showState(stateWarning);
@@ -220,14 +254,10 @@
       try {
         const data = await doSignIn(sid, null);
         if (data.success) { showSuccess(data); }
-        else {
-          document.getElementById('entry-error').textContent = data.message || 'Sign-in failed.';
-          document.getElementById('entry-error').classList.remove('hidden');
-          submitBtn.disabled = false;
-          submitBtn.textContent = 'Sign In';
-        }
+        else if (data.error === 'expired') { showExpired(); }
+        else { showEntryError(data.message || 'Sign-in failed.'); }
       } catch (e) {
-        showError('Connection error. Try again.');
+        showEntryError('Connection error. Try again.');
       }
     });
 
@@ -245,6 +275,14 @@
         return;
       }
 
+      // Pre-check: if the URL carries a timestamp and it's way too old, don't
+      // bother calling the server. Show the "scan again" screen directly.
+      // This catches bookmarked URLs and tabs left open for hours.
+      if (urlIsStale()) {
+        showExpired();
+        return;
+      }
+
       const stored = getStoredStudent();
       if (stored) {
         // Auto-sign-in for returning student
@@ -252,16 +290,14 @@
           const data = await doSignIn(stored.id, null);
           if (data.success) {
             showSuccess(data);
-          } else if (data.error === 'not_found') {
-            // Stored ID no longer on roster
-            clearStoredStudent();
-            showState(stateEntry);
-            idInput.focus();
+          } else if (data.error === 'expired') {
+            showExpired();
           } else {
-            showError(data.message || 'Sign-in failed.');
+            if (data.error === 'not_found') clearStoredStudent();
+            showEntryError(data.message || 'Sign-in failed.');
           }
         } catch (e) {
-          showError('Connection error. Try again.');
+          showEntryError('Connection error. Try again.');
         }
       } else {
         // First time — show ID entry

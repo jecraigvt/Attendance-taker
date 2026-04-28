@@ -11,6 +11,7 @@ import functools
 import json
 import logging
 import os
+import re
 import time
 from datetime import datetime, timezone
 
@@ -433,6 +434,7 @@ def sync_teacher(uid: str) -> dict:
                 for period, students in period_groups.items():
                     logger.info(f"[{uid}] Period {period}: {len(students)} student(s)")
                     updates_count = 0
+                    all_present_clicked = False
 
                     # Select the period in the dropdown
                     try:
@@ -468,12 +470,26 @@ def sync_teacher(uid: str) -> dict:
 
                     # Click "All Remaining Students Are Present"
                     try:
-                        all_present_btn = page.locator(
-                            "a, input, button"
-                        ).filter(has_text="All Remaining Students Are Present").first
-                        if all_present_btn.is_visible():
+                        all_present_re = re.compile(r"remaining.*present", re.IGNORECASE)
+                        all_present_btn = page.get_by_role(
+                            "button", name=all_present_re
+                        ).first
+                        if all_present_btn.count() == 0:
+                            all_present_btn = page.get_by_role(
+                                "link", name=all_present_re
+                            ).first
+                        if all_present_btn.count() == 0:
+                            all_present_btn = page.locator(
+                                "input[value*='Remaining'][value*='Present'], "
+                                "button:has-text('Remaining'), "
+                                "a:has-text('Remaining')"
+                            ).first
+                        if all_present_btn.count() > 0 and all_present_btn.is_visible():
                             all_present_btn.click()
-                            logger.info(f"[{uid}] Clicked 'All Remaining Students Are Present'")
+                            all_present_clicked = True
+                            logger.info(
+                                f"[{uid}] Clicked 'All Remaining Students Are Present'"
+                            )
                             try:
                                 page.keyboard.press("Enter")
                             except Exception:
@@ -615,13 +631,14 @@ def sync_teacher(uid: str) -> dict:
 
                     logger.info(
                         f"[{uid}] Period {period} complete. "
-                        f"Updates: {updates_count}, Unsyncable: "
+                        f"Updates: {updates_count}, AllPresentClicked: {all_present_clicked}, "
+                        f"Unsyncable: "
                         f"{sum(1 for u in unsyncable if u['period'] == period)}"
                     )
                     periods_processed += 1
 
-                    # Save after each period
-                    if updates_count > 0:
+                    # Save after any action that submits attendance state in Aeries.
+                    if updates_count > 0 or all_present_clicked:
                         try:
                             save_btn = page.locator(
                                 "input[value='Save'], button:has-text('Save')"

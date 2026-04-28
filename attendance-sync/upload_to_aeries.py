@@ -6,6 +6,7 @@ from playwright.sync_api import sync_playwright
 from datetime import datetime
 import csv
 import os
+import re
 import logging
 from sync_utils import (
     retry_with_backoff, SyncError, log_sync_failure,
@@ -123,6 +124,7 @@ def upload_to_aeries(csv_filepath, username, password):
             for period, students in period_groups.items():
                 logger.info(f"Processing Period {period} ({len(students)} students)")
                 failed_students = []  # Track failed students for this period
+                all_present_clicked = False
 
                 # Select the Period
                 try:
@@ -156,9 +158,23 @@ def upload_to_aeries(csv_filepath, username, password):
 
                 # Click "All Remaining Students Are Present"
                 try:
-                    all_present_btn = page.locator("a, input, button").filter(has_text="All Remaining Students Are Present").first
-                    if all_present_btn.is_visible():
+                    all_present_re = re.compile(r"remaining.*present", re.IGNORECASE)
+                    all_present_btn = page.get_by_role(
+                        "button", name=all_present_re
+                    ).first
+                    if all_present_btn.count() == 0:
+                        all_present_btn = page.get_by_role(
+                            "link", name=all_present_re
+                        ).first
+                    if all_present_btn.count() == 0:
+                        all_present_btn = page.locator(
+                            "input[value*='Remaining'][value*='Present'], "
+                            "button:has-text('Remaining'), "
+                            "a:has-text('Remaining')"
+                        ).first
+                    if all_present_btn.count() > 0 and all_present_btn.is_visible():
                         all_present_btn.click()
+                        all_present_clicked = True
                         logger.info("Clicked 'All Remaining Students Are Present'")
                         try:
                             page.keyboard.press("Enter")
@@ -332,12 +348,18 @@ def upload_to_aeries(csv_filepath, username, password):
 
                 # Report period summary
                 if failed_students:
-                    logger.info(f"Period {period} complete. Updates: {updates_count}, Failed: {len(failed_students)}")
+                    logger.info(
+                        f"Period {period} complete. Updates: {updates_count}, "
+                        f"AllPresentClicked: {all_present_clicked}, Failed: {len(failed_students)}"
+                    )
                 else:
-                    logger.info(f"Period {period} verified. Updates made: {updates_count}")
+                    logger.info(
+                        f"Period {period} verified. Updates made: {updates_count}, "
+                        f"AllPresentClicked: {all_present_clicked}"
+                    )
 
-                # Save after each period to avoid losing changes on period switch
-                if updates_count > 0:
+                # Save after any action that submits attendance state in Aeries.
+                if updates_count > 0 or all_present_clicked:
                     try:
                         save_btn = page.locator("input[value='Save'], button:has-text('Save')").first
                         save_btn.scroll_into_view_if_needed(timeout=5000)
